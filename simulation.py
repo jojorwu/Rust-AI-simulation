@@ -1,4 +1,5 @@
 import random
+import copy
 
 class Map:
     """
@@ -8,7 +9,6 @@ class Map:
         self.width = width
         self.height = height
         self.grid = []
-        self.goal_pos = None
 
     def generate_random_map(self, obstacle_density=0.2):
         """
@@ -46,17 +46,6 @@ class Map:
                 return True
         return False
 
-    def add_goal(self, x, y):
-        """
-        Adds a goal at the given coordinates.
-        """
-        if 0 <= x < self.width and 0 <= y < self.height:
-            if self.grid[y][x] == '.':
-                self.grid[y][x] = 'G'
-                self.goal_pos = (x, y)
-                return True
-        return False
-
 class Agent:
     """
     Represents the agent in the simulation with Q-learning capabilities.
@@ -72,7 +61,8 @@ class Agent:
         self.discount_factor = discount_factor
         self.epsilon = epsilon
         self.q_table = {}
-        self.actions = ['up', 'down', 'left', 'right']
+        self.actions = ['up', 'down', 'left', 'right', 'gather']
+        self.inventory = {}
 
     def get_state(self):
         """Returns the current state of the agent (its position)."""
@@ -101,7 +91,7 @@ class Agent:
         new_x = self.x + dx
         new_y = self.y + dy
 
-        if 0 <= new_x < self.map.width and 0 <= new_y < self.map.height and self.map.grid[new_y][new_x] not in ['#', 'T']:
+        if 0 <= new_x < self.map.width and 0 <= new_y < self.map.height and self.map.grid[new_y][new_x] != '#':
             self.x = new_x
             self.y = new_y
             return True
@@ -122,108 +112,96 @@ class Agent:
         self.q_table[state][action] = new_value
 
     def reset(self):
-        """Resets the agent's position to the start."""
+        """Resets the agent's position and inventory."""
         self.x = self.initial_x
         self.y = self.initial_y
+        self.inventory = {}
 
 def main():
-    """Main function to run the Q-learning simulation."""
+    """Main function to run the Rust-like simulation."""
     print("Simulation starting...")
     # --- 1. Setup the environment ---
     game_map = Map(width=10, height=10)
-    game_map.generate_random_map(obstacle_density=0.2)
-    game_map.add_tree(3, 4)
-    game_map.add_tree(6, 7)
-
-    # Set a goal
-    goal_x, goal_y = 9, 9
-    while game_map.grid[goal_y][goal_x] in ['#', 'T']:
-        goal_x = random.randint(0, game_map.width - 1)
-        goal_y = random.randint(0, game_map.height - 1)
-    game_map.add_goal(goal_x, goal_y)
+    game_map.generate_random_map(obstacle_density=0.1)
+    # Add some trees
+    for _ in range(15):
+        tx, ty = random.randint(0, game_map.width - 1), random.randint(0, game_map.height - 1)
+        game_map.add_tree(tx, ty)
 
     # --- 2. Initialize the agent ---
     start_x, start_y = 0, 0
-    while game_map.grid[start_y][start_x] in ['#', 'T', 'G']:
+    while game_map.grid[start_y][start_x] in ['#', 'T']:
         start_x = random.randint(0, game_map.width - 1)
         start_y = random.randint(0, game_map.height - 1)
 
     agent = Agent(game_map, start_x, start_y, learning_rate=0.1, discount_factor=0.9, epsilon=1.0)
 
+    # Save the original map state
+    original_map_grid = copy.deepcopy(game_map.grid)
+
     print("Initial Map:")
     game_map.display(agent)
     print(f"Agent starts at ({start_x}, {start_y})")
-    print(f"Goal is at {game_map.goal_pos}")
 
     # --- 3. Run the training loop ---
-    episodes = 1000
+    episodes = 2000
     max_steps_per_episode = 100
-    epsilon_decay = 0.995
-    min_epsilon = 0.01
+    epsilon_decay = 0.999
+    min_epsilon = 0.05
+    wood_goal = 5
 
-    print("\n--- Starting Training ---")
+    print(f"\n--- Starting Training (Goal: Gather {wood_goal} wood) ---")
     for episode in range(episodes):
+        # Reset environment and agent for each episode
+        game_map.grid = copy.deepcopy(original_map_grid)
         agent.reset()
+
+        # Place agent in a random non-obstacle spot
+        agent.x = random.randint(0, game_map.width - 1)
+        agent.y = random.randint(0, game_map.height - 1)
+        while game_map.grid[agent.y][agent.x] == '#':
+            agent.x = random.randint(0, game_map.width - 1)
+            agent.y = random.randint(0, game_map.height - 1)
 
         for step in range(max_steps_per_episode):
             state = agent.get_state()
             action = agent.choose_action()
 
-            # Store position before move
-            old_x, old_y = agent.x, agent.y
+            reward = -0.1  # Cost of living
 
-            agent.move(action)
+            if action == 'gather':
+                if game_map.grid[agent.y][agent.x] == 'T':
+                    reward = 20  # Big reward for gathering wood
+                    agent.inventory['wood'] = agent.inventory.get('wood', 0) + 1
+                    game_map.grid[agent.y][agent.x] = '.' # Remove the tree for this episode
+                else:
+                    reward = -2 # Penalty for trying to gather from nothing
+            else: # Movement action
+                moved = agent.move(action)
+                if not moved:
+                    reward = -5 # Penalty for bumping into a wall
+                elif game_map.grid[agent.y][agent.x] == 'T':
+                    reward = 1 # Small reward for being on a tree tile
 
             next_state = agent.get_state()
-
-            # Determine reward
-            reward = 0
-            if next_state == game_map.goal_pos:
-                reward = 10  # High reward for reaching the goal
-            elif state == next_state:
-                reward = -5 # Penalty for bumping into a wall/obstacle
-            else:
-                reward = -0.1  # Small penalty for each step
-
             agent.update_q_table(state, action, reward, next_state)
 
-            if next_state == game_map.goal_pos:
-                break # End episode if goal is reached
+            # Check if goal is met
+            if agent.inventory.get('wood', 0) >= wood_goal:
+                break
 
         # Decay epsilon
         if agent.epsilon > min_epsilon:
             agent.epsilon *= epsilon_decay
 
-        if (episode + 1) % 100 == 0:
-            print(f"Episode {episode + 1}/{episodes} | Epsilon: {agent.epsilon:.3f}")
+        if (episode + 1) % 200 == 0:
+            print(f"Episode {episode + 1}/{episodes} | Wood gathered in this episode: {agent.inventory.get('wood', 0)} | Epsilon: {agent.epsilon:.3f}")
 
     print("--- Training Finished ---")
 
     # --- 4. Display results ---
-    print("\nAgent's learned path (greedy policy):")
-    agent.reset()
-    agent.epsilon = 0 # Turn off exploration
-    path = []
-    for _ in range(max_steps_per_episode):
-        state = agent.get_state()
-        path.append(state)
-        if state == game_map.goal_pos:
-            break
-        action = agent.choose_action()
-        agent.move(action)
-
-    # Print the map with the path
-    for y, row in enumerate(game_map.grid):
-        display_row = []
-        for x, tile in enumerate(row):
-            if (x, y) == (agent.initial_x, agent.initial_y):
-                display_row.append('S')
-            elif (x,y) in path and game_map.grid[y][x] not in ['S', 'G']:
-                display_row.append('*')
-            else:
-                display_row.append(tile)
-        print(' '.join(display_row))
-    print(f"\nPath taken: {path}")
+    print(f"\nFinal inventory from last episode: {agent.inventory}")
+    print("Final Q-table size:", len(agent.q_table))
 
 
 if __name__ == "__main__":
