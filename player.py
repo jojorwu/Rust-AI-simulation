@@ -15,12 +15,17 @@ class Player:
         self.discount_factor = discount_factor
         self.epsilon = epsilon
         self.q_table = {}
-        self.actions = ['up', 'down', 'left', 'right', 'gather']
+        self.actions = ['up', 'down', 'left', 'right', 'gather', 'craft']
         self.inventory = {}
 
     def get_state(self):
-        """Returns the current state of the player (its position)."""
-        return (self.x, self.y)
+        """
+        Returns the current state of the player, including position and inventory.
+        The state is defined as (x, y, wood_count, stone_count).
+        """
+        wood_count = self.inventory.get('wood', 0)
+        stone_count = self.inventory.get('stone', 0)
+        return (self.x, self.y, wood_count, stone_count)
 
     def choose_action(self):
         """Chooses an action using an epsilon-greedy policy."""

@@ -44,3 +44,13 @@ class Map:
                 self.grid[y][x] = 'T'
                 return True
         return False
+
+    def add_stone(self, x, y):
+        """
+        Adds a stone node at the given coordinates if the tile is empty.
+        """
+        if 0 <= x < self.width and 0 <= y < self.height:
+            if self.grid[y][x] == '.':
+                self.grid[y][x] = 'S'
+                return True
+        return False
