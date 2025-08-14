@@ -1,0 +1,24 @@
+# --- Simulation Parameters ---
+
+# MAP SETTINGS
+WIDTH = 10
+HEIGHT = 10
+OBSTACLE_DENSITY = 0.1
+NUM_TREES = 15
+NUM_STONE = 10 # Added for the new resource
+
+# PLAYER/AI SETTINGS
+LEARNING_RATE = 0.1
+DISCOUNT_FACTOR = 0.9
+INITIAL_EPSILON = 1.0
+
+# TRAINING LOOP SETTINGS
+EPISODES = 2000
+MAX_STEPS_PER_EPISODE = 100
+EPSILON_DECAY = 0.999
+MIN_EPSILON = 0.05
+
+# GOAL SETTINGS
+WOOD_GOAL = 5 # This will be replaced by crafting goals later
+STONE_GOAL = 3 # Example for a new goal
+CRAFTING_GOAL = 'stone_axe'

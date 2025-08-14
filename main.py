@@ -2,15 +2,17 @@ import random
 import copy
 from map import Map
 from player import Player
+import config
+import recipes
 
 def main():
     """Main function to run the Rust-like simulation."""
     print("Simulation starting...")
     # --- 1. Setup the environment ---
-    game_map = Map(width=10, height=10)
-    game_map.generate_random_map(obstacle_density=0.1)
+    game_map = Map(width=config.WIDTH, height=config.HEIGHT)
+    game_map.generate_random_map(obstacle_density=config.OBSTACLE_DENSITY)
     # Add some trees
-    for _ in range(15):
+    for _ in range(config.NUM_TREES):
         tx, ty = random.randint(0, game_map.width - 1), random.randint(0, game_map.height - 1)
         game_map.add_tree(tx, ty)
 
@@ -20,7 +22,10 @@ def main():
         start_x = random.randint(0, game_map.width - 1)
         start_y = random.randint(0, game_map.height - 1)
 
-    player = Player(game_map, start_x, start_y, learning_rate=0.1, discount_factor=0.9, epsilon=1.0)
+    player = Player(game_map, start_x, start_y,
+                    learning_rate=config.LEARNING_RATE,
+                    discount_factor=config.DISCOUNT_FACTOR,
+                    epsilon=config.INITIAL_EPSILON)
 
     # Save the original map state
     original_map_grid = copy.deepcopy(game_map.grid)
@@ -30,14 +35,8 @@ def main():
     print(f"Player starts at ({start_x}, {start_y})")
 
     # --- 3. Run the training loop ---
-    episodes = 2000
-    max_steps_per_episode = 100
-    epsilon_decay = 0.999
-    min_epsilon = 0.05
-    wood_goal = 5
-
-    print(f"\n--- Starting Training (Goal: Gather {wood_goal} wood) ---")
-    for episode in range(episodes):
+    print(f"\n--- Starting Training (Goal: Gather {config.WOOD_GOAL} wood) ---")
+    for episode in range(config.EPISODES):
         # Reset environment and player for each episode
         game_map.grid = copy.deepcopy(original_map_grid)
         player.reset()
@@ -49,7 +48,7 @@ def main():
             player.x = random.randint(0, game_map.width - 1)
             player.y = random.randint(0, game_map.height - 1)
 
-        for step in range(max_steps_per_episode):
+        for step in range(config.MAX_STEPS_PER_EPISODE):
             state = player.get_state()
             action = player.choose_action()
 
@@ -73,15 +72,15 @@ def main():
             player.update_q_table(state, action, reward, next_state)
 
             # Check if goal is met
-            if player.inventory.get('wood', 0) >= wood_goal:
+            if player.inventory.get('wood', 0) >= config.WOOD_GOAL:
                 break
 
         # Decay epsilon
-        if player.epsilon > min_epsilon:
-            player.epsilon *= epsilon_decay
+        if player.epsilon > config.MIN_EPSILON:
+            player.epsilon *= config.EPSILON_DECAY
 
         if (episode + 1) % 200 == 0:
-            print(f"Episode {episode + 1}/{episodes} | Wood gathered in this episode: {player.inventory.get('wood', 0)} | Epsilon: {player.epsilon:.3f}")
+            print(f"Episode {episode + 1}/{config.EPISODES} | Wood gathered in this episode: {player.inventory.get('wood', 0)} | Epsilon: {player.epsilon:.3f}")
 
     print("--- Training Finished ---")
 
