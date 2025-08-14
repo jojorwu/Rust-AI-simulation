@@ -5,16 +5,21 @@ from player import Player
 import config
 import recipes
 
+def setup_new_map(game_map):
+    """Generates a new random map and populates it with resources."""
+    print("\n--- GENERATING NEW MAP ---")
+    game_map.generate_random_map(config.OBSTACLE_DENSITY)
+    # Add some trees
+    for _ in range(config.NUM_TREES):
+        tx, ty = random.randint(0, game_map.width - 1), random.randint(0, game_map.height - 1)
+        game_map.add_tree(tx, ty)
+
 def main():
     """Main function to run the Rust-like simulation."""
     print("Simulation starting...")
     # --- 1. Setup the environment ---
     game_map = Map(width=config.WIDTH, height=config.HEIGHT)
-    game_map.generate_random_map(obstacle_density=config.OBSTACLE_DENSITY)
-    # Add some trees
-    for _ in range(config.NUM_TREES):
-        tx, ty = random.randint(0, game_map.width - 1), random.randint(0, game_map.height - 1)
-        game_map.add_tree(tx, ty)
+    setup_new_map(game_map)
 
     # --- 2. Initialize the player ---
     start_x, start_y = 0, 0
@@ -27,7 +32,6 @@ def main():
                     discount_factor=config.DISCOUNT_FACTOR,
                     epsilon=config.INITIAL_EPSILON)
 
-    # Save the original map state
     original_map_grid = copy.deepcopy(game_map.grid)
 
     print("Initial Map:")
@@ -35,8 +39,19 @@ def main():
     print(f"Player starts at ({start_x}, {start_y})")
 
     # --- 3. Run the training loop ---
+    total_ticks = 0
+    time_of_day = 'DAY'
+    day_cycle_length = config.DAY_LENGTH + config.NIGHT_LENGTH
+
     print(f"\n--- Starting Training (Goal: Gather {config.WOOD_GOAL} wood) ---")
     for episode in range(config.EPISODES):
+        # --- WIPE MECHANIC ---
+        if episode > 0 and episode % config.WIPE_CYCLE == 0:
+            print(f"\n\n--- SERVER WIPE AT EPISODE {episode} ---\n")
+            setup_new_map(game_map)
+            original_map_grid = copy.deepcopy(game_map.grid)
+            # Player keeps its learned knowledge (Q-table)
+
         # Reset environment and player for each episode
         game_map.grid = copy.deepcopy(original_map_grid)
         player.reset()
@@ -49,6 +64,16 @@ def main():
             player.y = random.randint(0, game_map.height - 1)
 
         for step in range(config.MAX_STEPS_PER_EPISODE):
+            total_ticks += 1
+
+            # Check for day/night change
+            current_cycle_tick = total_ticks % day_cycle_length
+            new_time_of_day = 'DAY' if current_cycle_tick < config.DAY_LENGTH else 'NIGHT'
+
+            if new_time_of_day != time_of_day:
+                time_of_day = new_time_of_day
+                print(f"\n--- It is now {time_of_day} (Total Ticks: {total_ticks}) ---")
+
             state = player.get_state()
             action = player.choose_action()
 
@@ -80,7 +105,7 @@ def main():
             player.epsilon *= config.EPSILON_DECAY
 
         if (episode + 1) % 200 == 0:
-            print(f"Episode {episode + 1}/{config.EPISODES} | Wood gathered in this episode: {player.inventory.get('wood', 0)} | Epsilon: {player.epsilon:.3f}")
+            print(f"Episode {episode + 1}/{config.EPISODES} | Wood gathered: {player.inventory.get('wood', 0)} | Epsilon: {player.epsilon:.3f}")
 
     print("--- Training Finished ---")
 

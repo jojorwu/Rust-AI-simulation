@@ -18,6 +18,13 @@ MAX_STEPS_PER_EPISODE = 100
 EPSILON_DECAY = 0.999
 MIN_EPSILON = 0.05
 
+# TIME SETTINGS
+DAY_LENGTH = 100  # in ticks
+NIGHT_LENGTH = 50 # in ticks
+
+# WIPE SETTINGS
+WIPE_CYCLE = 1000 # number of episodes before a map wipe
+
 # GOAL SETTINGS
 WOOD_GOAL = 5 # This will be replaced by crafting goals later
 STONE_GOAL = 3 # Example for a new goal
