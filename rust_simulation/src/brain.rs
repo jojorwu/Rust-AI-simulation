@@ -3,15 +3,16 @@ use rand::Rng;
 use super::state::StateKey;
 use super::errors::SimulationError;
 use super::config::{WIDTH, HEIGHT};
-use super::actions::Action; // Import Action
+use super::actions::Action;
+use super::map::Tile;
 
 pub struct Brain {
-    pub actions: Vec<Action>, // Use Action enum
+    pub actions: Vec<Action>,
     pub learning_rate: f64,
     pub discount_factor: f64,
     pub epsilon: f64,
-    pub q_table: HashMap<String, HashMap<Action, f64>>, // Use Action as key
-    pub mental_map: Vec<Vec<Option<char>>>,
+    pub q_table: HashMap<String, HashMap<Action, f64>>,
+    pub mental_map: Vec<Vec<Option<Tile>>>,
 }
 
 impl Brain {
@@ -71,7 +72,7 @@ impl Brain {
         self.q_table
             .entry(state_key_str)
             .or_insert_with(HashMap::new)
-            .insert(action.clone(), new_value); // action needs to be cloned
+            .insert(action.clone(), new_value);
 
         Ok(())
     }

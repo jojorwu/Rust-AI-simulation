@@ -11,6 +11,7 @@ pub enum Action {
     Build(String),
     Open,
     Close,
+    AttachLock,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -42,5 +43,6 @@ pub fn get_all_actions() -> Vec<Action> {
         Action::Build("doorway".to_string()),
         Action::Open,
         Action::Close,
+        Action::AttachLock,
     ]
 }

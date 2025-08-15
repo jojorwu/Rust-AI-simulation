@@ -7,6 +7,7 @@ use super::item::ItemRegistry; // Import ItemRegistry
 pub struct Slot {
     pub item: String,
     pub quantity: u32,
+    pub instance_id: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -50,6 +51,24 @@ impl Player {
         self.inventory.iter().position(|slot| slot.is_none())
     }
 
+    pub fn has_lock(&self) -> bool {
+        self.inventory.iter().any(|s| s.as_ref().map_or(false, |slot| slot.item == "lock"))
+    }
+
+    pub fn find_and_remove_lock(&mut self) -> Option<u32> {
+        let lock_slot_index = self.inventory.iter().position(|s| s.as_ref().map_or(false, |slot| slot.item == "lock"));
+        if let Some(index) = lock_slot_index {
+            let lock_id = self.inventory[index].as_ref().unwrap().instance_id;
+            self.inventory[index] = None;
+            return lock_id;
+        }
+        None
+    }
+
+    pub fn has_key(&self, key_id: u32) -> bool {
+        self.inventory.iter().any(|s| s.as_ref().map_or(false, |slot| slot.item == "key" && slot.instance_id == Some(key_id)))
+    }
+
     pub fn get_total_quantity(&self, item_name: &str) -> u32 {
         self.inventory.iter().filter_map(|slot| {
             slot.as_ref().and_then(|s| {
@@ -67,11 +86,12 @@ impl Player {
         true
     }
 
-    pub fn add_item(&mut self, item_name: &str, quantity: u32, item_registry: &ItemRegistry) -> bool {
+    pub fn add_item(&mut self, item_name: &str, quantity: u32, instance_id: Option<u32>, item_registry: &ItemRegistry) -> bool {
         let item = item_registry.get_item(item_name);
 
         if let Some(item_def) = item {
-            if item_def.stackable {
+            // Stack only if the item is stackable AND we are not adding a unique instance
+            if item_def.stackable && instance_id.is_none() {
                 if let Some(slot_index) = self.find_item_slot(item_name) {
                     if let Some(slot) = &mut self.inventory[slot_index] {
                         slot.quantity += quantity;
@@ -81,10 +101,12 @@ impl Player {
             }
         }
 
+        // If not stackable, or a unique instance, or no existing stack, find an empty slot
         if let Some(empty_slot_index) = self.find_empty_slot() {
             self.inventory[empty_slot_index] = Some(Slot {
                 item: item_name.to_string(),
                 quantity,
+                instance_id,
             });
             true
         } else {
@@ -136,9 +158,9 @@ impl Player {
         let new_y = (self.y as i32 + dy) as u32;
 
         if new_x < map.width && new_y < map.height {
-            let target_tile = map.grid[new_y as usize][new_x as usize];
-            let blocking_tiles = ['W', '#', 'D'];
-            if !blocking_tiles.contains(&target_tile) {
+            let target_tile = &map.grid[new_y as usize][new_x as usize];
+            let blocking_tiles = ['W', '#', 'D', 'L'];
+            if !blocking_tiles.contains(&target_tile.tile_type) {
                 self.x = new_x;
                 self.y = new_y;
                 return true;

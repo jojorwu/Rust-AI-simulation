@@ -16,5 +16,8 @@
   },
   "door": {
     "wood": 10
+  },
+  "lock": {
+    "iron_bars": 10
   }
 }

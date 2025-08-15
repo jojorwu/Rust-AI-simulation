@@ -1,10 +1,23 @@
 use noise::{NoiseFn, Fbm, Perlin};
 use rand::Rng;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Tile {
+    pub tile_type: char,
+    pub lock_id: Option<u32>,
+}
+
+impl Tile {
+    pub fn new(tile_type: char) -> Self {
+        Tile { tile_type, lock_id: None }
+    }
+}
 
 pub struct Map {
     pub width: u32,
     pub height: u32,
-    pub grid: Vec<Vec<char>>,
+    pub grid: Vec<Vec<Tile>>,
 }
 
 impl Map {
@@ -12,7 +25,7 @@ impl Map {
         Map {
             width,
             height,
-            grid: vec![vec![' '; width as usize]; height as usize],
+            grid: vec![vec![Tile::new(' '); width as usize]; height as usize],
         }
     }
 
@@ -25,29 +38,18 @@ impl Map {
 
         for y in 0..self.height {
             for x in 0..self.width {
-                // Calculate distance from center for radial gradient
                 let nx = 2.0 * x as f64 / self.width as f64 - 1.0;
                 let ny = 2.0 * y as f64 / self.height as f64 - 1.0;
                 let dist = 1.0 - (1.0 - nx.powi(2)) * (1.0 - ny.powi(2));
-
-                // Generate FBM noise value
                 let noise_val = fbm.get([x as f64 / scale, y as f64 / scale]);
-
-                // Combine noise with radial gradient to form an island
-                let island_val = (noise_val + 1.0) / 2.0; // Normalize to 0-1
+                let island_val = (noise_val + 1.0) / 2.0;
                 let height = island_val * (1.0 - dist);
 
-                // Assign tile based on height
-                let tile = if height < 0.1 {
-                    'W' // Water
-                } else if height < 0.15 {
-                    'S' // Sand
-                } else if height < 0.5 {
-                    '.' // Plains
-                } else {
-                    'M' // Mountain
-                };
-                self.grid[y as usize][x as usize] = tile;
+                let tile_char = if height < 0.1 { 'W' }
+                else if height < 0.15 { 'S' }
+                else if height < 0.5 { '.' }
+                else { 'M' };
+                self.grid[y as usize][x as usize] = Tile::new(tile_char);
             }
         }
     }
@@ -64,7 +66,7 @@ impl Map {
                     }
                 }
                 if !is_player_on_tile {
-                    print!("{} ", self.grid[y as usize][x as usize]);
+                    print!("{} ", self.grid[y as usize][x as usize].tile_type);
                 }
             }
             println!();
@@ -72,18 +74,18 @@ impl Map {
     }
 
     pub fn add_tree(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'T';
+        self.grid[y as usize][x as usize].tile_type = 'T';
     }
 
     pub fn add_rock(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'R';
+        self.grid[y as usize][x as usize].tile_type = 'R';
     }
 
     pub fn add_sulfur(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'U';
+        self.grid[y as usize][x as usize].tile_type = 'U';
     }
 
     pub fn add_iron_ore_node(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'I';
+        self.grid[y as usize][x as usize].tile_type = 'I';
     }
 }

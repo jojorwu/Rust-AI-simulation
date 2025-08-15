@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use super::map::Map;
+use super::map::{Map, Tile};
 use super::player::Player;
 use super::brain::Brain;
 use super::state::StateKey;
@@ -18,6 +18,7 @@ pub struct Game {
     pub players: Vec<Player>,
     pub brains: Vec<Brain>,
     pub item_registry: ItemRegistry,
+    next_instance_id: u32,
 }
 
 impl Game {
@@ -39,13 +40,14 @@ impl Game {
             players,
             brains,
             item_registry,
+            next_instance_id: 0,
         }
     }
 
     fn get_state(&mut self, player_index: usize) -> StateKey {
         let player = &self.players[player_index];
         let mut local_view = Vec::new();
-        let view_radius = 1; // 3x3 view
+        let view_radius = 1;
 
         for dy in -view_radius..=view_radius {
             for dx in -view_radius..=view_radius {
@@ -53,12 +55,11 @@ impl Game {
                 let ny = player.y as i32 + dy;
 
                 if nx >= 0 && nx < self.map.width as i32 && ny >= 0 && ny < self.map.height as i32 {
-                    let tile = self.map.grid[ny as usize][nx as usize];
-                    local_view.push(tile);
-                    // Update mental map
+                    let tile = self.map.grid[ny as usize][nx as usize].clone();
+                    local_view.push(tile.clone());
                     self.brains[player_index].mental_map[ny as usize][nx as usize] = Some(tile);
                 } else {
-                    local_view.push('X'); // 'X' for out of bounds
+                    local_view.push(Tile::new('X'));
                 }
             }
         }
@@ -67,7 +68,6 @@ impl Game {
             local_view,
             inventory: player.inventory.clone(),
             held_item: player.held_item.clone(),
-            mental_map: self.brains[player_index].mental_map.clone(),
         }
     }
 
@@ -76,7 +76,7 @@ impl Game {
             let nx = (px as i32 + dx) as u32;
             let ny = (py as i32 + dy) as u32;
             if nx < self.map.width && ny < self.map.height {
-                if self.map.grid[ny as usize][nx as usize] == tile_type {
+                if self.map.grid[ny as usize][nx as usize].tile_type == tile_type {
                     return true;
                 }
             }
@@ -89,7 +89,7 @@ impl Game {
             let nx = (px as i32 + dx) as u32;
             let ny = (py as i32 + dy) as u32;
             if nx < self.map.width && ny < self.map.height {
-                if self.map.grid[ny as usize][nx as usize] == tile_type {
+                if self.map.grid[ny as usize][nx as usize].tile_type == tile_type {
                     return Some((nx, ny));
                 }
             }
@@ -105,7 +105,7 @@ impl Game {
             loop {
                 let x = rng.gen_range(0..self.map.width);
                 let y = rng.gen_range(0..self.map.height);
-                if self.map.grid[y as usize][x as usize] == '.' && !occupied_positions.contains(&(x, y)) {
+                if self.map.grid[y as usize][x as usize].tile_type == '.' && !occupied_positions.contains(&(x, y)) {
                     player.x = x;
                     player.y = y;
                     occupied_positions.insert((x, y));
@@ -122,7 +122,7 @@ impl Game {
         let mut mountain_tiles = Vec::new();
         for y in 0..self.map.height {
             for x in 0..self.map.width {
-                match self.map.grid[y as usize][x as usize] {
+                match self.map.grid[y as usize][x as usize].tile_type {
                     '.' => plains_tiles.push((x, y)),
                     'M' => mountain_tiles.push((x, y)),
                     _ => (),
@@ -155,8 +155,6 @@ impl Game {
         self.map.display(&self.players);
 
         for episode in 0..EPISODES {
-            // ... (wipe logic can be added here later) ...
-
             self.map.grid = original_map_grid.clone();
             for player in &mut self.players {
                 player.reset();
@@ -192,8 +190,8 @@ impl Game {
         let brain = &self.brains[player_index];
         for y in 0..HEIGHT {
             for x in 0..WIDTH {
-                match brain.mental_map[y as usize][x as usize] {
-                    Some(tile) => print!("{} ", tile),
+                match &brain.mental_map[y as usize][x as usize] {
+                    Some(tile) => print!("{} ", tile.tile_type),
                     None => print!("? "),
                 }
             }
@@ -201,8 +199,6 @@ impl Game {
         }
         println!("--------------------------");
     }
-
-    // --- Action Handler Methods ---
 
     fn _handle_equip_action(&mut self, player_index: usize, item: &str) -> f64 {
         let player = &mut self.players[player_index];
@@ -215,14 +211,27 @@ impl Game {
     }
 
     fn _handle_craft_action(&mut self, player_index: usize, item: &str) -> f64 {
-        let player = &mut self.players[player_index];
         let recipes = recipes::get_recipes();
         if let Some(recipe) = recipes.get(item) {
+            let player = &mut self.players[player_index];
             if player.has_resources(recipe) {
                 if player.remove_resources(recipe) {
-                    if player.add_item(item, 1, &self.item_registry) {
-                        50.0
-                    } else { -15.0 }
+                    if item == "lock" {
+                        let lock_id = self.next_instance_id;
+                        self.next_instance_id += 1;
+                        let key_id = lock_id;
+
+                        if player.add_item("lock", 1, Some(lock_id), &self.item_registry) &&
+                           player.add_item("key", 1, Some(key_id), &self.item_registry) {
+                            50.0
+                        } else {
+                            -15.0
+                        }
+                    } else {
+                        if player.add_item(item, 1, None, &self.item_registry) {
+                            50.0
+                        } else { -15.0 }
+                    }
                 } else { -15.0 }
             } else { -10.0 }
         } else { -1.0 }
@@ -238,15 +247,15 @@ impl Game {
         };
         if player.move_player(direction_str, &self.map) {
             let (new_px, new_py) = (player.x, player.y);
-            let current_tile = self.map.grid[new_py as usize][new_px as usize];
-            if current_tile == 'M' { -2.0 }
-            else if "RUIT".contains(current_tile) { 1.0 }
+            let current_tile = &self.map.grid[new_py as usize][new_px as usize];
+            if current_tile.tile_type == 'M' { -2.0 }
+            else if "RUIT".contains(current_tile.tile_type) { 1.0 }
             else { 0.0 }
         } else { -5.0 }
     }
 
     fn _handle_gather_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
-        let tile = self.map.grid[py as usize][px as usize];
+        let tile_type = self.map.grid[py as usize][px as usize].tile_type;
         let player = &mut self.players[player_index];
         let held = player.held_item.as_deref();
         let tool_map: HashMap<char, (&str, &str, f64)> = [
@@ -256,10 +265,10 @@ impl Game {
             ('I', ("metal_pickaxe", "iron_ore", 40.0)),
         ].iter().cloned().collect();
 
-        if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile) {
+        if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile_type) {
             if held == Some(*required_tool) {
-                if player.add_item(resource, 1, &self.item_registry) {
-                    self.map.grid[py as usize][px as usize] = '.';
+                if player.add_item(resource, 1, None, &self.item_registry) {
+                    self.map.grid[py as usize][px as usize].tile_type = '.';
                     *reward_val
                 } else { -15.0 }
             } else { -10.0 }
@@ -268,20 +277,20 @@ impl Game {
 
     fn _handle_place_furnace_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
         let player = &mut self.players[player_index];
-        if player.get_total_quantity("furnace") > 0 && self.map.grid[py as usize][px as usize] == '.' {
+        if player.get_total_quantity("furnace") > 0 && self.map.grid[py as usize][px as usize].tile_type == '.' {
             let mut recipe = HashMap::new(); recipe.insert("furnace".to_string(), 1);
             player.remove_resources(&recipe);
-            self.map.grid[py as usize][px as usize] = 'F';
+            self.map.grid[py as usize][px as usize].tile_type = 'F';
             40.0
         } else { -5.0 }
     }
 
     fn _handle_place_door_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
         let player = &mut self.players[player_index];
-        if player.get_total_quantity("door") > 0 && self.map.grid[py as usize][px as usize] == 'O' {
+        if player.get_total_quantity("door") > 0 && self.map.grid[py as usize][px as usize].tile_type == 'O' {
             let mut recipe = HashMap::new(); recipe.insert("door".to_string(), 1);
             player.remove_resources(&recipe);
-            self.map.grid[py as usize][px as usize] = 'D'; // 'D' for closed door
+            self.map.grid[py as usize][px as usize].tile_type = 'D';
             40.0
         } else { -5.0 }
     }
@@ -295,7 +304,7 @@ impl Game {
             let player = &mut self.players[player_index];
             if player.has_resources(&recipe) {
                 if player.remove_resources(&recipe) {
-                    player.add_item("iron_bars", 1, &self.item_registry);
+                    player.add_item("iron_bars", 1, None, &self.item_registry);
                     60.0
                 } else { -15.0 }
             } else { -12.0 }
@@ -304,49 +313,75 @@ impl Game {
 
     fn _handle_build_action(&mut self, player_index: usize, structure: &str, px: u32, py: u32) -> f64 {
         let _player = &mut self.players[player_index];
-        let current_tile = self.map.grid[py as usize][px as usize];
+        let current_tile = &mut self.map.grid[py as usize][px as usize];
 
         match structure {
             "foundation" => {
-                if current_tile == '.' {
-                    self.map.grid[py as usize][px as usize] = 'B';
+                if current_tile.tile_type == '.' {
+                    current_tile.tile_type = 'B';
                     30.0
-                } else {
-                    -5.0
-                }
+                } else { -5.0 }
             }
             "wall" => {
-                if current_tile == 'B' {
-                    self.map.grid[py as usize][px as usize] = '#';
+                if current_tile.tile_type == 'B' {
+                    current_tile.tile_type = '#';
                     30.0
-                } else {
-                    -5.0
-                }
+                } else { -5.0 }
             }
             "doorway" => {
-                if current_tile == 'B' {
-                    self.map.grid[py as usize][px as usize] = 'O';
+                if current_tile.tile_type == 'B' {
+                    current_tile.tile_type = 'O';
                     30.0
-                } else {
-                    -5.0
-                }
+                } else { -5.0 }
             }
             _ => -0.1,
         }
     }
 
-    fn _handle_open_door_action(&mut self, _player_index: usize, px: u32, py: u32) -> f64 {
-        if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'D') {
-            self.map.grid[door_y as usize][door_x as usize] = 'd'; // 'd' for open door
-            10.0
-        } else {
-            -5.0
+    fn _handle_attach_lock_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+        let player = &mut self.players[player_index];
+        if !player.has_lock() {
+            return -10.0;
         }
+
+        if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'D') {
+            let door_tile = &mut self.map.grid[door_y as usize][door_x as usize];
+            if door_tile.lock_id.is_none() {
+                let player = &mut self.players[player_index];
+                if let Some(lock_id) = player.find_and_remove_lock() {
+                    door_tile.tile_type = 'L';
+                    door_tile.lock_id = Some(lock_id);
+                    return 50.0;
+                }
+            }
+        }
+        -5.0
+    }
+
+    fn _handle_open_door_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+        if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'D') {
+            self.map.grid[door_y as usize][door_x as usize].tile_type = 'd';
+            return 10.0;
+        }
+
+        if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'L') {
+            let door_tile = &self.map.grid[door_y as usize][door_x as usize];
+            if let Some(lock_id) = door_tile.lock_id {
+                let player = &self.players[player_index];
+                if player.has_key(lock_id) {
+                    self.map.grid[door_y as usize][door_x as usize].tile_type = 'd';
+                    return 20.0;
+                } else {
+                    return -15.0;
+                }
+            }
+        }
+        -5.0
     }
 
     fn _handle_close_door_action(&mut self, _player_index: usize, px: u32, py: u32) -> f64 {
         if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'd') {
-            self.map.grid[door_y as usize][door_x as usize] = 'D'; // 'D' for closed door
+            self.map.grid[door_y as usize][door_x as usize].tile_type = 'D';
             10.0
         } else {
             -5.0
@@ -374,11 +409,11 @@ impl Game {
             Action::Build(structure) => self._handle_build_action(player_index, structure, px, py),
             Action::Open => self._handle_open_door_action(player_index, px, py),
             Action::Close => self._handle_close_door_action(player_index, px, py),
+            Action::AttachLock => self._handle_attach_lock_action(player_index, px, py),
         }
     }
 }
 
-// Helper function for random sampling without replacement
 fn get_random_samples<T: Clone>(population: &[T], k: usize, rng: &mut impl Rng) -> Vec<T> {
     let mut samples = Vec::new();
     let mut indices: Vec<usize> = (0..population.len()).collect();
