@@ -135,12 +135,15 @@ impl Player {
         let new_x = (self.x as i32 + dx) as u32;
         let new_y = (self.y as i32 + dy) as u32;
 
-        if new_x < map.width && new_y < map.height && map.grid[new_y as usize][new_x as usize] != 'W' {
-            self.x = new_x;
-            self.y = new_y;
-            true
-        } else {
-            false
+        if new_x < map.width && new_y < map.height {
+            let target_tile = map.grid[new_y as usize][new_x as usize];
+            let blocking_tiles = ['W', '#'];
+            if !blocking_tiles.contains(&target_tile) {
+                self.x = new_x;
+                self.y = new_y;
+                return true;
+            }
         }
+        false
     }
 }

@@ -36,5 +36,7 @@ pub fn get_all_actions() -> Vec<Action> {
         Action::Place("furnace".to_string()),
         Action::Smelt,
         Action::Build("foundation".to_string()),
+        Action::Build("wall".to_string()),
+        Action::Build("doorway".to_string()),
     ]
 }

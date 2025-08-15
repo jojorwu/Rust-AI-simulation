@@ -279,13 +279,36 @@ impl Game {
         } else { -12.0 }
     }
 
-    fn _handle_build_foundation_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+    fn _handle_build_action(&mut self, player_index: usize, structure: &str, px: u32, py: u32) -> f64 {
         let _player = &mut self.players[player_index];
-        if self.map.grid[py as usize][px as usize] == '.' {
-            self.map.grid[py as usize][px as usize] = 'B';
-            30.0
-        } else {
-            -5.0
+        let current_tile = self.map.grid[py as usize][px as usize];
+
+        match structure {
+            "foundation" => {
+                if current_tile == '.' {
+                    self.map.grid[py as usize][px as usize] = 'B';
+                    30.0
+                } else {
+                    -5.0
+                }
+            }
+            "wall" => {
+                if current_tile == 'B' {
+                    self.map.grid[py as usize][px as usize] = '#';
+                    30.0
+                } else {
+                    -5.0
+                }
+            }
+            "doorway" => {
+                if current_tile == 'B' {
+                    self.map.grid[py as usize][px as usize] = 'O';
+                    30.0
+                } else {
+                    -5.0
+                }
+            }
+            _ => -0.1,
         }
     }
 
@@ -305,13 +328,7 @@ impl Game {
                 }
             },
             Action::Smelt => self._handle_smelt_iron_action(player_index, px, py),
-            Action::Build(structure) => {
-                if structure == "foundation" {
-                    self._handle_build_foundation_action(player_index, px, py)
-                } else {
-                    -0.1
-                }
-            },
+            Action::Build(structure) => self._handle_build_action(player_index, structure, px, py),
         }
     }
 }
