@@ -15,9 +15,6 @@ pub struct Game {
     pub map: Map,
     pub players: Vec<Player>,
     pub brains: Vec<Brain>,
-    pub cycle_successes: u32,
-    pub last_cycle_performance: f64,
-    pub current_cycle_episodes: u32,
 }
 
 impl Game {
@@ -33,8 +30,8 @@ impl Game {
             "place_furnace".to_string(), "smelt_iron".to_string()
         ];
 
-        for i in 0..NUM_PLAYERS {
-            players.push(Player::new(i, 0, 0));
+        for _ in 0..NUM_PLAYERS {
+            players.push(Player::new(0, 0));
             brains.push(Brain::new(actions.clone(), LEARNING_RATE, DISCOUNT_FACTOR, INITIAL_EPSILON));
         }
 
@@ -42,9 +39,6 @@ impl Game {
             map,
             players,
             brains,
-            cycle_successes: 0,
-            last_cycle_performance: 0.0,
-            current_cycle_episodes: 0,
         }
     }
 
@@ -175,95 +169,109 @@ impl Game {
         Ok(())
     }
 
-    pub fn _perform_action(&mut self, player_index: usize, action: &str) -> f64 {
-        let mut reward = -0.1;
+    // --- Action Handler Methods ---
+
+    fn _handle_equip_action(&mut self, player_index: usize, action: &str) -> f64 {
+        let player = &mut self.players[player_index];
+        let item = &action[6..];
+        if player.get_total_quantity(item) > 0 {
+            player.held_item = Some(item.to_string());
+            2.0
+        } else {
+            -2.0
+        }
+    }
+
+    fn _handle_craft_action(&mut self, player_index: usize, action: &str) -> f64 {
+        let player = &mut self.players[player_index];
+        let item = &action[6..];
         let recipes = recipes::get_recipes();
+        if let Some(recipe) = recipes.get(item) {
+            if player.has_resources(recipe) {
+                if player.remove_resources(recipe) {
+                    if player.add_item(item, 1) {
+                        50.0
+                    } else { -15.0 }
+                } else { -15.0 }
+            } else { -10.0 }
+        } else { -1.0 }
+    }
+
+    fn _handle_move_action(&mut self, player_index: usize, action: &str) -> f64 {
+        let player = &mut self.players[player_index];
+        if player.move_player(action, &self.map) {
+            let (new_px, new_py) = (player.x, player.y);
+            let current_tile = self.map.grid[new_py as usize][new_px as usize];
+            if current_tile == 'M' { -2.0 }
+            else if "RUIT".contains(current_tile) { 1.0 }
+            else { 0.0 }
+        } else { -5.0 }
+    }
+
+    fn _handle_gather_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+        let tile = self.map.grid[py as usize][px as usize];
+        let player = &mut self.players[player_index];
+        let held = player.held_item.as_deref();
+        let tool_map: HashMap<char, (&str, &str, f64)> = [
+            ('T', ("stone_axe", "wood", 20.0)),
+            ('R', ("stone_pickaxe", "stone", 20.0)),
+            ('U', ("stone_pickaxe", "sulfur", 30.0)),
+            ('I', ("metal_pickaxe", "iron_ore", 40.0)),
+        ].iter().cloned().collect();
+
+        if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile) {
+            if held == Some(*required_tool) {
+                if player.add_item(resource, 1) {
+                    self.map.grid[py as usize][px as usize] = '.';
+                    *reward_val
+                } else { -15.0 }
+            } else { -10.0 }
+        } else { -2.0 }
+    }
+
+    fn _handle_place_furnace_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+        let player = &mut self.players[player_index];
+        if player.get_total_quantity("furnace") > 0 && self.map.grid[py as usize][px as usize] == '.' {
+            let mut recipe = HashMap::new(); recipe.insert("furnace".to_string(), 1);
+            player.remove_resources(&recipe);
+            self.map.grid[py as usize][px as usize] = 'F';
+            40.0
+        } else { -5.0 }
+    }
+
+    fn _handle_smelt_iron_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+        let mut recipe = HashMap::new();
+        recipe.insert("iron_ore".to_string(), 1);
+        recipe.insert("wood".to_string(), 1);
+
+        if self._is_adjacent_to(px, py, 'F') {
+            let player = &mut self.players[player_index];
+            if player.has_resources(&recipe) {
+                if player.remove_resources(&recipe) {
+                    player.add_item("iron_bars", 1);
+                    60.0
+                } else { -15.0 }
+            } else { -12.0 }
+        } else { -12.0 }
+    }
+
+
+    pub fn _perform_action(&mut self, player_index: usize, action: &str) -> f64 {
         let (px, py) = (self.players[player_index].x, self.players[player_index].y);
 
         if action.starts_with("equip_") {
-            let player = &mut self.players[player_index];
-            let item = &action[6..];
-            if player.get_total_quantity(item) > 0 {
-                player.held_item = Some(item.to_string());
-                reward = 2.0;
-            } else {
-                reward = -2.0;
-            }
+            self._handle_equip_action(player_index, action)
         } else if action.starts_with("craft_") {
-            let player = &mut self.players[player_index];
-            let item = &action[6..];
-            if let Some(recipe) = recipes.get(item) {
-                if player.has_resources(recipe) {
-                    if player.remove_resources(recipe) {
-                        if player.add_item(item, 1) {
-                            reward = 50.0;
-                        } else { reward = -15.0; }
-                    } else { reward = -15.0; }
-                } else { reward = -10.0; }
-            } else { reward = -1.0; }
+            self._handle_craft_action(player_index, action)
         } else {
             match action {
-                "up" | "down" | "left" | "right" => {
-                    let player = &mut self.players[player_index];
-                    if player.move_player(action, &self.map) {
-                        let (new_px, new_py) = (player.x, player.y);
-                        let current_tile = self.map.grid[new_py as usize][new_px as usize];
-                        if current_tile == 'M' { reward = -2.0; }
-                        else if "RUIT".contains(current_tile) { reward = 1.0; }
-                    } else { reward = -5.0; }
-                },
-                "gather" => {
-                    let tile = self.map.grid[py as usize][px as usize];
-                    let player = &mut self.players[player_index];
-                    let held = player.held_item.as_deref();
-                    let tool_map: HashMap<char, (&str, &str, f64)> = [
-                        ('T', ("stone_axe", "wood", 20.0)),
-                        ('R', ("stone_pickaxe", "stone", 20.0)),
-                        ('U', ("stone_pickaxe", "sulfur", 30.0)),
-                        ('I', ("metal_pickaxe", "iron_ore", 40.0)),
-                    ].iter().cloned().collect();
-
-                    if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile) {
-                        if held == Some(*required_tool) {
-                            if player.add_item(resource, 1) {
-                                self.map.grid[py as usize][px as usize] = '.';
-                                reward = *reward_val;
-                            } else { reward = -15.0; }
-                        } else { reward = -10.0; }
-                    } else { reward = -2.0; }
-                },
-                "place_furnace" => {
-                    let player = &mut self.players[player_index];
-                    if player.get_total_quantity("furnace") > 0 && self.map.grid[py as usize][px as usize] == '.' {
-                        let mut recipe = HashMap::new(); recipe.insert("furnace".to_string(), 1);
-                        player.remove_resources(&recipe);
-                        self.map.grid[py as usize][px as usize] = 'F';
-                        reward = 40.0;
-                    } else { reward = -5.0; }
-                },
-                "smelt_iron" => {
-                    let mut recipe = HashMap::new();
-                    recipe.insert("iron_ore".to_string(), 1);
-                    recipe.insert("wood".to_string(), 1);
-
-                    if self._is_adjacent_to(px, py, 'F') {
-                        let player = &mut self.players[player_index];
-                        if player.has_resources(&recipe) {
-                            if player.remove_resources(&recipe) {
-                                player.add_item("iron_bars", 1);
-                                reward = 60.0;
-                            } else { reward = -15.0; }
-                        } else {
-                            reward = -12.0;
-                        }
-                    } else {
-                        reward = -12.0;
-                    }
-                },
-                _ => (),
+                "up" | "down" | "left" | "right" => self._handle_move_action(player_index, action),
+                "gather" => self._handle_gather_action(player_index, px, py),
+                "place_furnace" => self._handle_place_furnace_action(player_index, px, py),
+                "smelt_iron" => self._handle_smelt_iron_action(player_index, px, py),
+                _ => -0.1, // Default reward for unknown or no-op actions
             }
         }
-        reward
     }
 }
 
