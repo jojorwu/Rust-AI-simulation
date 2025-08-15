@@ -1,6 +1,8 @@
 const INVENTORY_SLOTS: usize = 6;
 
-#[derive(Debug, Clone)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Slot {
     pub item: String,
     pub quantity: u32,

@@ -1,66 +1,62 @@
 mod map;
 mod player;
+mod state;
+mod agent;
 
 use map::Map;
-use player::Player;
+use player::{Player, Slot};
+use state::StateKey;
+use agent::Agent;
 
 fn main() {
     println!("--- Rust Simulation Test ---");
 
     // --- Map Generation Test ---
-    const WIDTH: u32 = 60;
-    const HEIGHT: u32 = 30;
-    const SCALE: f64 = 25.0;
-    const OCTAVES: i32 = 5;
-    const PERSISTENCE: f64 = 0.5;
-    const LACUNARITY: f64 = 2.0;
-
     println!("\n--- Generating Map... ---");
-    let mut island_map = Map::new(WIDTH, HEIGHT);
-    island_map.generate_island_map(SCALE, OCTAVES, PERSISTENCE, LACUNARITY);
+    let mut island_map = Map::new(20, 10);
+    island_map.generate_island_map(10.0, 5, 0.5, 2.0);
     island_map.display();
 
     // --- Player and Inventory Test ---
     println!("\n--- Testing Player Inventory... ---");
     let mut test_player = Player::new(5, 5);
-
-    println!("Initial Inventory: {:?}", test_player.inventory);
-
-    // Add items
     test_player.add_item("wood", 10);
-    test_player.add_item("stone", 5);
-    test_player.add_item("wood", 5); // Add to existing stack
-    test_player.add_item("stone_axe", 1); // Add a tool
+    test_player.add_item("stone_axe", 1);
+    println!("Player Inventory: {:?}", test_player.inventory);
 
-    println!("Inventory after adding items: {:?}", test_player.inventory);
+    // --- Agent and Q-Learning Test ---
+    println!("\n--- Testing Agent Logic... ---");
+    let actions = vec![
+        "up".to_string(), "down".to_string(), "left".to_string(), "right".to_string(),
+        "gather".to_string(), "craft_stone_axe".to_string()
+    ];
+    let mut agent = Agent::new(actions.clone(), 0.1, 0.9, 1.0);
 
-    // Check quantities
-    let wood_count = test_player.get_total_quantity("wood");
-    let stone_count = test_player.get_total_quantity("stone");
-    let axe_count = test_player.get_total_quantity("stone_axe");
+    // Create a sample state
+    let state1 = StateKey {
+        local_view: vec!['.', 'T', '.'],
+        inventory: test_player.inventory.clone(),
+        held_item: None,
+    };
 
-    println!("\nItem Quantities:");
-    println!("Wood: {}", wood_count);
-    println!("Stone: {}", stone_count);
-    println!("Stone Axe: {}", axe_count);
+    // Choose an action
+    let action = agent.choose_action(&state1);
+    println!("Agent chose action: {}", action);
 
-    // Test removing resources
-    let mut recipe = std::collections::HashMap::new();
-    recipe.insert("wood".to_string(), 7);
-    recipe.insert("stone".to_string(), 3);
+    // Simulate a transition
+    let reward = 20.0; // Got wood
+    test_player.add_item("wood", 1);
+    let state2 = StateKey {
+        local_view: vec!['.', '.', '.'], // Tree is gone
+        inventory: test_player.inventory.clone(),
+        held_item: None,
+    };
 
-    println!("\nAttempting to remove resources for recipe: {:?}", recipe);
-    if test_player.has_resources(&recipe) {
-        if test_player.remove_resources(&recipe) {
-            println!("Successfully removed resources.");
-        } else {
-            println!("Failed to remove resources.");
-        }
-    } else {
-        println!("Not enough resources for recipe.");
-    }
+    println!("\nQ-table before update: {:?}", agent.q_table);
+    agent.update_q_table(&state1, &action, reward, &state2);
+    println!("Q-table after update: {:?}", agent.q_table);
 
-    println!("Final Inventory: {:?}", test_player.inventory);
-    let final_wood_count = test_player.get_total_quantity("wood");
-    println!("Final wood count: {}", final_wood_count);
+    // Choose another action from the new state
+    let action2 = agent.choose_action(&state2);
+    println!("\nAgent chose new action from state 2: {}", action2);
 }
