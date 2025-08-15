@@ -137,7 +137,7 @@ impl Player {
 
         if new_x < map.width && new_y < map.height {
             let target_tile = map.grid[new_y as usize][new_x as usize];
-            let blocking_tiles = ['W', '#'];
+            let blocking_tiles = ['W', '#', 'D'];
             if !blocking_tiles.contains(&target_tile) {
                 self.x = new_x;
                 self.y = new_y;

@@ -7,5 +7,6 @@
   { "name": "stone_axe", "stackable": false, "tool": true },
   { "name": "stone_pickaxe", "stackable": false, "tool": true },
   { "name": "metal_pickaxe", "stackable": false, "tool": true },
-  { "name": "furnace", "stackable": false, "tool": false }
+  { "name": "furnace", "stackable": false, "tool": false },
+  { "name": "door", "stackable": false, "tool": false }
 ]

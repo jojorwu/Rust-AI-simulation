@@ -9,6 +9,8 @@ pub enum Action {
     Place(String),
     Smelt,
     Build(String),
+    Open,
+    Close,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -38,5 +40,7 @@ pub fn get_all_actions() -> Vec<Action> {
         Action::Build("foundation".to_string()),
         Action::Build("wall".to_string()),
         Action::Build("doorway".to_string()),
+        Action::Open,
+        Action::Close,
     ]
 }

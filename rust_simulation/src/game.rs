@@ -84,6 +84,19 @@ impl Game {
         false
     }
 
+    fn _find_adjacent_tile(&self, px: u32, py: u32, tile_type: char) -> Option<(u32, u32)> {
+        for (dx, dy) in &[(0, 1), (0, -1), (1, 0), (-1, 0)] {
+            let nx = (px as i32 + dx) as u32;
+            let ny = (py as i32 + dy) as u32;
+            if nx < self.map.width && ny < self.map.height {
+                if self.map.grid[ny as usize][nx as usize] == tile_type {
+                    return Some((nx, ny));
+                }
+            }
+        }
+        None
+    }
+
     fn _find_and_set_valid_start_positions(&mut self) {
         let mut rng = rand::thread_rng();
         let mut occupied_positions = std::collections::HashSet::new();
@@ -263,6 +276,16 @@ impl Game {
         } else { -5.0 }
     }
 
+    fn _handle_place_door_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+        let player = &mut self.players[player_index];
+        if player.get_total_quantity("door") > 0 && self.map.grid[py as usize][px as usize] == 'O' {
+            let mut recipe = HashMap::new(); recipe.insert("door".to_string(), 1);
+            player.remove_resources(&recipe);
+            self.map.grid[py as usize][px as usize] = 'D'; // 'D' for closed door
+            40.0
+        } else { -5.0 }
+    }
+
     fn _handle_smelt_iron_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
         let mut recipe = HashMap::new();
         recipe.insert("iron_ore".to_string(), 1);
@@ -312,6 +335,24 @@ impl Game {
         }
     }
 
+    fn _handle_open_door_action(&mut self, _player_index: usize, px: u32, py: u32) -> f64 {
+        if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'D') {
+            self.map.grid[door_y as usize][door_x as usize] = 'd'; // 'd' for open door
+            10.0
+        } else {
+            -5.0
+        }
+    }
+
+    fn _handle_close_door_action(&mut self, _player_index: usize, px: u32, py: u32) -> f64 {
+        if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'd') {
+            self.map.grid[door_y as usize][door_x as usize] = 'D'; // 'D' for closed door
+            10.0
+        } else {
+            -5.0
+        }
+    }
+
     pub fn _perform_action(&mut self, player_index: usize, action: &Action) -> f64 {
         let (px, py) = (self.players[player_index].x, self.players[player_index].y);
 
@@ -323,12 +364,16 @@ impl Game {
             Action::Place(item) => {
                 if item == "furnace" {
                     self._handle_place_furnace_action(player_index, px, py)
+                } else if item == "door" {
+                    self._handle_place_door_action(player_index, px, py)
                 } else {
                     -0.1
                 }
             },
             Action::Smelt => self._handle_smelt_iron_action(player_index, px, py),
             Action::Build(structure) => self._handle_build_action(player_index, structure, px, py),
+            Action::Open => self._handle_open_door_action(player_index, px, py),
+            Action::Close => self._handle_close_door_action(player_index, px, py),
         }
     }
 }

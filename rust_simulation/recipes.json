@@ -13,5 +13,8 @@
   "metal_pickaxe": {
     "wood": 2,
     "iron_bars": 10
+  },
+  "door": {
+    "wood": 10
   }
 }
