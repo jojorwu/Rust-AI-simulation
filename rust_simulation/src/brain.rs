@@ -23,7 +23,7 @@ impl Brain {
     }
 
     pub fn choose_action(&self, state: &StateKey) -> Result<String, SimulationError> {
-        if rand::thread_rng().gen::<f64>() < self.epsilon {
+        if rand::thread_rng().r#gen::<f64>() < self.epsilon {
             // Explore
             let index = rand::thread_rng().gen_range(0..self.actions.len());
             Ok(self.actions[index].clone())

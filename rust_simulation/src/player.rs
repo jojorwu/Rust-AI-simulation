@@ -30,6 +30,11 @@ impl Player {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.inventory = vec![None; INVENTORY_SLOTS];
+        self.held_item = None;
+    }
+
     // --- Inventory Helper Methods ---
 
     fn find_item_slot(&self, item_name: &str) -> Option<usize> {

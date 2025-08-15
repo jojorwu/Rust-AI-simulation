@@ -1,4 +1,4 @@
-use noise::{NoiseFn, Fbm};
+use noise::{NoiseFn, Fbm, Perlin};
 use rand::Rng;
 
 pub struct Map {
@@ -17,9 +17,9 @@ impl Map {
     }
 
     pub fn generate_island_map(&mut self, scale: f64, octaves: i32, persistence: f64, lacunarity: f64) {
-        let seed = rand::thread_rng().gen::<u32>();
-        let mut fbm = Fbm::new(seed);
-        fbm.octaves = octaves;
+        let seed = rand::thread_rng().r#gen::<u32>();
+        let mut fbm: Fbm<Perlin> = Fbm::new(seed);
+        fbm.octaves = octaves as usize;
         fbm.persistence = persistence;
         fbm.lacunarity = lacunarity;
 
@@ -69,5 +69,21 @@ impl Map {
             }
             println!();
         }
+    }
+
+    pub fn add_tree(&mut self, x: u32, y: u32) {
+        self.grid[y as usize][x as usize] = 'T';
+    }
+
+    pub fn add_rock(&mut self, x: u32, y: u32) {
+        self.grid[y as usize][x as usize] = 'R';
+    }
+
+    pub fn add_sulfur(&mut self, x: u32, y: u32) {
+        self.grid[y as usize][x as usize] = 'U';
+    }
+
+    pub fn add_iron_ore_node(&mut self, x: u32, y: u32) {
+        self.grid[y as usize][x as usize] = 'I';
     }
 }

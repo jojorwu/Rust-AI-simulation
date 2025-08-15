@@ -73,10 +73,7 @@ impl Game {
         }
     }
 
-    fn _is_adjacent_to(&self, player_index: usize, tile_type: char) -> bool {
-        let player = &self.players[player_index];
-        let px = player.x;
-        let py = player.y;
+    fn _is_adjacent_to(&self, px: u32, py: u32, tile_type: char) -> bool {
         for (dx, dy) in &[(0, 1), (0, -1), (1, 0), (-1, 0)] {
             let nx = (px as i32 + dx) as u32;
             let ny = (py as i32 + dy) as u32;
@@ -140,7 +137,7 @@ impl Game {
     pub fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
         self.setup_new_map();
-        let mut original_map_grid = self.map.grid.clone();
+        let original_map_grid = self.map.grid.clone();
         self._find_and_set_valid_start_positions();
 
         println!("Initial Map:");
@@ -180,14 +177,11 @@ impl Game {
 
     pub fn _perform_action(&mut self, player_index: usize, action: &str) -> f64 {
         let mut reward = -0.1;
-
-        // --- Get Recipes ---
         let recipes = recipes::get_recipes();
-
-        // --- Actions ---
-        let player = &mut self.players[player_index];
+        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
 
         if action.starts_with("equip_") {
+            let player = &mut self.players[player_index];
             let item = &action[6..];
             if player.get_total_quantity(item) > 0 {
                 player.held_item = Some(item.to_string());
@@ -196,27 +190,31 @@ impl Game {
                 reward = -2.0;
             }
         } else if action.starts_with("craft_") {
+            let player = &mut self.players[player_index];
             let item = &action[6..];
             if let Some(recipe) = recipes.get(item) {
                 if player.has_resources(recipe) {
                     if player.remove_resources(recipe) {
                         if player.add_item(item, 1) {
-                             reward = 50.0;
-                        } else { reward = -15.0; } // Inventory full
-                    } else { reward = -15.0; } // Should not happen
+                            reward = 50.0;
+                        } else { reward = -15.0; }
+                    } else { reward = -15.0; }
                 } else { reward = -10.0; }
             } else { reward = -1.0; }
         } else {
             match action {
                 "up" | "down" | "left" | "right" => {
+                    let player = &mut self.players[player_index];
                     if player.move_player(action, &self.map) {
-                        let current_tile = self.map.grid[player.y as usize][player.x as usize];
+                        let (new_px, new_py) = (player.x, player.y);
+                        let current_tile = self.map.grid[new_py as usize][new_px as usize];
                         if current_tile == 'M' { reward = -2.0; }
                         else if "RUIT".contains(current_tile) { reward = 1.0; }
                     } else { reward = -5.0; }
                 },
                 "gather" => {
-                    let tile = self.map.grid[player.y as usize][player.x as usize];
+                    let tile = self.map.grid[py as usize][px as usize];
+                    let player = &mut self.players[player_index];
                     let held = player.held_item.as_deref();
                     let tool_map: HashMap<char, (&str, &str, f64)> = [
                         ('T', ("stone_axe", "wood", 20.0)),
@@ -228,30 +226,41 @@ impl Game {
                     if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile) {
                         if held == Some(*required_tool) {
                             if player.add_item(resource, 1) {
-                                self.map.grid[player.y as usize][player.x as usize] = '.';
+                                self.map.grid[py as usize][px as usize] = '.';
                                 reward = *reward_val;
                             } else { reward = -15.0; }
                         } else { reward = -10.0; }
                     } else { reward = -2.0; }
                 },
                 "place_furnace" => {
-                    if player.get_total_quantity("furnace") > 0 && self.map.grid[player.y as usize][player.x as usize] == '.' {
+                    let player = &mut self.players[player_index];
+                    if player.get_total_quantity("furnace") > 0 && self.map.grid[py as usize][px as usize] == '.' {
                         let mut recipe = HashMap::new(); recipe.insert("furnace".to_string(), 1);
                         player.remove_resources(&recipe);
-                        self.map.grid[player.y as usize][player.x as usize] = 'F';
+                        self.map.grid[py as usize][px as usize] = 'F';
                         reward = 40.0;
                     } else { reward = -5.0; }
                 },
                 "smelt_iron" => {
-                    let mut recipe = HashMap::new(); recipe.insert("iron_ore".to_string(), 1); recipe.insert("wood".to_string(), 1);
-                    if self._is_adjacent_to(player_index, 'F') && player.has_resources(&recipe) {
-                        if player.remove_resources(&recipe) {
-                            player.add_item("iron_bars", 1);
-                            reward = 60.0;
-                        } else { reward = -15.0; }
-                    } else { reward = -12.0; }
+                    let mut recipe = HashMap::new();
+                    recipe.insert("iron_ore".to_string(), 1);
+                    recipe.insert("wood".to_string(), 1);
+
+                    if self._is_adjacent_to(px, py, 'F') {
+                        let player = &mut self.players[player_index];
+                        if player.has_resources(&recipe) {
+                            if player.remove_resources(&recipe) {
+                                player.add_item("iron_bars", 1);
+                                reward = 60.0;
+                            } else { reward = -15.0; }
+                        } else {
+                            reward = -12.0;
+                        }
+                    } else {
+                        reward = -12.0;
+                    }
                 },
-                _ => (), // Unknown action
+                _ => (),
             }
         }
         reward
