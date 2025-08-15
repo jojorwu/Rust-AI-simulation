@@ -5,8 +5,6 @@ class Player:
     """
     def __init__(self, map_instance, start_x, start_y):
         self.map = map_instance
-        self.initial_x = start_x
-        self.initial_y = start_y
         self.x = start_x
         self.y = start_y
         self.inventory = {}
@@ -52,7 +50,5 @@ class Player:
         return False
 
     def reset(self):
-        """Resets the player's position and inventory."""
-        self.x = self.initial_x
-        self.y = self.initial_y
+        """Resets the player's inventory."""
         self.inventory = {}

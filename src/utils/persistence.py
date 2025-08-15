@@ -15,7 +15,8 @@ def save_q_table(q_table):
 
     file_path = os.path.join(generation_dir, "q_table.json")
 
-    q_table_str_keys = {str(k): v for k, v in q_table.items()}
+    # Use json.dumps to safely serialize tuple keys to strings
+    q_table_str_keys = {json.dumps(k): v for k, v in q_table.items()}
     with open(file_path, 'w') as f:
         json.dump(q_table_str_keys, f, indent=4)
     print(f"Q-table saved to {file_path}")
@@ -43,6 +44,7 @@ def load_q_table():
 
     with open(file_path, 'r') as f:
         q_table_str_keys = json.load(f)
-        q_table = {eval(k): v for k, v in q_table_str_keys.items()}
+        # Safely parse the string keys back into tuples
+        q_table = {tuple(json.loads(k)): v for k, v in q_table_str_keys.items()}
         print(f"Q-table loaded from latest generation: {latest_generation}")
         return q_table

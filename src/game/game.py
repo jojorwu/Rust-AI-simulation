@@ -16,7 +16,8 @@ class Game:
     def __init__(self):
         print("Simulation starting...")
         self.game_map = Map(width=config.WIDTH, height=config.HEIGHT)
-        self.player = self._initialize_player()
+        # Player is created at a temporary position. A valid one is set in run().
+        self.player = Player(self.game_map, 0, 0)
         self.agent = self._initialize_agent()
         self.agent.q_table = load_q_table()
 
@@ -25,14 +26,6 @@ class Game:
         self.last_cycle_performance = 0.0
         self.current_cycle_episodes = 0
 
-    def _initialize_player(self):
-        """Creates the player and places them on a valid starting tile."""
-        start_x, start_y = 0, 0
-        while self.game_map.grid and self.game_map.grid[start_y][start_x] in ['#', 'T', 'S']:
-            start_x = random.randint(0, self.game_map.width - 1)
-            start_y = random.randint(0, self.game_map.height - 1)
-        return Player(self.game_map, start_x, start_y)
-
     def _initialize_agent(self):
         """Initializes the AI agent."""
         actions = ['up', 'down', 'left', 'right', 'gather', 'craft']
@@ -40,6 +33,18 @@ class Game:
                      learning_rate=config.LEARNING_RATE,
                      discount_factor=config.DISCOUNT_FACTOR,
                      epsilon=config.INITIAL_EPSILON)
+
+    def _find_and_set_valid_start_pos(self):
+        """Finds a valid random starting position for the player and updates player's state."""
+        start_x, start_y = 0, 0
+        # Loop until a valid starting tile ('.') is found
+        while True:
+            start_x = random.randint(0, self.game_map.width - 1)
+            start_y = random.randint(0, self.game_map.height - 1)
+            if self.game_map.grid[start_y][start_x] == '.':
+                break
+        self.player.x = start_x
+        self.player.y = start_y
 
     def setup_new_map(self):
         """Generates a new random map and populates it with resources."""
@@ -56,6 +61,8 @@ class Game:
         """Runs the main training loop."""
         self.setup_new_map()
         original_map_grid = copy.deepcopy(self.game_map.grid)
+
+        self._find_and_set_valid_start_pos()
 
         print("Initial Map:")
         self.game_map.display(self.player)
@@ -100,11 +107,10 @@ class Game:
                 self.setup_new_map()
                 original_map_grid = copy.deepcopy(self.game_map.grid)
 
+            # Reset episode state
             self.game_map.grid = copy.deepcopy(original_map_grid)
-            self.player.reset()
-            while self.game_map.grid[self.player.y][self.player.x] in ['#', 'T', 'S']:
-                self.player.x = random.randint(0, self.game_map.width - 1)
-                self.player.y = random.randint(0, self.game_map.height - 1)
+            self.player.reset() # Resets inventory
+            self._find_and_set_valid_start_pos() # Find a new valid start pos for the episode
 
             for step in range(config.MAX_STEPS_PER_EPISODE):
                 total_ticks += 1

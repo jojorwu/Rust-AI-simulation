@@ -13,14 +13,13 @@ class Agent:
 
     def choose_action(self, state):
         """Chooses an action using an epsilon-greedy policy."""
-        if random.random() < self.epsilon:
-            return random.choice(self.actions)  # Explore
+        # Explore if epsilon is high or if the state is unknown
+        if random.random() < self.epsilon or state not in self.q_table:
+            return random.choice(self.actions)
         else:
-            # If state not in q_table, choose randomly
-            if state not in self.q_table:
-                 return random.choice(self.actions)
-            q_values = self.q_table.get(state, {action: 0 for action in self.actions})
-            return max(q_values, key=q_values.get) # Exploit
+            # Exploit: choose the best known action for the current state
+            q_values = self.q_table[state]
+            return max(q_values, key=q_values.get)
 
     def update_q_table(self, state, action, reward, next_state):
         """Updates the Q-table using the Q-learning formula."""
