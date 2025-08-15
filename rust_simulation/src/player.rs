@@ -1,6 +1,7 @@
 const INVENTORY_SLOTS: usize = 6;
 
 use serde::{Serialize, Deserialize};
+use super::item::ItemRegistry; // Import ItemRegistry
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Slot {
@@ -66,14 +67,16 @@ impl Player {
         true
     }
 
-    pub fn add_item(&mut self, item_name: &str, quantity: u32) -> bool {
-        let stackable_items = ["wood", "stone", "sulfur", "iron_ore", "iron_bars"];
+    pub fn add_item(&mut self, item_name: &str, quantity: u32, item_registry: &ItemRegistry) -> bool {
+        let item = item_registry.get_item(item_name);
 
-        if stackable_items.contains(&item_name) {
-            if let Some(slot_index) = self.find_item_slot(item_name) {
-                if let Some(slot) = &mut self.inventory[slot_index] {
-                    slot.quantity += quantity;
-                    return true;
+        if let Some(item_def) = item {
+            if item_def.stackable {
+                if let Some(slot_index) = self.find_item_slot(item_name) {
+                    if let Some(slot) = &mut self.inventory[slot_index] {
+                        slot.quantity += quantity;
+                        return true;
+                    }
                 }
             }
         }

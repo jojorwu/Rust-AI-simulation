@@ -6,6 +6,7 @@ use super::state::StateKey;
 use super::recipes;
 use super::errors::SimulationError;
 use super::actions::{Action, Direction, get_all_actions};
+use super::item::ItemRegistry;
 
 use rand::Rng;
 
@@ -16,11 +17,13 @@ pub struct Game {
     pub map: Map,
     pub players: Vec<Player>,
     pub brains: Vec<Brain>,
+    pub item_registry: ItemRegistry,
 }
 
 impl Game {
     pub fn new() -> Self {
         let map = Map::new(WIDTH, HEIGHT);
+        let item_registry = ItemRegistry::new("items.json");
 
         let mut players = Vec::new();
         let mut brains = Vec::new();
@@ -35,6 +38,7 @@ impl Game {
             map,
             players,
             brains,
+            item_registry,
         }
     }
 
@@ -203,7 +207,7 @@ impl Game {
         if let Some(recipe) = recipes.get(item) {
             if player.has_resources(recipe) {
                 if player.remove_resources(recipe) {
-                    if player.add_item(item, 1) {
+                    if player.add_item(item, 1, &self.item_registry) {
                         50.0
                     } else { -15.0 }
                 } else { -15.0 }
@@ -241,7 +245,7 @@ impl Game {
 
         if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile) {
             if held == Some(*required_tool) {
-                if player.add_item(resource, 1) {
+                if player.add_item(resource, 1, &self.item_registry) {
                     self.map.grid[py as usize][px as usize] = '.';
                     *reward_val
                 } else { -15.0 }
@@ -268,7 +272,7 @@ impl Game {
             let player = &mut self.players[player_index];
             if player.has_resources(&recipe) {
                 if player.remove_resources(&recipe) {
-                    player.add_item("iron_bars", 1);
+                    player.add_item("iron_bars", 1, &self.item_registry);
                     60.0
                 } else { -15.0 }
             } else { -12.0 }

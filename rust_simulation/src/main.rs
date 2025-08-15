@@ -4,6 +4,7 @@ mod player;
 mod state;
 mod brain;
 mod game;
+mod item;
 mod config;
 mod recipes;
 mod errors;

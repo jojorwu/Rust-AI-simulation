@@ -1,0 +1,11 @@
+[
+  { "name": "wood", "stackable": true, "tool": false },
+  { "name": "stone", "stackable": true, "tool": false },
+  { "name": "sulfur", "stackable": true, "tool": false },
+  { "name": "iron_ore", "stackable": true, "tool": false },
+  { "name": "iron_bars", "stackable": true, "tool": false },
+  { "name": "stone_axe", "stackable": false, "tool": true },
+  { "name": "stone_pickaxe", "stackable": false, "tool": true },
+  { "name": "metal_pickaxe", "stackable": false, "tool": true },
+  { "name": "furnace", "stackable": false, "tool": false }
+]
