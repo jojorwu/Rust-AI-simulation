@@ -6,4 +6,5 @@ pub struct StateKey {
     pub local_view: Vec<char>,
     pub inventory: Vec<Option<Slot>>,
     pub held_item: Option<String>,
+    pub mental_map: Vec<Vec<Option<char>>>,
 }

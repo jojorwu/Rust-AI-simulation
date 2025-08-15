@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use rand::Rng;
 use super::state::StateKey;
 use super::errors::SimulationError;
+use super::config::{WIDTH, HEIGHT};
 
 pub struct Brain {
     pub actions: Vec<String>,
@@ -9,6 +10,7 @@ pub struct Brain {
     pub discount_factor: f64,
     pub epsilon: f64,
     pub q_table: HashMap<String, HashMap<String, f64>>,
+    pub mental_map: Vec<Vec<Option<char>>>,
 }
 
 impl Brain {
@@ -19,6 +21,7 @@ impl Brain {
             discount_factor,
             epsilon,
             q_table: HashMap::new(),
+            mental_map: vec![vec![None; WIDTH as usize]; HEIGHT as usize],
         }
     }
 

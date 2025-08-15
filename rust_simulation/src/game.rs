@@ -42,7 +42,7 @@ impl Game {
         }
     }
 
-    fn get_state(&self, player_index: usize) -> StateKey {
+    fn get_state(&mut self, player_index: usize) -> StateKey {
         let player = &self.players[player_index];
         let mut local_view = Vec::new();
         let view_radius = 1; // 3x3 view
@@ -53,7 +53,10 @@ impl Game {
                 let ny = player.y as i32 + dy;
 
                 if nx >= 0 && nx < self.map.width as i32 && ny >= 0 && ny < self.map.height as i32 {
-                    local_view.push(self.map.grid[ny as usize][nx as usize]);
+                    let tile = self.map.grid[ny as usize][nx as usize];
+                    local_view.push(tile);
+                    // Update mental map
+                    self.brains[player_index].mental_map[ny as usize][nx as usize] = Some(tile);
                 } else {
                     local_view.push('X'); // 'X' for out of bounds
                 }
@@ -64,6 +67,7 @@ impl Game {
             local_view,
             inventory: player.inventory.clone(),
             held_item: player.held_item.clone(),
+            mental_map: self.brains[player_index].mental_map.clone(),
         }
     }
 
@@ -162,11 +166,27 @@ impl Game {
 
             if (episode + 1) % 200 == 0 {
                 println!("Episode {}/{} | P1 Epsilon: {:.3}", episode + 1, EPISODES, self.brains[0].epsilon);
+                self._display_mental_map(0);
             }
         }
 
         println!("--- Training Finished ---");
         Ok(())
+    }
+
+    fn _display_mental_map(&self, player_index: usize) {
+        println!("--- Player {} Mental Map ---", player_index);
+        let brain = &self.brains[player_index];
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                match brain.mental_map[y as usize][x as usize] {
+                    Some(tile) => print!("{} ", tile),
+                    None => print!("? "),
+                }
+            }
+            println!();
+        }
+        println!("--------------------------");
     }
 
     // --- Action Handler Methods ---
