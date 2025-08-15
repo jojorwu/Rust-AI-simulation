@@ -11,14 +11,28 @@ class Player:
         self.y = start_y
         self.inventory = {}
 
-    def get_state(self):
+    def get_state(self, view_radius=1):
         """
-        Returns the current state of the player, including position and inventory.
-        The state is defined as (x, y, wood_count, stone_count).
+        Returns the current state of the player, including a local view and inventory.
+        The state is a tuple containing a flattened view of the surrounding tiles
+        and the player's inventory counts.
         """
+        # Get local view
+        local_view = []
+        for dy in range(-view_radius, view_radius + 1):
+            for dx in range(-view_radius, view_radius + 1):
+                nx, ny = self.x + dx, self.y + dy
+                if 0 <= nx < self.map.width and 0 <= ny < self.map.height:
+                    local_view.append(self.map.grid[ny][nx])
+                else:
+                    local_view.append('X') # 'X' for out of bounds
+
+        # Get inventory state
         wood_count = self.inventory.get('wood', 0)
         stone_count = self.inventory.get('stone', 0)
-        return (self.x, self.y, wood_count, stone_count)
+
+        # The final state is a combination of the view and inventory
+        return tuple(local_view) + (wood_count, stone_count)
 
     def move(self, action):
         """Moves the player based on the chosen action."""
