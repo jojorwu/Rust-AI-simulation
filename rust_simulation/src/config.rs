@@ -7,6 +7,7 @@ pub const NUM_SULFUR: u32 = 10;
 pub const NUM_IRON_ORE: u32 = 8;
 
 // PLAYER/AI SETTINGS
+pub const NUM_PLAYERS: u32 = 2;
 pub const INVENTORY_SLOTS: usize = 6;
 pub const LEARNING_RATE: f64 = 0.1;
 pub const DISCOUNT_FACTOR: f64 = 0.9;

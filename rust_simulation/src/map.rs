@@ -52,10 +52,20 @@ impl Map {
         }
     }
 
-    pub fn display(&self) {
+    pub fn display(&self, players: &[super::player::Player]) {
         for y in 0..self.height {
             for x in 0..self.width {
-                print!("{} ", self.grid[y as usize][x as usize]);
+                let mut is_player_on_tile = false;
+                for p in players {
+                    if p.x == x && p.y == y {
+                        print!("P ");
+                        is_player_on_tile = true;
+                        break;
+                    }
+                }
+                if !is_player_on_tile {
+                    print!("{} ", self.grid[y as usize][x as usize]);
+                }
             }
             println!();
         }

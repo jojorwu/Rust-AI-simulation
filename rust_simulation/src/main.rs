@@ -1,7 +1,7 @@
 mod map;
 mod player;
 mod state;
-mod agent;
+mod brain;
 mod game;
 mod config;
 mod recipes;

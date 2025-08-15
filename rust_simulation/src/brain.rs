@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use rand::Rng;
 use super::state::StateKey;
 
-pub struct Agent {
+pub struct Brain {
     pub actions: Vec<String>,
     pub learning_rate: f64,
     pub discount_factor: f64,
@@ -10,9 +10,9 @@ pub struct Agent {
     pub q_table: HashMap<String, HashMap<String, f64>>,
 }
 
-impl Agent {
+impl Brain {
     pub fn new(actions: Vec<String>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
-        Agent {
+        Brain {
             actions,
             learning_rate,
             discount_factor,
