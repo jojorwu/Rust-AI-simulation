@@ -146,7 +146,7 @@ class Player:
         new_x = self.x + dx
         new_y = self.y + dy
 
-        if 0 <= new_x < self.map.width and 0 <= new_y < self.map.height and self.map.grid[new_y][new_x] != '#':
+        if 0 <= new_x < self.map.width and 0 <= new_y < self.map.height and self.map.grid[new_y][new_x] != 'W':
             self.x = new_x
             self.y = new_y
             return True

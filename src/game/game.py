@@ -62,21 +62,41 @@ class Game:
         self.player.y = start_y
 
     def setup_new_map(self):
-        """Generates a new random map and populates it with resources."""
+        """Generates a new island map and populates it with biome-aware resources."""
         print("\n--- GENERATING NEW MAP ---")
-        self.game_map.generate_random_map(config.OBSTACLE_DENSITY)
-        for _ in range(config.NUM_TREES):
-            tx, ty = random.randint(0, self.game_map.width - 1), random.randint(0, self.game_map.height - 1)
-            self.game_map.add_tree(tx, ty)
-        for _ in range(config.NUM_STONE):
-            sx, sy = random.randint(0, self.game_map.width - 1), random.randint(0, self.game_map.height - 1)
-            self.game_map.add_stone(sx, sy)
-        for _ in range(config.NUM_SULFUR):
-            ux, uy = random.randint(0, self.game_map.width - 1), random.randint(0, self.game_map.height - 1)
-            self.game_map.add_sulfur(ux, uy)
-        for _ in range(config.NUM_IRON_ORE):
-            ix, iy = random.randint(0, self.game_map.width - 1), random.randint(0, self.game_map.height - 1)
-            self.game_map.add_iron_ore_node(ix, iy)
+        self.game_map.generate_island_map()
+
+        # Get lists of valid tiles for each biome
+        plains_tiles = []
+        mountain_tiles = []
+        for y in range(self.game_map.height):
+            for x in range(self.game_map.width):
+                if self.game_map.grid[y][x] == '.':
+                    plains_tiles.append((x, y))
+                elif self.game_map.grid[y][x] == 'M':
+                    mountain_tiles.append((x, y))
+
+        # Spawn resources in their respective biomes
+        # Trees spawn in plains
+        spawn_locations = random.sample(plains_tiles, min(len(plains_tiles), config.NUM_TREES))
+        for x, y in spawn_locations:
+            self.game_map.add_tree(x, y)
+
+        # Rock, Sulfur, and Iron spawn in mountains and plains
+        rock_spawn_candidates = plains_tiles + mountain_tiles
+        spawn_locations = random.sample(rock_spawn_candidates, min(len(rock_spawn_candidates), config.NUM_STONE))
+        for x, y in spawn_locations:
+            self.game_map.add_rock(x, y)
+
+        sulfur_spawn_candidates = plains_tiles + mountain_tiles
+        spawn_locations = random.sample(sulfur_spawn_candidates, min(len(sulfur_spawn_candidates), config.NUM_SULFUR))
+        for x, y in spawn_locations:
+            self.game_map.add_sulfur(x, y)
+
+        iron_spawn_candidates = mountain_tiles # Iron is only in mountains
+        spawn_locations = random.sample(iron_spawn_candidates, min(len(iron_spawn_candidates), config.NUM_IRON_ORE))
+        for x, y in spawn_locations:
+            self.game_map.add_iron_ore_node(x, y)
 
     def run(self):
         """Runs the main training loop."""
@@ -151,7 +171,7 @@ class Game:
                 stone = self.player.get_total_quantity('stone')
                 sulfur = self.player.get_total_quantity('sulfur')
                 goal_item = self.player.get_total_quantity(config.CRAFTING_GOAL)
-                print(f"E{episode+1}/{config.EPISODES} | Inv: {wood}W, {stone}S, {sulfur}U, {goal_item}A | Epsilon: {self.agent.epsilon:.3f}")
+                print(f"E{episode+1}/{config.EPISODES} | Inv: {wood}W, {stone}R, {sulfur}U, {goal_item}A | Epsilon: {self.agent.epsilon:.3f}")
 
         print("--- Training Finished ---")
         print(f"\nFinal inventory from last episode: {self.player.inventory}")
@@ -160,11 +180,19 @@ class Game:
     def _perform_action(self, action):
         """Performs the given action and returns the reward."""
         reward = -0.1  # Time penalty
-        # print(f"Action: {action}, Current Held: {self.player.held_item}") # General action debug
 
         # Movement
         if action in ['up', 'down', 'left', 'right']:
-            if not self.player.move(action): reward = -5
+            if self.player.move(action):
+                # Move was successful, check for special tile penalties/rewards
+                current_tile = self.game_map.grid[self.player.y][self.player.x]
+                if current_tile == 'M':
+                    reward = -2.0  # Higher cost for moving in mountains
+                elif current_tile in ['R', 'U', 'I', 'T']:
+                    reward = 1.0 # Small reward for moving onto a resource
+            else:
+                # Move was unsuccessful (e.g., into water)
+                reward = -5
 
         # Equip
         elif action.startswith('equip_'):
@@ -182,16 +210,12 @@ class Game:
             if recipe and self.player.has_resources(recipe):
                 if self.player.remove_resources(recipe):
                     if self.player.add_item(item):
-                        # print(f"DEBUG: Crafted {item}")
                         reward = 100 if item == config.CRAFTING_GOAL else 50
                     else:
-                        # print(f"DEBUG: Craft failed for {item}, inventory full.")
                         reward = -15 # Inventory full
                 else:
-                    # print(f"DEBUG: Craft failed for {item}, could not remove resources.")
                     reward = -15 # Failed to remove resources, should be rare
             else:
-                # print(f"DEBUG: Craft failed for {item}, not enough resources.")
                 reward = -10 # Not enough resources
 
         # Place Furnace
@@ -199,7 +223,6 @@ class Game:
             if self.player.get_total_quantity('furnace') > 0 and self.game_map.grid[self.player.y][self.player.x] == '.':
                 self.player.remove_resources({'furnace': 1})
                 self.game_map.grid[self.player.y][self.player.x] = 'F'
-                # print("DEBUG: Player placed a furnace.")
                 reward = 40
             else:
                 reward = -5
@@ -210,12 +233,10 @@ class Game:
             if self._is_adjacent_to('F') and self.player.has_resources(smelting_recipe):
                 if self.player.remove_resources(smelting_recipe):
                     self.player.add_item('iron_bars')
-                    # print("DEBUG: Player smelted iron bars.")
                     reward = 60
                 else:
                     reward = -15 # Should not happen
             else:
-                # print("DEBUG: Smelting failed. Not near furnace or not enough resources.")
                 reward = -12
 
         # Gather
@@ -225,7 +246,7 @@ class Game:
 
             tool_map = {
                 'T': ('stone_axe', 'wood', 20),
-                'S': ('stone_pickaxe', 'stone', 20),
+                'R': ('stone_pickaxe', 'stone', 20),
                 'U': ('stone_pickaxe', 'sulfur', 30),
                 'I': ('metal_pickaxe', 'iron_ore', 40)
             }
@@ -239,7 +260,6 @@ class Game:
                     else:
                         reward = -15 # Inventory full
                 else:
-                    # print(f"DEBUG: Gather failed on tile {tile}. Held: {held_item}, Need: {required_tool}")
                     reward = -10 # Wrong tool
             else:
                 reward = -2 # Gathering on empty tile
