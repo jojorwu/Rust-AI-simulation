@@ -3,18 +3,19 @@ use rand::Rng;
 use super::state::StateKey;
 use super::errors::SimulationError;
 use super::config::{WIDTH, HEIGHT};
+use super::actions::Action; // Import Action
 
 pub struct Brain {
-    pub actions: Vec<String>,
+    pub actions: Vec<Action>, // Use Action enum
     pub learning_rate: f64,
     pub discount_factor: f64,
     pub epsilon: f64,
-    pub q_table: HashMap<String, HashMap<String, f64>>,
+    pub q_table: HashMap<String, HashMap<Action, f64>>, // Use Action as key
     pub mental_map: Vec<Vec<Option<char>>>,
 }
 
 impl Brain {
-    pub fn new(actions: Vec<String>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
+    pub fn new(actions: Vec<Action>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
         Brain {
             actions,
             learning_rate,
@@ -25,7 +26,7 @@ impl Brain {
         }
     }
 
-    pub fn choose_action(&self, state: &StateKey) -> Result<String, SimulationError> {
+    pub fn choose_action(&self, state: &StateKey) -> Result<Action, SimulationError> {
         if rand::thread_rng().r#gen::<f64>() < self.epsilon {
             // Explore
             let index = rand::thread_rng().gen_range(0..self.actions.len());
@@ -49,7 +50,7 @@ impl Brain {
         }
     }
 
-    pub fn update_q_table(&mut self, state: &StateKey, action: &str, reward: f64, next_state: &StateKey) -> Result<(), SimulationError> {
+    pub fn update_q_table(&mut self, state: &StateKey, action: &Action, reward: f64, next_state: &StateKey) -> Result<(), SimulationError> {
         let state_key_str = serde_json::to_string(state)?;
         let next_state_key_str = serde_json::to_string(next_state)?;
 
@@ -70,7 +71,7 @@ impl Brain {
         self.q_table
             .entry(state_key_str)
             .or_insert_with(HashMap::new)
-            .insert(action.to_string(), new_value);
+            .insert(action.clone(), new_value); // action needs to be cloned
 
         Ok(())
     }

@@ -5,6 +5,7 @@ use super::brain::Brain;
 use super::state::StateKey;
 use super::recipes;
 use super::errors::SimulationError;
+use super::actions::{Action, Direction, get_all_actions};
 
 use rand::Rng;
 
@@ -23,12 +24,7 @@ impl Game {
 
         let mut players = Vec::new();
         let mut brains = Vec::new();
-        let actions = vec![
-            "up".to_string(), "down".to_string(), "left".to_string(), "right".to_string(), "gather".to_string(),
-            "craft_stone_axe".to_string(), "craft_stone_pickaxe".to_string(), "craft_furnace".to_string(), "craft_metal_pickaxe".to_string(),
-            "equip_stone_axe".to_string(), "equip_stone_pickaxe".to_string(), "equip_metal_pickaxe".to_string(),
-            "place_furnace".to_string(), "smelt_iron".to_string(), "build_foundation".to_string()
-        ];
+        let actions = get_all_actions();
 
         for _ in 0..NUM_PLAYERS {
             players.push(Player::new(0, 0));
@@ -191,9 +187,8 @@ impl Game {
 
     // --- Action Handler Methods ---
 
-    fn _handle_equip_action(&mut self, player_index: usize, action: &str) -> f64 {
+    fn _handle_equip_action(&mut self, player_index: usize, item: &str) -> f64 {
         let player = &mut self.players[player_index];
-        let item = &action[6..];
         if player.get_total_quantity(item) > 0 {
             player.held_item = Some(item.to_string());
             2.0
@@ -202,9 +197,8 @@ impl Game {
         }
     }
 
-    fn _handle_craft_action(&mut self, player_index: usize, action: &str) -> f64 {
+    fn _handle_craft_action(&mut self, player_index: usize, item: &str) -> f64 {
         let player = &mut self.players[player_index];
-        let item = &action[6..];
         let recipes = recipes::get_recipes();
         if let Some(recipe) = recipes.get(item) {
             if player.has_resources(recipe) {
@@ -217,9 +211,15 @@ impl Game {
         } else { -1.0 }
     }
 
-    fn _handle_move_action(&mut self, player_index: usize, action: &str) -> f64 {
+    fn _handle_move_action(&mut self, player_index: usize, direction: &Direction) -> f64 {
         let player = &mut self.players[player_index];
-        if player.move_player(action, &self.map) {
+        let direction_str = match direction {
+            Direction::Up => "up",
+            Direction::Down => "down",
+            Direction::Left => "left",
+            Direction::Right => "right",
+        };
+        if player.move_player(direction_str, &self.map) {
             let (new_px, new_py) = (player.x, player.y);
             let current_tile = self.map.grid[new_py as usize][new_px as usize];
             if current_tile == 'M' { -2.0 }
@@ -275,26 +275,6 @@ impl Game {
         } else { -12.0 }
     }
 
-
-    pub fn _perform_action(&mut self, player_index: usize, action: &str) -> f64 {
-        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
-
-        if action.starts_with("equip_") {
-            self._handle_equip_action(player_index, action)
-        } else if action.starts_with("craft_") {
-            self._handle_craft_action(player_index, action)
-        } else {
-            match action {
-                "up" | "down" | "left" | "right" => self._handle_move_action(player_index, action),
-                "gather" => self._handle_gather_action(player_index, px, py),
-                "place_furnace" => self._handle_place_furnace_action(player_index, px, py),
-                "smelt_iron" => self._handle_smelt_iron_action(player_index, px, py),
-                "build_foundation" => self._handle_build_foundation_action(player_index, px, py),
-                _ => -0.1, // Default reward for unknown or no-op actions
-            }
-        }
-    }
-
     fn _handle_build_foundation_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
         let _player = &mut self.players[player_index];
         if self.map.grid[py as usize][px as usize] == '.' {
@@ -302,6 +282,32 @@ impl Game {
             30.0
         } else {
             -5.0
+        }
+    }
+
+    pub fn _perform_action(&mut self, player_index: usize, action: &Action) -> f64 {
+        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
+
+        match action {
+            Action::Move(direction) => self._handle_move_action(player_index, direction),
+            Action::Gather => self._handle_gather_action(player_index, px, py),
+            Action::Craft(item) => self._handle_craft_action(player_index, item),
+            Action::Equip(item) => self._handle_equip_action(player_index, item),
+            Action::Place(item) => {
+                if item == "furnace" {
+                    self._handle_place_furnace_action(player_index, px, py)
+                } else {
+                    -0.1
+                }
+            },
+            Action::Smelt => self._handle_smelt_iron_action(player_index, px, py),
+            Action::Build(structure) => {
+                if structure == "foundation" {
+                    self._handle_build_foundation_action(player_index, px, py)
+                } else {
+                    -0.1
+                }
+            },
         }
     }
 }
