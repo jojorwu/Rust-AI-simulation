@@ -3,6 +3,8 @@ mod player;
 mod state;
 mod agent;
 mod game;
+mod config;
+mod recipes;
 
 use game::Game;
 

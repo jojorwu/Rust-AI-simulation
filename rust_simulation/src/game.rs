@@ -3,24 +3,11 @@ use super::map::Map;
 use super::player::Player;
 use super::agent::Agent;
 use super::state::StateKey;
+use super::recipes;
 
 use rand::Rng;
 
-// Constants will be moved to a config module later
-const WIDTH: u32 = 20;
-const HEIGHT: u32 = 10;
-const LEARNING_RATE: f64 = 0.1;
-const DISCOUNT_FACTOR: f64 = 0.9;
-const INITIAL_EPSILON: f64 = 1.0;
-const NUM_TREES: u32 = 15;
-const NUM_STONE: u32 = 10;
-const NUM_SULFUR: u32 = 10;
-const NUM_IRON_ORE: u32 = 8;
-const EPISODES: u32 = 2000;
-const MAX_STEPS_PER_EPISODE: u32 = 200;
-const WIPE_CYCLE: u32 = 1000;
-const MIN_EPSILON: f64 = 0.05;
-const EPSILON_DECAY: f64 = 0.9995;
+use super::config::*;
 
 
 pub struct Game {
@@ -56,8 +43,22 @@ impl Game {
     }
 
     fn get_state(&self) -> StateKey {
-        // Simplified local view for now
-        let local_view = vec!['.'; 9];
+        let mut local_view = Vec::new();
+        let view_radius = 1; // 3x3 view
+
+        for dy in -view_radius..=view_radius {
+            for dx in -view_radius..=view_radius {
+                let nx = self.player.x as i32 + dx;
+                let ny = self.player.y as i32 + dy;
+
+                if nx >= 0 && nx < self.map.width as i32 && ny >= 0 && ny < self.map.height as i32 {
+                    local_view.push(self.map.grid[ny as usize][nx as usize]);
+                } else {
+                    local_view.push('X'); // 'X' for out of bounds
+                }
+            }
+        }
+
         StateKey {
             local_view,
             inventory: self.player.inventory.clone(),
@@ -175,12 +176,8 @@ impl Game {
     pub fn _perform_action(&mut self, action: &str) -> f64 {
         let mut reward = -0.1;
 
-        // --- Recipes ---
-        let mut recipes: HashMap<String, HashMap<String, u32>> = HashMap::new();
-        let mut r = HashMap::new(); r.insert("wood".to_string(), 2); r.insert("stone".to_string(), 3); recipes.insert("stone_axe".to_string(), r);
-        let mut r = HashMap::new(); r.insert("wood".to_string(), 2); r.insert("stone".to_string(), 3); recipes.insert("stone_pickaxe".to_string(), r);
-        let mut r = HashMap::new(); r.insert("stone".to_string(), 50); recipes.insert("furnace".to_string(), r);
-        let mut r = HashMap::new(); r.insert("iron_bars".to_string(), 10); r.insert("wood".to_string(), 2); recipes.insert("metal_pickaxe".to_string(), r);
+        // --- Get Recipes ---
+        let recipes = recipes::get_recipes();
 
         // --- Actions ---
         if action.starts_with("equip_") {
