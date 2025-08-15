@@ -1,0 +1,8 @@
+[package]
+name = "rust_simulation"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+noise = "0.8.2"
+rand = "0.8.5"
