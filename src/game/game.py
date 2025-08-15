@@ -28,7 +28,11 @@ class Game:
 
     def _initialize_agent(self):
         """Initializes the AI agent."""
-        actions = ['up', 'down', 'left', 'right', 'gather', 'craft']
+        actions = [
+            'up', 'down', 'left', 'right', 'gather',
+            'craft_stone_axe', 'craft_stone_pickaxe',
+            'equip_stone_axe', 'equip_stone_pickaxe'
+        ]
         return Agent(actions,
                      learning_rate=config.LEARNING_RATE,
                      discount_factor=config.DISCOUNT_FACTOR,
@@ -56,6 +60,9 @@ class Game:
         for _ in range(config.NUM_STONE):
             sx, sy = random.randint(0, self.game_map.width - 1), random.randint(0, self.game_map.height - 1)
             self.game_map.add_stone(sx, sy)
+        for _ in range(config.NUM_SULFUR):
+            ux, uy = random.randint(0, self.game_map.width - 1), random.randint(0, self.game_map.height - 1)
+            self.game_map.add_sulfur(ux, uy)
 
     def run(self):
         """Runs the main training loop."""
@@ -138,8 +145,9 @@ class Game:
             if (episode + 1) % 200 == 0:
                 wood = self.player.inventory.get('wood', 0)
                 stone = self.player.inventory.get('stone', 0)
+                sulfur = self.player.inventory.get('sulfur', 0)
                 goal_item = self.player.inventory.get(config.CRAFTING_GOAL, 0)
-                print(f"E{episode+1}/{config.EPISODES} | Inv: {wood}W, {stone}S, {goal_item}A | Epsilon: {self.agent.epsilon:.3f}")
+                print(f"E{episode+1}/{config.EPISODES} | Inv: {wood}W, {stone}S, {sulfur}U, {goal_item}A | Epsilon: {self.agent.epsilon:.3f}")
 
         print("--- Training Finished ---")
         print(f"\nFinal inventory from last episode: {self.player.inventory}")
@@ -148,38 +156,75 @@ class Game:
 
     def _perform_action(self, action):
         """Performs the given action and returns the reward."""
-        reward = -0.1  # Cost of living
+        reward = -0.1  # Base cost of living/time penalty
 
-        if action == 'gather':
-            tile = self.game_map.grid[self.player.y][self.player.x]
-            if tile == 'T':
-                reward = 20
-                self.player.inventory['wood'] = self.player.inventory.get('wood', 0) + 1
-                self.game_map.grid[self.player.y][self.player.x] = '.'
-            elif tile == 'S':
-                reward = 20
-                self.player.inventory['stone'] = self.player.inventory.get('stone', 0) + 1
-                self.game_map.grid[self.player.y][self.player.x] = '.'
+        # Movement actions
+        if action in ['up', 'down', 'left', 'right']:
+            moved = self.player.move(action)
+            if not moved:
+                reward = -5  # Penalty for bumping into walls
+            elif self.game_map.grid[self.player.y][self.player.x] in ['T', 'S', 'U']:
+                reward = 1  # Small reward for moving to a resource tile
+
+        # Equip actions
+        elif action.startswith('equip_'):
+            item_to_equip = action.split('_', 1)[1]
+            if self.player.inventory.get(item_to_equip, 0) > 0:
+                self.player.held_item = item_to_equip
+                # print(f"DEBUG: Player equipped {item_to_equip}")
+                reward = 2  # Reward for equipping a tool
             else:
-                reward = -2
-        elif action == 'craft':
-            goal = config.CRAFTING_GOAL
-            recipe = recipes.RECIPES.get(goal)
+                # print(f"DEBUG: Player failed to equip {item_to_equip} (not in inventory)")
+                reward = -2  # Penalty for equipping an item they don't have
+
+        # Craft actions
+        elif action.startswith('craft_'):
+            item_to_craft = action.split('_', 1)[1]
+            recipe = recipes.RECIPES.get(item_to_craft)
             if recipe:
                 has_resources = all(self.player.inventory.get(res, 0) >= amount for res, amount in recipe.items())
                 if has_resources:
                     for res, amount in recipe.items():
                         self.player.inventory[res] -= amount
-                    self.player.inventory[goal] = self.player.inventory.get(goal, 0) + 1
-                    reward = 100
+                    self.player.inventory[item_to_craft] = self.player.inventory.get(item_to_craft, 0) + 1
+                    # Big reward for crafting the main goal item, smaller for others
+                    reward = 100 if item_to_craft == config.CRAFTING_GOAL else 50
                 else:
-                    reward = -10
+                    reward = -10  # Penalty for trying to craft without resources
             else:
-                reward = -1
-        else:  # Movement action
-            moved = self.player.move(action)
-            if not moved:
-                reward = -5
-            elif self.game_map.grid[self.player.y][self.player.x] in ['T', 'S']:
-                reward = 1
+                reward = -1 # Should not happen if actions are defined correctly
+
+        # Gather action
+        elif action == 'gather':
+            tile = self.game_map.grid[self.player.y][self.player.x]
+            held_item = self.player.held_item
+            # print(f"DEBUG: Player holding '{held_item}' attempts to gather from tile '{tile}'")
+
+            if tile == 'T':  # Tree
+                if held_item == 'stone_axe':
+                    reward = 20
+                    self.player.inventory['wood'] = self.player.inventory.get('wood', 0) + 1
+                    self.game_map.grid[self.player.y][self.player.x] = '.'
+                else:
+                    # print(f"DEBUG: Gather failed - wrong tool.")
+                    reward = -10  # Big penalty for wrong tool
+            elif tile == 'S':  # Stone
+                if held_item == 'stone_pickaxe':
+                    reward = 20
+                    self.player.inventory['stone'] = self.player.inventory.get('stone', 0) + 1
+                    self.game_map.grid[self.player.y][self.player.x] = '.'
+                else:
+                    # print(f"DEBUG: Gather failed - wrong tool.")
+                    reward = -10 # Big penalty for wrong tool
+            elif tile == 'U': # Sulfur
+                if held_item == 'stone_pickaxe':
+                    reward = 30 # Sulfur is more valuable
+                    self.player.inventory['sulfur'] = self.player.inventory.get('sulfur', 0) + 1
+                    self.game_map.grid[self.player.y][self.player.x] = '.'
+                else:
+                    # print(f"DEBUG: Gather failed - wrong tool.")
+                    reward = -10 # Big penalty for wrong tool
+            else:
+                reward = -2  # Penalty for trying to gather from an empty tile
+
         return reward

@@ -8,6 +8,7 @@ class Player:
         self.x = start_x
         self.y = start_y
         self.inventory = {}
+        self.held_item = None
 
     def get_state(self, view_radius=1):
         """
@@ -28,9 +29,10 @@ class Player:
         # Get inventory state
         wood_count = self.inventory.get('wood', 0)
         stone_count = self.inventory.get('stone', 0)
+        sulfur_count = self.inventory.get('sulfur', 0)
 
-        # The final state is a combination of the view and inventory
-        return tuple(local_view) + (wood_count, stone_count)
+        # The final state is a combination of the view, inventory, and held item
+        return tuple(local_view) + (wood_count, stone_count, sulfur_count, self.held_item)
 
     def move(self, action):
         """Moves the player based on the chosen action."""
@@ -50,5 +52,6 @@ class Player:
         return False
 
     def reset(self):
-        """Resets the player's inventory."""
+        """Resets the player's inventory and held item."""
         self.inventory = {}
+        self.held_item = None

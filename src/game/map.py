@@ -54,3 +54,13 @@ class Map:
                 self.grid[y][x] = 'S'
                 return True
         return False
+
+    def add_sulfur(self, x, y):
+        """
+        Adds a sulfur node at the given coordinates if the tile is empty.
+        """
+        if 0 <= x < self.width and 0 <= y < self.height:
+            if self.grid[y][x] == '.':
+                self.grid[y][x] = 'U'
+                return True
+        return False
