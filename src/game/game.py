@@ -19,6 +19,11 @@ class Game:
         self.agent = self._initialize_agent()
         self.agent.q_table = load_q_table()
 
+        # Performance tracking
+        self.cycle_successes = 0
+        self.last_cycle_performance = 0.0
+        self.current_cycle_episodes = 0
+
     def _initialize_player(self):
         """Creates the player and places them on a valid starting tile."""
         start_x, start_y = 0, 0
@@ -63,6 +68,34 @@ class Game:
         for episode in range(config.EPISODES):
             if episode > 0 and episode % config.WIPE_CYCLE == 0:
                 print(f"\n\n--- SERVER WIPE AT EPISODE {episode} ---\n")
+
+                # System improvement phase
+                if self.current_cycle_episodes > 0:
+                    success_rate = self.cycle_successes / self.current_cycle_episodes
+                    print(f"--- Cycle Performance ---")
+                    print(f"Episodes this cycle: {self.current_cycle_episodes}")
+                    print(f"Successes this cycle: {self.cycle_successes}")
+                    print(f"Success rate: {success_rate:.2%}")
+                    print(f"Previous cycle's success rate: {self.last_cycle_performance:.2%}")
+
+                    # Adjust learning rate based on performance
+                    if success_rate > self.last_cycle_performance:
+                        self.agent.learning_rate = min(0.5, self.agent.learning_rate + 0.01)
+                        print(f"Performance improved. Increasing learning rate to {self.agent.learning_rate:.3f}")
+                    elif success_rate < self.last_cycle_performance:
+                        self.agent.learning_rate = max(0.01, self.agent.learning_rate - 0.01)
+                        print(f"Performance declined. Decreasing learning rate to {self.agent.learning_rate:.3f}")
+                    else:
+                        print("Performance stable. Learning rate remains unchanged.")
+
+                    self.last_cycle_performance = success_rate
+                else:
+                    print("No episodes in this cycle to evaluate.")
+
+                # Reset counters for the new cycle
+                self.cycle_successes = 0
+                self.current_cycle_episodes = 0
+
                 self.setup_new_map()
                 original_map_grid = copy.deepcopy(self.game_map.grid)
 
@@ -87,6 +120,10 @@ class Game:
 
                 if self.player.inventory.get(config.CRAFTING_GOAL, 0) > 0:
                     break
+
+            self.current_cycle_episodes += 1
+            if self.player.inventory.get(config.CRAFTING_GOAL, 0) > 0:
+                self.cycle_successes += 1
 
             if self.agent.epsilon > config.MIN_EPSILON:
                 self.agent.epsilon *= config.EPSILON_DECAY
