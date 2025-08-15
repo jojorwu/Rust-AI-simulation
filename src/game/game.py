@@ -1,5 +1,6 @@
 import random
 import copy
+import math
 from src.game.map import Map
 from src.game.player import Player
 from src.ai.agent import Agent
@@ -79,14 +80,14 @@ class Game:
                     print(f"Previous cycle's success rate: {self.last_cycle_performance:.2%}")
 
                     # Adjust learning rate based on performance
-                    if success_rate > self.last_cycle_performance:
-                        self.agent.learning_rate = min(0.5, self.agent.learning_rate + 0.01)
-                        print(f"Performance improved. Increasing learning rate to {self.agent.learning_rate:.3f}")
-                    elif success_rate < self.last_cycle_performance:
-                        self.agent.learning_rate = max(0.01, self.agent.learning_rate - 0.01)
-                        print(f"Performance declined. Decreasing learning rate to {self.agent.learning_rate:.3f}")
-                    else:
+                    if math.isclose(success_rate, self.last_cycle_performance):
                         print("Performance stable. Learning rate remains unchanged.")
+                    elif success_rate > self.last_cycle_performance:
+                        self.agent.learning_rate = min(config.MAX_LEARNING_RATE, self.agent.learning_rate + config.LEARNING_RATE_ADJUSTMENT)
+                        print(f"Performance improved. Increasing learning rate to {self.agent.learning_rate:.3f}")
+                    else: # success_rate < self.last_cycle_performance
+                        self.agent.learning_rate = max(config.MIN_LEARNING_RATE, self.agent.learning_rate - config.LEARNING_RATE_ADJUSTMENT)
+                        print(f"Performance declined. Decreasing learning rate to {self.agent.learning_rate:.3f}")
 
                     self.last_cycle_performance = success_rate
                 else:
