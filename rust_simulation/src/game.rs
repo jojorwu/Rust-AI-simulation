@@ -27,7 +27,7 @@ impl Game {
             "up".to_string(), "down".to_string(), "left".to_string(), "right".to_string(), "gather".to_string(),
             "craft_stone_axe".to_string(), "craft_stone_pickaxe".to_string(), "craft_furnace".to_string(), "craft_metal_pickaxe".to_string(),
             "equip_stone_axe".to_string(), "equip_stone_pickaxe".to_string(), "equip_metal_pickaxe".to_string(),
-            "place_furnace".to_string(), "smelt_iron".to_string()
+            "place_furnace".to_string(), "smelt_iron".to_string(), "build_foundation".to_string()
         ];
 
         for _ in 0..NUM_PLAYERS {
@@ -289,8 +289,19 @@ impl Game {
                 "gather" => self._handle_gather_action(player_index, px, py),
                 "place_furnace" => self._handle_place_furnace_action(player_index, px, py),
                 "smelt_iron" => self._handle_smelt_iron_action(player_index, px, py),
+                "build_foundation" => self._handle_build_foundation_action(player_index, px, py),
                 _ => -0.1, // Default reward for unknown or no-op actions
             }
+        }
+    }
+
+    fn _handle_build_foundation_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
+        let _player = &mut self.players[player_index];
+        if self.map.grid[py as usize][px as usize] == '.' {
+            self.map.grid[py as usize][px as usize] = 'B';
+            30.0
+        } else {
+            -5.0
         }
     }
 }
