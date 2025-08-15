@@ -4,6 +4,7 @@ use super::player::Player;
 use super::brain::Brain;
 use super::state::StateKey;
 use super::recipes;
+use super::errors::SimulationError;
 
 use rand::Rng;
 
@@ -136,7 +137,7 @@ impl Game {
         for (x, y) in iron_locations { self.map.add_iron_ore_node(x, y); }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
         self.setup_new_map();
         let mut original_map_grid = self.map.grid.clone();
@@ -157,10 +158,10 @@ impl Game {
             for _step in 0..MAX_STEPS_PER_EPISODE {
                 for i in 0..self.players.len() {
                     let state = self.get_state(i);
-                    let action = self.brains[i].choose_action(&state);
+                    let action = self.brains[i].choose_action(&state)?;
                     let reward = self._perform_action(i, &action);
                     let next_state = self.get_state(i);
-                    self.brains[i].update_q_table(&state, &action, reward, &next_state);
+                    self.brains[i].update_q_table(&state, &action, reward, &next_state)?;
                 }
             }
 
@@ -174,6 +175,7 @@ impl Game {
         }
 
         println!("--- Training Finished ---");
+        Ok(())
     }
 
     pub fn _perform_action(&mut self, player_index: usize, action: &str) -> f64 {

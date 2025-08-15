@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use rand::Rng;
 use super::state::StateKey;
+use super::errors::SimulationError;
 
 pub struct Brain {
     pub actions: Vec<String>,
@@ -21,36 +22,33 @@ impl Brain {
         }
     }
 
-    pub fn choose_action(&self, state: &StateKey) -> String {
+    pub fn choose_action(&self, state: &StateKey) -> Result<String, SimulationError> {
         if rand::thread_rng().gen::<f64>() < self.epsilon {
             // Explore
             let index = rand::thread_rng().gen_range(0..self.actions.len());
-            return self.actions[index].clone();
+            Ok(self.actions[index].clone())
         } else {
             // Exploit
-            let state_key_str = serde_json::to_string(state).unwrap();
+            let state_key_str = serde_json::to_string(state)?;
             if let Some(q_values) = self.q_table.get(&state_key_str) {
                 // Find the action with the highest Q-value
-                let mut best_action = self.actions[0].clone();
-                let mut max_q_value = f64::NEG_INFINITY;
-                for (action, &q_value) in q_values {
-                    if q_value > max_q_value {
-                        max_q_value = q_value;
-                        best_action = action.clone();
-                    }
-                }
-                best_action
+                let best_action = q_values
+                    .iter()
+                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(action, _)| action.clone())
+                    .unwrap_or_else(|| self.actions[0].clone());
+                Ok(best_action)
             } else {
                 // If state is unknown, choose randomly
                 let index = rand::thread_rng().gen_range(0..self.actions.len());
-                self.actions[index].clone()
+                Ok(self.actions[index].clone())
             }
         }
     }
 
-    pub fn update_q_table(&mut self, state: &StateKey, action: &str, reward: f64, next_state: &StateKey) {
-        let state_key_str = serde_json::to_string(state).unwrap();
-        let next_state_key_str = serde_json::to_string(next_state).unwrap();
+    pub fn update_q_table(&mut self, state: &StateKey, action: &str, reward: f64, next_state: &StateKey) -> Result<(), SimulationError> {
+        let state_key_str = serde_json::to_string(state)?;
+        let next_state_key_str = serde_json::to_string(next_state)?;
 
         let old_value = self.q_table
             .get(&state_key_str)
@@ -70,5 +68,7 @@ impl Brain {
             .entry(state_key_str)
             .or_insert_with(HashMap::new)
             .insert(action.to_string(), new_value);
+
+        Ok(())
     }
 }
