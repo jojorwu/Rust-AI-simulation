@@ -64,3 +64,13 @@ class Map:
                 self.grid[y][x] = 'U'
                 return True
         return False
+
+    def add_iron_ore_node(self, x, y):
+        """
+        Adds an iron ore node at the given coordinates if the tile is empty.
+        """
+        if 0 <= x < self.width and 0 <= y < self.height:
+            if self.grid[y][x] == '.':
+                self.grid[y][x] = 'I'
+                return True
+        return False
