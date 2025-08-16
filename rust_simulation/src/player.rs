@@ -12,6 +12,7 @@ pub struct Slot {
 
 #[derive(Debug)]
 pub struct Player {
+    pub id: u32,
     pub x: u32,
     pub y: u32,
     pub health: i32,
@@ -22,8 +23,9 @@ pub struct Player {
 use std::collections::HashMap;
 
 impl Player {
-    pub fn new(x: u32, y: u32) -> Self {
+    pub fn new(id: u32, x: u32, y: u32) -> Self {
         Player {
+            id,
             x,
             y,
             health: 100,

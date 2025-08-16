@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use super::map::{Map, Tile};
 use super::player::Player;
-use super::brain::Brain;
+use super::brain::{Brain, MemoryTile};
 use super::state::StateKey;
 use super::recipes::RecipeManager;
 use super::errors::SimulationError;
@@ -34,8 +34,8 @@ impl Game {
         let mut brains = Vec::new();
         let actions = get_all_actions();
 
-        for _ in 0..NUM_PLAYERS {
-            players.push(Player::new(0, 0));
+        for i in 0..NUM_PLAYERS {
+            players.push(Player::new(i as u32, 0, 0));
             brains.push(Arc::new(Mutex::new(Brain::new(actions.clone(), LEARNING_RATE, DISCOUNT_FACTOR, INITIAL_EPSILON))));
         }
 
@@ -49,12 +49,25 @@ impl Game {
         }
     }
 
-    fn get_state(&mut self, player_index: usize) -> StateKey {
+    fn get_state(&mut self, player_index: usize, episode: u32) -> StateKey {
         let player = &self.players[player_index];
         let mut local_view = Vec::new();
         let view_radius = 1;
 
         let mut brain_lock = self.brains[player_index].lock().unwrap();
+
+        // Update player memories
+        for other_player in &self.players {
+            if other_player.id != player.id {
+                let dist = ((player.x as f64 - other_player.x as f64).powi(2) + (player.y as f64 - other_player.y as f64).powi(2)).sqrt();
+                if dist < 5.0 { // arbitrary vision range for seeing other players
+                    brain_lock.player_memories.entry(other_player.id).or_insert(super::brain::PlayerMemory {
+                        last_seen_location: Some((other_player.x, other_player.y)),
+                        relationship: super::brain::RelationshipStatus::Neutral,
+                    }).last_seen_location = Some((other_player.x, other_player.y));
+                }
+            }
+        }
 
         for dy in -view_radius..=view_radius {
             for dx in -view_radius..=view_radius {
@@ -64,7 +77,12 @@ impl Game {
                 if nx >= 0 && nx < self.map.width as i32 && ny >= 0 && ny < self.map.height as i32 {
                     let tile = self.map.grid[ny as usize][nx as usize].clone();
                     local_view.push(tile.clone());
-                    brain_lock.mental_map[ny as usize][nx as usize] = Some(tile);
+                    let memory_tile = MemoryTile {
+                        tile: tile.clone(),
+                        last_seen_episode: episode,
+                        resource_richness: brain_lock.mental_map[ny as usize][nx as usize].as_ref().map_or(0.0, |mt| mt.resource_richness),
+                    };
+                    brain_lock.mental_map[ny as usize][nx as usize] = Some(memory_tile);
                 } else {
                     local_view.push(Tile::new('X'));
                 }
@@ -188,7 +206,7 @@ impl Game {
 
                 for i in 0..self.players.len() {
                     if self.players[i].health > 0 {
-                        let state = self.get_state(i);
+                        let state = self.get_state(i, episode);
                         let brain = Arc::clone(&self.brains[i]);
                         let player_pos = (self.players[i].x, self.players[i].y);
                         let handle = task::spawn(async move {
@@ -206,8 +224,8 @@ impl Game {
                          match result {
                             Ok(Ok(action)) => {
                                 let reward = self._perform_action(i, &action, episode);
-                                let state_before_action = self.get_state(i);
-                                let next_state = self.get_state(i);
+                                let state_before_action = self.get_state(i, episode);
+                                let next_state = self.get_state(i, episode);
                                 self.brains[i].lock().unwrap().update_q_table(&state_before_action, &action, reward, &next_state)?;
                             },
                             Ok(Err(e)) => return Err(e.into()),
@@ -253,7 +271,7 @@ impl Game {
         for y in 0..HEIGHT {
             for x in 0..WIDTH {
                 match &brain.mental_map[y as usize][x as usize] {
-                    Some(tile) => print!("{} ", tile.tile_type),
+                    Some(memory_tile) => print!("{} ", memory_tile.tile.tile_type),
                     None => print!("? "),
                 }
             }
@@ -463,7 +481,13 @@ impl Game {
 
     fn _handle_attack_action(&mut self, player_index: usize) -> f64 {
         if let Some(other_player_index) = self._find_adjacent_player(player_index) {
+            let attacker_id = self.players[player_index].id;
             self.players[other_player_index].health -= 10;
+
+            let victim_brain = Arc::clone(&self.brains[other_player_index]);
+            let mut victim_brain_lock = victim_brain.lock().unwrap();
+            victim_brain_lock.record_attack_from(attacker_id);
+
             if self.players[other_player_index].health <= 0 {
                 100.0
             } else {
