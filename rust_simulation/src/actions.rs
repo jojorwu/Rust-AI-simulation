@@ -12,6 +12,7 @@ pub enum Action {
     Open,
     Close,
     AttachLock,
+    Attack,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -44,5 +45,6 @@ pub fn get_all_actions() -> Vec<Action> {
         Action::Open,
         Action::Close,
         Action::AttachLock,
+        Action::Attack,
     ]
 }

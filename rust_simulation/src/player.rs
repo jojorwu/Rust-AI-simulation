@@ -14,6 +14,7 @@ pub struct Slot {
 pub struct Player {
     pub x: u32,
     pub y: u32,
+    pub health: i32,
     pub held_item: Option<String>,
     pub inventory: Vec<Option<Slot>>,
 }
@@ -25,12 +26,14 @@ impl Player {
         Player {
             x,
             y,
+            health: 100,
             held_item: None,
             inventory: vec![None; INVENTORY_SLOTS],
         }
     }
 
     pub fn reset(&mut self) {
+        self.health = 100;
         self.inventory = vec![None; INVENTORY_SLOTS];
         self.held_item = None;
     }

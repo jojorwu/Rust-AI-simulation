@@ -97,6 +97,22 @@ impl Game {
         None
     }
 
+    fn _find_adjacent_player(&self, player_index: usize) -> Option<usize> {
+        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
+        for i in 0..self.players.len() {
+            if i != player_index {
+                let other_player = &self.players[i];
+                if (other_player.x == px && (other_player.y == py + 1 || other_player.y == py.wrapping_sub(1))) ||
+                   (other_player.y == py && (other_player.x == px + 1 || other_player.x == px.wrapping_sub(1))) {
+                    if other_player.health > 0 {
+                        return Some(i);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn _find_and_set_valid_start_positions(&mut self) {
         let mut rng = rand::thread_rng();
         let mut occupied_positions = std::collections::HashSet::new();
@@ -163,11 +179,13 @@ impl Game {
 
             for _step in 0..MAX_STEPS_PER_EPISODE {
                 for i in 0..self.players.len() {
-                    let state = self.get_state(i);
-                    let action = self.brains[i].choose_action(&state)?;
-                    let reward = self._perform_action(i, &action);
-                    let next_state = self.get_state(i);
-                    self.brains[i].update_q_table(&state, &action, reward, &next_state)?;
+                    if self.players[i].health > 0 {
+                        let state = self.get_state(i);
+                        let action = self.brains[i].choose_action(&state)?;
+                        let reward = self._perform_action(i, &action);
+                        let next_state = self.get_state(i);
+                        self.brains[i].update_q_table(&state, &action, reward, &next_state)?;
+                    }
                 }
             }
 
@@ -388,6 +406,19 @@ impl Game {
         }
     }
 
+    fn _handle_attack_action(&mut self, player_index: usize) -> f64 {
+        if let Some(other_player_index) = self._find_adjacent_player(player_index) {
+            self.players[other_player_index].health -= 10;
+            if self.players[other_player_index].health <= 0 {
+                100.0
+            } else {
+                10.0
+            }
+        } else {
+            -1.0
+        }
+    }
+
     pub fn _perform_action(&mut self, player_index: usize, action: &Action) -> f64 {
         let (px, py) = (self.players[player_index].x, self.players[player_index].y);
 
@@ -410,6 +441,7 @@ impl Game {
             Action::Open => self._handle_open_door_action(player_index, px, py),
             Action::Close => self._handle_close_door_action(player_index, px, py),
             Action::AttachLock => self._handle_attach_lock_action(player_index, px, py),
+            Action::Attack => self._handle_attack_action(player_index),
         }
     }
 }
