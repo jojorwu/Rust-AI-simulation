@@ -166,9 +166,9 @@ impl Brain {
 
     fn is_goal_valid(&self, goal: &Goal) -> bool {
         match goal {
-            Goal::GatherResource(resource_name) => {
-                let resource_char = self.resource_name_to_char(resource_name);
-                self.mental_map.iter().any(|row| row.iter().any(|tile| tile.as_ref().map_or(false, |t| t.tile.tile_type == resource_char)))
+            Goal::GatherResource(_) => {
+                // TODO: Check mental map for known resource locations
+                true
             },
             _ => true,
         }
@@ -201,7 +201,6 @@ impl Brain {
     }
 
     fn execute_gather_goal(&mut self, world: &mut World, entity: Entity, resource_name: &str, current_episode: u32) -> Result<(), SimulationError> {
-        let resource_char = self.resource_name_to_char(resource_name);
         let player_pos = *world.get_component::<Position>(entity).unwrap();
 
         // Find the closest resource
@@ -210,7 +209,7 @@ impl Brain {
 
         for e in 0..world.entities.len() {
             if let Some(resource) = world.get_component::<super::components::Resource>(e) {
-                if resource.resource_type == resource_char {
+                if resource.name == resource_name {
                     if let Some(target_pos) = world.get_component::<Position>(e) {
                         let dist = (player_pos.x.abs_diff(target_pos.x)) + (player_pos.y.abs_diff(target_pos.y));
                         if dist < min_dist {
@@ -278,13 +277,6 @@ impl Brain {
         Ok(())
     }
 
-    fn resource_name_to_char(&self, resource_name: &str) -> char {
-        match resource_name {
-            "wood" => 'T',
-            "stone" => 'R',
-            _ => 'X',
-        }
-    }
 
     fn handle_threats(&mut self, world: &World, entity: Entity) -> bool {
         let health = world.get_component::<crate::components::Health>(entity).unwrap();
@@ -295,7 +287,7 @@ impl Brain {
             .collect();
 
         if !hostile_players.is_empty() {
-            if health.current < 50 {
+            if health.current < health.max / 2 {
                 self.current_goal = Some(Goal::Flee);
                 self.current_path = None; // Clear any existing path
                 return true;

@@ -37,7 +37,7 @@ pub struct Biome {
     pub height_range: [f64; 2],
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Resource {
     pub name: String,
     pub tile_type: char,
@@ -130,10 +130,4 @@ impl Map {
         }
     }
 
-    pub fn add_resource(&mut self, x: u32, y: u32, resource_type: char) {
-        let tile = &mut self.grid[y as usize][x as usize];
-        tile.tile_type = resource_type;
-        tile.original_tile_type = resource_type;
-        tile.remaining_resources = Some(5);
-    }
 }

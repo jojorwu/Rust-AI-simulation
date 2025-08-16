@@ -27,7 +27,7 @@ pub fn movement_system(world: &mut World) {
     }
 }
 
-pub fn gathering_system(world: &mut World) {
+pub fn gathering_system(world: &mut World, item_registry: &ItemRegistry) {
     let mut to_gather = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_gather) = world.get_component::<WantsToGather>(entity) {
@@ -43,10 +43,10 @@ pub fn gathering_system(world: &mut World) {
         let dy = (gatherer_pos.y as i32 - target_pos.y as i32).abs();
 
         if dx <= 1 && dy <= 1 {
-            let resource_type = if let Some(resource) = world.get_component_mut::<Resource>(target) {
+            let resource_name = if let Some(resource) = world.get_component_mut::<Resource>(target) {
                 if resource.quantity > 0 {
                     resource.quantity -= 1;
-                    Some(resource.resource_type)
+                    Some(resource.name.clone())
                 } else {
                     None
                 }
@@ -54,10 +54,9 @@ pub fn gathering_system(world: &mut World) {
                 None
             };
 
-            if let Some(resource_type) = resource_type {
+            if let Some(name) = resource_name {
                 if let Some(player) = world.get_component_mut::<Player>(gatherer) {
-                    // This is a placeholder for adding the item to the inventory
-                    println!("Player {} gathered 1 of {}", player.id, resource_type);
+                    player.add_item(&name, 1, None, item_registry);
                 }
             }
         }

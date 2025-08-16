@@ -80,15 +80,25 @@ impl Game {
 
     fn setup_new_map(&mut self) {
         self.map.generate_island_map(25.0, 5, 0.5, 2.0);
+        self._place_resources();
+    }
+
+    fn _place_resources(&mut self) {
         let mut rng = rand::thread_rng();
+        let mut world = self.world.lock().unwrap();
 
         for y in 0..self.map.height {
             for x in 0..self.map.width {
                 let tile = &self.map.grid[y as usize][x as usize];
-                for resource in &self.map.resources {
-                    if resource.biomes.contains(&tile.biome) {
-                        if rng.r#gen::<f64>() < resource.density {
-                            self.map.add_resource(x, y, resource.tile_type);
+                for resource_def in &self.map.resources {
+                    if resource_def.biomes.contains(&tile.biome) {
+                        if rng.r#gen::<f64>() < resource_def.density {
+                            let resource_entity = world.create_entity();
+                            world.add_component(resource_entity, Position { x, y });
+                            world.add_component(resource_entity, crate::components::Resource {
+                                name: resource_def.name.clone(),
+                                quantity: 5, // Placeholder quantity
+                            });
                             break;
                         }
                     }
@@ -174,7 +184,7 @@ impl Game {
                 }
 
                 movement_system(&mut self.world.lock().unwrap());
-                gathering_system(&mut self.world.lock().unwrap());
+                gathering_system(&mut self.world.lock().unwrap(), &self.item_registry);
                 crafting_system(&mut self.world.lock().unwrap(), &self.recipe_manager, &self.item_registry);
                 building_system(&mut self.world.lock().unwrap(), &mut self.map);
                 combat_system(&mut self.world.lock().unwrap());
