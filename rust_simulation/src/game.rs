@@ -7,6 +7,8 @@ use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::actions::{Action, Direction, get_all_actions};
 use super::item::ItemRegistry;
+use std::sync::{Arc, Mutex};
+use tokio::task;
 
 use rand::Rng;
 
@@ -16,7 +18,7 @@ use super::config::*;
 pub struct Game {
     pub map: Map,
     pub players: Vec<Player>,
-    pub brains: Vec<Brain>,
+    pub brains: Vec<Arc<Mutex<Brain>>>,
     pub item_registry: ItemRegistry,
     pub recipe_manager: RecipeManager,
     next_instance_id: u32,
@@ -34,7 +36,7 @@ impl Game {
 
         for _ in 0..NUM_PLAYERS {
             players.push(Player::new(0, 0));
-            brains.push(Brain::new(actions.clone(), LEARNING_RATE, DISCOUNT_FACTOR, INITIAL_EPSILON));
+            brains.push(Arc::new(Mutex::new(Brain::new(actions.clone(), LEARNING_RATE, DISCOUNT_FACTOR, INITIAL_EPSILON))));
         }
 
         Game {
@@ -52,6 +54,8 @@ impl Game {
         let mut local_view = Vec::new();
         let view_radius = 1;
 
+        let mut brain_lock = self.brains[player_index].lock().unwrap();
+
         for dy in -view_radius..=view_radius {
             for dx in -view_radius..=view_radius {
                 let nx = player.x as i32 + dx;
@@ -60,7 +64,7 @@ impl Game {
                 if nx >= 0 && nx < self.map.width as i32 && ny >= 0 && ny < self.map.height as i32 {
                     let tile = self.map.grid[ny as usize][nx as usize].clone();
                     local_view.push(tile.clone());
-                    self.brains[player_index].mental_map[ny as usize][nx as usize] = Some(tile);
+                    brain_lock.mental_map[ny as usize][nx as usize] = Some(tile);
                 } else {
                     local_view.push(Tile::new('X'));
                 }
@@ -164,7 +168,7 @@ impl Game {
         for (x, y) in iron_locations { self.map.add_iron_ore_node(x, y); }
     }
 
-    pub fn run(&mut self) -> Result<(), SimulationError> {
+    pub async fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
         self.setup_new_map();
         self._find_and_set_valid_start_positions();
@@ -173,7 +177,6 @@ impl Game {
         self.map.display(&self.players);
 
         for episode in 0..EPISODES {
-            // self.map.grid = original_map_grid.clone(); // Respawning handles this now
             self._respawn_resources(episode);
             for player in &mut self.players {
                 player.reset();
@@ -181,23 +184,45 @@ impl Game {
             self._find_and_set_valid_start_positions();
 
             for _step in 0..MAX_STEPS_PER_EPISODE {
+                let mut action_handles = Vec::new();
+
                 for i in 0..self.players.len() {
                     if self.players[i].health > 0 {
                         let state = self.get_state(i);
-                        let action = self.brains[i].choose_action(&state)?;
-                        let reward = self._perform_action(i, &action, episode);
-                        let next_state = self.get_state(i);
-                        self.brains[i].update_q_table(&state, &action, reward, &next_state)?;
+                        let brain = Arc::clone(&self.brains[i]);
+                        let handle = task::spawn(async move {
+                            let brain_lock = brain.lock().unwrap();
+                            brain_lock.choose_action(&state)
+                        });
+                        action_handles.push(handle);
+                    }
+                }
+
+                let actions_results: Vec<_> = futures::future::join_all(action_handles).await;
+
+                for (i, result) in actions_results.into_iter().enumerate() {
+                    if self.players[i].health > 0 {
+                         match result {
+                            Ok(Ok(action)) => {
+                                let reward = self._perform_action(i, &action, episode);
+                                let state_before_action = self.get_state(i);
+                                let next_state = self.get_state(i);
+                                self.brains[i].lock().unwrap().update_q_table(&state_before_action, &action, reward, &next_state)?;
+                            },
+                            Ok(Err(e)) => return Err(e.into()),
+                            Err(e) => return Err(SimulationError::TaskJoinError(e.to_string())),
+                        }
                     }
                 }
             }
 
-            if self.brains[0].epsilon > MIN_EPSILON {
-                self.brains[0].epsilon *= EPSILON_DECAY;
+            let mut brain_lock = self.brains[0].lock().unwrap();
+            if brain_lock.epsilon > MIN_EPSILON {
+                brain_lock.epsilon *= EPSILON_DECAY;
             }
 
             if (episode + 1) % 200 == 0 {
-                println!("Episode {}/{} | P1 Epsilon: {:.3}", episode + 1, EPISODES, self.brains[0].epsilon);
+                println!("Episode {}/{} | P1 Epsilon: {:.3}", brain_lock.epsilon, episode + 1, EPISODES);
                 self._display_mental_map(0);
             }
         }
@@ -223,7 +248,7 @@ impl Game {
 
     fn _display_mental_map(&self, player_index: usize) {
         println!("--- Player {} Mental Map ---", player_index);
-        let brain = &self.brains[player_index];
+        let brain = self.brains[player_index].lock().unwrap();
         for y in 0..HEIGHT {
             for x in 0..WIDTH {
                 match &brain.mental_map[y as usize][x as usize] {
