@@ -6,11 +6,20 @@ use serde::{Serialize, Deserialize};
 pub struct Tile {
     pub tile_type: char,
     pub lock_id: Option<u32>,
+    pub remaining_resources: Option<u32>,
+    pub depletion_episode: Option<u32>,
+    pub original_tile_type: char,
 }
 
 impl Tile {
     pub fn new(tile_type: char) -> Self {
-        Tile { tile_type, lock_id: None }
+        Tile {
+            tile_type,
+            lock_id: None,
+            remaining_resources: None,
+            depletion_episode: None,
+            original_tile_type: tile_type,
+        }
     }
 }
 
@@ -74,18 +83,30 @@ impl Map {
     }
 
     pub fn add_tree(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize].tile_type = 'T';
+        let tile = &mut self.grid[y as usize][x as usize];
+        tile.tile_type = 'T';
+        tile.original_tile_type = 'T';
+        tile.remaining_resources = Some(5);
     }
 
     pub fn add_rock(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize].tile_type = 'R';
+        let tile = &mut self.grid[y as usize][x as usize];
+        tile.tile_type = 'R';
+        tile.original_tile_type = 'R';
+        tile.remaining_resources = Some(5);
     }
 
     pub fn add_sulfur(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize].tile_type = 'U';
+        let tile = &mut self.grid[y as usize][x as usize];
+        tile.tile_type = 'U';
+        tile.original_tile_type = 'U';
+        tile.remaining_resources = Some(5);
     }
 
     pub fn add_iron_ore_node(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize].tile_type = 'I';
+        let tile = &mut self.grid[y as usize][x as usize];
+        tile.tile_type = 'I';
+        tile.original_tile_type = 'I';
+        tile.remaining_resources = Some(5);
     }
 }

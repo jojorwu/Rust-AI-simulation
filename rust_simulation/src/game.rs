@@ -167,14 +167,14 @@ impl Game {
     pub fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
         self.setup_new_map();
-        let original_map_grid = self.map.grid.clone();
         self._find_and_set_valid_start_positions();
 
         println!("Initial Map:");
         self.map.display(&self.players);
 
         for episode in 0..EPISODES {
-            self.map.grid = original_map_grid.clone();
+            // self.map.grid = original_map_grid.clone(); // Respawning handles this now
+            self._respawn_resources(episode);
             for player in &mut self.players {
                 player.reset();
             }
@@ -185,7 +185,7 @@ impl Game {
                     if self.players[i].health > 0 {
                         let state = self.get_state(i);
                         let action = self.brains[i].choose_action(&state)?;
-                        let reward = self._perform_action(i, &action);
+                        let reward = self._perform_action(i, &action, episode);
                         let next_state = self.get_state(i);
                         self.brains[i].update_q_table(&state, &action, reward, &next_state)?;
                     }
@@ -204,6 +204,21 @@ impl Game {
 
         println!("--- Training Finished ---");
         Ok(())
+    }
+
+    fn _respawn_resources(&mut self, current_episode: u32) {
+        for y in 0..self.map.height {
+            for x in 0..self.map.width {
+                let tile = &mut self.map.grid[y as usize][x as usize];
+                if let Some(depletion_episode) = tile.depletion_episode {
+                    if current_episode >= depletion_episode + 4 {
+                        tile.tile_type = tile.original_tile_type;
+                        tile.remaining_resources = Some(5);
+                        tile.depletion_episode = None;
+                    }
+                }
+            }
+        }
     }
 
     fn _display_mental_map(&self, player_index: usize) {
@@ -276,8 +291,12 @@ impl Game {
         } else { -5.0 }
     }
 
-    fn _handle_gather_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
-        let tile_type = self.map.grid[py as usize][px as usize].tile_type;
+    fn _handle_gather_action(&mut self, player_index: usize, px: u32, py: u32, episode: u32) -> f64 {
+        let tile = &mut self.map.grid[py as usize][px as usize];
+        if tile.remaining_resources.is_none() || tile.remaining_resources == Some(0) {
+            return -2.0; // Nothing to gather
+        }
+
         let player = &mut self.players[player_index];
         let held = player.held_item.as_deref();
         let tool_map: HashMap<char, (&str, &str, f64)> = [
@@ -287,10 +306,16 @@ impl Game {
             ('I', ("metal_pickaxe", "iron_ore", 40.0)),
         ].iter().cloned().collect();
 
-        if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile_type) {
+        if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile.tile_type) {
             if held == Some(*required_tool) {
-                if player.add_item(resource, 1, None, &self.item_registry) {
-                    self.map.grid[py as usize][px as usize].tile_type = '.';
+                if player.add_item(resource, 3, None, &self.item_registry) {
+                    if let Some(res) = &mut tile.remaining_resources {
+                        *res -= 1;
+                        if *res == 0 {
+                            tile.tile_type = '.';
+                            tile.depletion_episode = Some(episode);
+                        }
+                    }
                     *reward_val
                 } else { -15.0 }
             } else { -10.0 }
@@ -423,12 +448,12 @@ impl Game {
         }
     }
 
-    pub fn _perform_action(&mut self, player_index: usize, action: &Action) -> f64 {
+    pub fn _perform_action(&mut self, player_index: usize, action: &Action, episode: u32) -> f64 {
         let (px, py) = (self.players[player_index].x, self.players[player_index].y);
 
         match action {
             Action::Move(direction) => self._handle_move_action(player_index, direction),
-            Action::Gather => self._handle_gather_action(player_index, px, py),
+            Action::Gather => self._handle_gather_action(player_index, px, py, episode),
             Action::Craft(item) => self._handle_craft_action(player_index, item),
             Action::Equip(item) => self._handle_equip_action(player_index, item),
             Action::Place(item) => {
