@@ -190,9 +190,10 @@ impl Game {
                     if self.players[i].health > 0 {
                         let state = self.get_state(i);
                         let brain = Arc::clone(&self.brains[i]);
+                        let player_pos = (self.players[i].x, self.players[i].y);
                         let handle = task::spawn(async move {
-                            let brain_lock = brain.lock().unwrap();
-                            brain_lock.choose_action(&state)
+                            let mut brain_lock = brain.lock().unwrap();
+                            brain_lock.choose_action(&state, player_pos)
                         });
                         action_handles.push(handle);
                     }

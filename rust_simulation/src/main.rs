@@ -1,5 +1,6 @@
 mod actions;
 mod map;
+mod pathfinding;
 mod player;
 mod state;
 mod brain;
