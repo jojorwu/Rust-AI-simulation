@@ -75,7 +75,6 @@ impl Brain {
             Goal::GatherResource("stone".to_string()),
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
-            Goal::Attack(1), // Attack player 1
         ];
         Brain {
             _actions: actions,
@@ -140,9 +139,10 @@ impl Brain {
     }
 
     pub fn tick(&mut self, world: &mut World, entity: Entity, high_level_state: &HighLevelState, current_episode: u32) -> Result<(), SimulationError> {
-        // if let Some(_action) = self.handle_threats(world, entity) {
-        //     // return Ok(action);
-        // }
+        if self.handle_threats(world, entity) {
+            self.goal_commitment_ticks = 5; // Commit to the threat response
+            return self.choose_action_for_goal(world, entity, current_episode);
+        }
 
         if self.goal_commitment_ticks > 0 {
             self.goal_commitment_ticks -= 1;
@@ -192,7 +192,8 @@ impl Brain {
                 Goal::GatherResource(resource_name) => self.execute_gather_goal(world, entity, &resource_name, current_episode)?,
                 Goal::CraftItem(item_name) => self.execute_craft_item_goal(world, entity, &item_name, current_episode)?,
                 Goal::Build(structure_name) => self.execute_build_goal(world, entity, &structure_name, current_episode)?,
-                _ => {}
+                Goal::Attack(target_id) => self.execute_attack_goal(world, entity, target_id, current_episode)?,
+                Goal::Flee => self.execute_flee_goal(world, entity, current_episode)?,
             }
         }
 
@@ -203,18 +204,25 @@ impl Brain {
         let resource_char = self.resource_name_to_char(resource_name);
         let player_pos = *world.get_component::<Position>(entity).unwrap();
 
-        // Find the target resource
-        let mut target_entity = None;
+        // Find the closest resource
+        let mut closest_target = None;
+        let mut min_dist = u32::MAX;
+
         for e in 0..world.entities.len() {
             if let Some(resource) = world.get_component::<super::components::Resource>(e) {
                 if resource.resource_type == resource_char {
-                    target_entity = Some(e);
-                    break;
+                    if let Some(target_pos) = world.get_component::<Position>(e) {
+                        let dist = (player_pos.x.abs_diff(target_pos.x)) + (player_pos.y.abs_diff(target_pos.y));
+                        if dist < min_dist {
+                            min_dist = dist;
+                            closest_target = Some(e);
+                        }
+                    }
                 }
             }
         }
 
-        if let Some(target) = target_entity {
+        if let Some(target) = closest_target {
             let target_pos = world.get_component::<Position>(target).unwrap();
             let dx = (player_pos.x as i32 - target_pos.x as i32).abs();
             let dy = (player_pos.y as i32 - target_pos.y as i32).abs();
@@ -278,6 +286,75 @@ impl Brain {
         }
     }
 
+    fn handle_threats(&mut self, world: &World, entity: Entity) -> bool {
+        let health = world.get_component::<crate::components::Health>(entity).unwrap();
+        let player_pos = *world.get_component::<Position>(entity).unwrap();
 
+        let hostile_players: Vec<_> = self.player_memories.iter()
+            .filter(|(_, mem)| mem.relationship == RelationshipStatus::Hostile)
+            .collect();
 
+        if !hostile_players.is_empty() {
+            if health.current < 50 {
+                self.current_goal = Some(Goal::Flee);
+                self.current_path = None; // Clear any existing path
+                return true;
+            } else {
+                let mut closest_threat = None;
+                let mut min_dist = u32::MAX;
+
+                for (&id, _) in hostile_players {
+                    if let Some(threat_pos) = world.get_component::<Position>(id as usize) {
+                        let dist = player_pos.x.abs_diff(threat_pos.x) + player_pos.y.abs_diff(threat_pos.y);
+                        if dist < min_dist {
+                            min_dist = dist;
+                            closest_threat = Some(id);
+                        }
+                    }
+                }
+
+                if let Some(id) = closest_threat {
+                    self.current_goal = Some(Goal::Attack(id));
+                    self.current_path = None;
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn execute_attack_goal(&mut self, world: &mut World, entity: Entity, target_id: u32, _current_episode: u32) -> Result<(), SimulationError> {
+        // Simple attack logic: add WantsToAttack component
+        world.add_component(entity, crate::components::WantsToAttack { target: target_id as usize });
+        Ok(())
+    }
+
+    fn execute_flee_goal(&mut self, world: &mut World, entity: Entity, _current_episode: u32) -> Result<(), SimulationError> {
+        let player_pos = *world.get_component::<Position>(entity).unwrap();
+
+        let hostile_positions: Vec<_> = self.player_memories.iter()
+            .filter(|(_, mem)| mem.relationship == RelationshipStatus::Hostile)
+            .filter_map(|(&id, _)| world.get_component::<Position>(id as usize).cloned())
+            .collect();
+
+        if hostile_positions.is_empty() {
+            // No threats in memory, stop fleeing.
+            self.current_goal = None;
+            return Ok(());
+        }
+
+        let avg_threat_x = hostile_positions.iter().map(|p| p.x as f32).sum::<f32>() / hostile_positions.len() as f32;
+        let avg_threat_y = hostile_positions.iter().map(|p| p.y as f32).sum::<f32>() / hostile_positions.len() as f32;
+
+        let flee_vec_x = player_pos.x as f32 - avg_threat_x;
+        let flee_vec_y = player_pos.y as f32 - avg_threat_y;
+
+        let norm = (flee_vec_x.powi(2) + flee_vec_y.powi(2)).sqrt();
+        let flee_dx = if norm > 0.0 { (flee_vec_x / norm).round() as i32 } else { 0 };
+        let flee_dy = if norm > 0.0 { (flee_vec_y / norm).round() as i32 } else { 0 };
+
+        world.add_component(entity, crate::components::Velocity { dx: flee_dx, dy: flee_dy });
+
+        Ok(())
+    }
 }
