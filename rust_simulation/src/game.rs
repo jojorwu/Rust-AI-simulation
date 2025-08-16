@@ -25,6 +25,7 @@ pub struct Game {
     _next_instance_id: u32,
 }
 
+
 impl Game {
     pub fn new() -> Self {
         let map = Map::new(WIDTH, HEIGHT).expect("Failed to create map");
@@ -119,26 +120,20 @@ impl Game {
         self.setup_new_map();
         self._find_and_set_valid_start_positions();
 
-        // --- Test Combat ---
-        {
-            let mut world = self.world.lock().unwrap();
-            world.add_component(0, crate::components::WantsToAttack { target: 1 });
-        }
-        combat_system(&mut self.world.lock().unwrap());
-        {
-            let world = self.world.lock().unwrap();
-            if let Some(health) = world.get_component::<crate::components::Health>(1) {
-                assert!(health.current < health.max);
-            }
-        }
-        // --- End Test Combat ---
 
         println!("Initial Map:");
         self.map.display(&self.world.lock().unwrap());
 
         for episode in 0..EPISODES {
             self._respawn_resources(episode);
-            // player.reset() will need to be re-implemented
+            {
+                let mut world = self.world.lock().unwrap();
+                for i in 0..world.entities.len() {
+                    if let Some(player) = world.get_component_mut::<Player>(i) {
+                        player.reset();
+                    }
+                }
+            }
             self._find_and_set_valid_start_positions();
 
             for _step in 0..MAX_STEPS_PER_EPISODE {
@@ -161,11 +156,20 @@ impl Game {
                     }
                 }
 
-                let actions_results: Vec<_> = futures::future::join_all(action_handles).await;
-
-                for (_i, result) in actions_results.into_iter().enumerate() {
-                    if let Ok(Ok(_)) = result {
-                        // self._perform_action(i, &action, episode);
+                let results = futures::future::join_all(action_handles).await;
+                for result in results {
+                    match result {
+                        Ok(Ok(())) => {
+                            // Brain tick succeeded, do nothing.
+                        },
+                        Ok(Err(e)) => {
+                            // Brain tick returned an error.
+                            return Err(e);
+                        },
+                        Err(e) => {
+                            // The tokio task failed to execute (e.g., panicked).
+                            return Err(SimulationError::Other(format!("Task failed: {}", e)));
+                        }
                     }
                 }
 

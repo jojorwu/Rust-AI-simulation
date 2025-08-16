@@ -125,6 +125,10 @@ impl Player {
         true
     }
 
+    pub fn reset(&mut self) {
+        self._held_item = None;
+        self.inventory = vec![None; INVENTORY_SLOTS];
+    }
 }
 
 use crate::ecs::Component;
