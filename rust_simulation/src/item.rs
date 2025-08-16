@@ -2,11 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Item {
     pub name: String,
     pub stackable: bool,
     pub tool: bool,
+    #[serde(default)]
+    pub properties: Option<HashMap<String, f64>>,
 }
 
 pub struct ItemRegistry {

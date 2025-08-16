@@ -8,6 +8,7 @@ pub struct Slot {
     pub item: String,
     pub quantity: u32,
     pub instance_id: Option<u32>,
+    pub durability: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,10 +109,17 @@ impl Player {
 
         // If not stackable, or a unique instance, or no existing stack, find an empty slot
         if let Some(empty_slot_index) = self.find_empty_slot() {
+            let initial_durability = if let Some(item_def) = item {
+                if item_def.tool {
+                    item_def.properties.as_ref().and_then(|p| p.get("max_durability").cloned())
+                } else { None }
+            } else { None };
+
             self.inventory[empty_slot_index] = Some(Slot {
                 item: item_name.to_string(),
                 quantity,
                 instance_id,
+                durability: initial_durability,
             });
             true
         } else {

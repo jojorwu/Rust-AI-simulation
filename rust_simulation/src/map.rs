@@ -9,6 +9,7 @@ pub struct Tile {
     pub remaining_resources: Option<u32>,
     pub depletion_episode: Option<u32>,
     pub original_tile_type: char,
+    pub health: Option<f64>,
 }
 
 impl Tile {
@@ -19,6 +20,7 @@ impl Tile {
             remaining_resources: None,
             depletion_episode: None,
             original_tile_type: tile_type,
+            health: None,
         }
     }
 }

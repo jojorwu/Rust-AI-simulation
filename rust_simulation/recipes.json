@@ -23,5 +23,11 @@
   },
   "lock": {
     "iron_bars": 10
+  },
+  "foundation": {
+    "stone": 20
+  },
+  "wall": {
+    "stone": 10
   }
 }

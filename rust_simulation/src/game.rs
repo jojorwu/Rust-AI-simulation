@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use super::map::{Map, Tile};
 use super::player::Player;
-use super::brain::{Brain, MemoryTile, HighLevelState};
+use super::brain::{Brain, HighLevelState};
 use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::actions::{Action, Direction, get_all_actions};
@@ -322,28 +322,55 @@ impl Game {
         }
 
         let player = &mut self.players[player_index];
-        let held = player.held_item.as_deref();
-        let tool_map: HashMap<char, (&str, &str, f64)> = [
-            ('T', ("stone_axe", "wood", 20.0)),
-            ('R', ("stone_pickaxe", "stone", 20.0)),
-            ('U', ("stone_pickaxe", "sulfur", 30.0)),
-            ('I', ("metal_pickaxe", "iron_ore", 40.0)),
-        ].iter().cloned().collect();
+        let held_item_name = player.held_item.as_deref();
+        let held_item = held_item_name.and_then(|name| self.item_registry.get_item(name));
 
-        if let Some((required_tool, resource, reward_val)) = tool_map.get(&tile.tile_type) {
-            if held == Some(*required_tool) {
-                if player.add_item(resource, 3, None, &self.item_registry) {
-                    if let Some(res) = &mut tile.remaining_resources {
-                        *res -= 1;
-                        if *res == 0 {
-                            tile.tile_type = '.';
-                            tile.depletion_episode = Some(episode);
+        if let Some(item) = held_item {
+            if let Some(properties) = &item.properties {
+                let efficiency = properties.get("efficiency").cloned().unwrap_or(1.0) as u32;
+                let required_tool = match tile.tile_type {
+                    'T' => "stone_axe",
+                    'R' => "stone_pickaxe",
+                    'U' => "stone_pickaxe",
+                    'I' => "metal_pickaxe",
+                    _ => "",
+                };
+
+                if item.name == required_tool {
+                    let resource = match tile.tile_type {
+                        'T' => "wood",
+                        'R' => "stone",
+                        'U' => "sulfur",
+                        'I' => "iron_ore",
+                        _ => "",
+                    };
+
+                    if player.add_item(resource, efficiency, None, &self.item_registry) {
+                        if let Some(res) = &mut tile.remaining_resources {
+                            *res -= 1;
+                            if *res == 0 {
+                                tile.tile_type = '.';
+                                tile.depletion_episode = Some(episode);
+                            }
                         }
-                    }
-                    *reward_val
-                } else { -15.0 }
+
+                        let player = &mut self.players[player_index];
+                        if let Some(slot_index) = player.inventory.iter().position(|s| s.is_some() && s.as_ref().unwrap().item == item.name) {
+                            if let Some(slot) = &mut player.inventory[slot_index] {
+                                if let Some(durability) = &mut slot.durability {
+                                    *durability -= 1.0;
+                                    if *durability <= 0.0 {
+                                        player.inventory[slot_index] = None;
+                                    }
+                                }
+                            }
+                        }
+
+                        return 20.0;
+                    } else { -15.0 }
+                } else { -10.0 }
             } else { -10.0 }
-        } else { -2.0 }
+        } else { -10.0 }
     }
 
     fn _handle_place_furnace_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
@@ -383,30 +410,28 @@ impl Game {
     }
 
     fn _handle_build_action(&mut self, player_index: usize, structure: &str, px: u32, py: u32) -> f64 {
-        let _player = &mut self.players[player_index];
-        let current_tile = &mut self.map.grid[py as usize][px as usize];
+        let player = &mut self.players[player_index];
+        if player.get_total_quantity(structure) > 0 {
+            let current_tile = &mut self.map.grid[py as usize][px as usize];
+            let item = self.item_registry.get_item(structure);
+            let health = item.and_then(|i| i.properties.as_ref()).and_then(|p| p.get("health")).cloned().unwrap_or(100.0);
 
-        match structure {
-            "foundation" => {
-                if current_tile.tile_type == '.' {
-                    current_tile.tile_type = 'B';
-                    30.0
-                } else { -5.0 }
-            }
-            "wall" => {
-                if current_tile.tile_type == 'B' {
-                    current_tile.tile_type = '#';
-                    30.0
-                } else { -5.0 }
-            }
-            "doorway" => {
-                if current_tile.tile_type == 'B' {
-                    current_tile.tile_type = 'O';
-                    30.0
-                } else { -5.0 }
-            }
-            _ => -0.1,
-        }
+            let tile_char = match structure {
+                "foundation" => 'B',
+                "wall" => '#',
+                "doorway" => 'O',
+                _ => 'X',
+            };
+
+            if tile_char != 'X' {
+                current_tile.tile_type = tile_char;
+                current_tile.health = Some(health);
+                let mut recipe = HashMap::new();
+                recipe.insert(structure.to_string(), 1);
+                player.remove_resources(&recipe);
+                30.0
+            } else { -0.1 }
+        } else { -5.0 }
     }
 
     fn _handle_attach_lock_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
@@ -459,16 +484,98 @@ impl Game {
         }
     }
 
+    fn _handle_structural_collapse(&mut self, x: u32, y: u32) {
+        println!("Structural collapse at ({}, {})", x, y);
+        let mut to_check = vec![(x, y)];
+        let mut checked = std::collections::HashSet::new();
+
+        while let Some((cx, cy)) = to_check.pop() {
+            if !checked.insert((cx, cy)) {
+                continue;
+            }
+
+            for (dx, dy) in &[(0, 1), (0, -1), (1, 0), (-1, 0)] {
+                let nx = (cx as i32 + dx) as u32;
+                let ny = (cy as i32 + dy) as u32;
+
+                if nx < self.map.width && ny < self.map.height && !checked.contains(&(nx, ny)) {
+                    let is_supported = if ny > 0 {
+                        let (_grid_slice_above, grid_slice_below) = self.map.grid.split_at_mut(ny as usize);
+                        let below_tile = &grid_slice_below[0][nx as usize];
+                        "B#".contains(below_tile.tile_type)
+                    } else { false };
+
+                    let tile = &mut self.map.grid[ny as usize][nx as usize];
+                    if "B#DO".contains(tile.tile_type) && !is_supported {
+                        tile.tile_type = '.';
+                        tile.health = None;
+                        to_check.push((nx, ny));
+                    }
+                }
+            }
+        }
+    }
+
     fn _handle_attack_action(&mut self, player_index: usize) -> f64 {
+        let attacker_id = self.players[player_index].id;
+        let held_item_name = self.players[player_index].held_item.clone();
+        let damage = if let Some(item_name) = &held_item_name {
+            self.item_registry.get_item(item_name).and_then(|item| item.properties.as_ref()).and_then(|p| p.get("damage")).cloned().unwrap_or(1.0)
+        } else { 1.0 };
+
+        // Try to attack a building first
+        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
+        for (dx, dy) in &[(0, 1), (0, -1), (1, 0), (-1, 0)] {
+            let nx = (px as i32 + dx) as u32;
+            let ny = (py as i32 + dy) as u32;
+            if nx < self.map.width && ny < self.map.height {
+                let tile = &mut self.map.grid[ny as usize][nx as usize];
+                if "B#DO".contains(tile.tile_type) {
+                    if let Some(health) = &mut tile.health {
+                        *health -= damage;
+                        if *health <= 0.0 {
+                            let was_foundation = tile.tile_type == 'B';
+                            tile.tile_type = '.';
+                            tile.health = None;
+                            if was_foundation {
+                                self._handle_structural_collapse(nx, ny);
+                            }
+                        }
+                        return 20.0;
+                    }
+                }
+            }
+        }
+
+        // If no building, try to attack a player
         if let Some(other_player_index) = self._find_adjacent_player(player_index) {
-            let attacker_id = self.players[player_index].id;
-            self.players[other_player_index].health -= 10;
+            let (players_slice1, players_slice2) = self.players.split_at_mut(std::cmp::max(player_index, other_player_index));
+            let (attacker, victim) = if player_index < other_player_index {
+                (&mut players_slice1[player_index], &mut players_slice2[0])
+            } else {
+                (&mut players_slice2[0], &mut players_slice1[other_player_index])
+            };
+
+            victim.health -= damage as i32;
 
             let victim_brain = Arc::clone(&self.brains[other_player_index]);
             let mut victim_brain_lock = victim_brain.lock().unwrap();
             victim_brain_lock.record_attack_from(attacker_id);
 
-            if self.players[other_player_index].health <= 0 {
+            if let Some(item_name) = held_item_name {
+                if let Some(slot) = attacker.inventory.iter_mut().find(|s| s.is_some() && s.as_ref().unwrap().item == item_name) {
+                    if let Some(s) = slot {
+                        if let Some(durability) = &mut s.durability {
+                            *durability -= 1.0;
+                            if *durability <= 0.0 {
+                                *slot = None;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if victim.health <= 0 {
                 100.0
             } else {
                 10.0
