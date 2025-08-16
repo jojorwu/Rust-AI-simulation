@@ -227,17 +227,16 @@ impl Game {
                         let player = self.players[i].clone(); // This is not ideal, but necessary for async
                         let handle = task::spawn(async move {
                             let mut brain_lock = brain.lock().unwrap();
-                            brain_lock.tick(&player, &high_level_state)
+                            brain_lock.tick(&player, &high_level_state, episode)
                         });
                         action_handles.push(handle);
                     }
                 }
 
-                let mut actions_results: Vec<_> = futures::future::join_all(action_handles).await;
+                let actions_results: Vec<_> = futures::future::join_all(action_handles).await;
 
-                for i in 0..self.players.len() {
+                for (i, result) in actions_results.into_iter().enumerate() {
                     if self.players[i].health > 0 {
-                        let result = actions_results.remove(0); // This is a bit of a hack, but it works for now
                         match result {
                             Ok(Ok(action)) => {
                                 let state_before_action = self.get_high_level_state(i);

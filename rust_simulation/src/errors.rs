@@ -5,6 +5,7 @@ use std::fmt;
 pub enum SimulationError {
     SerializationError(String),
     TaskJoinError(String),
+    Other(String),
 }
 
 impl fmt::Display for SimulationError {
@@ -12,6 +13,7 @@ impl fmt::Display for SimulationError {
         match self {
             SimulationError::SerializationError(e) => write!(f, "Serialization Error: {}", e),
             SimulationError::TaskJoinError(e) => write!(f, "Task Join Error: {}", e),
+            SimulationError::Other(e) => write!(f, "Other Error: {}", e),
         }
     }
 }
