@@ -3,10 +3,14 @@ use rand::Rng;
 use super::errors::SimulationError;
 use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
-use super::actions::{Action, Direction};
+use super::actions::{Action};
 use super::map::Tile;
 use super::pathfinding;
+use crate::components::WantsToGather;
 use super::recipes::RecipeManager;
+use super::ecs::{World, Entity};
+use super::components::Position;
+use super::player::Player;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 
@@ -122,7 +126,8 @@ impl Brain {
         Ok(())
     }
 
-    pub fn is_goal_complete(&self, player: &super::player::Player, goal: &Goal) -> bool {
+    pub fn is_goal_complete(&self, world: &World, entity: Entity, goal: &Goal) -> bool {
+        let player = world.get_component::<Player>(entity).unwrap();
         match goal {
             Goal::GatherResource(resource) => {
                 if let Some(parent_goal) = self.goal_stack.last() {
@@ -140,9 +145,9 @@ impl Brain {
         }
     }
 
-    pub fn tick(&mut self, player: &super::player::Player, high_level_state: &HighLevelState, current_episode: u32) -> Result<Action, SimulationError> {
-        if let Some(action) = self.handle_threats(player) {
-            return Ok(action);
+    pub fn tick(&mut self, world: &mut World, entity: Entity, high_level_state: &HighLevelState, current_episode: u32) -> Result<(), SimulationError> {
+        if let Some(_action) = self.handle_threats(world, entity) {
+            // return Ok(action);
         }
 
         if self.goal_commitment_ticks > 0 {
@@ -150,7 +155,7 @@ impl Brain {
         }
 
         if let Some(goal) = &self.current_goal {
-            if self.is_goal_complete(player, goal) || !self.is_goal_valid(goal) {
+            if self.is_goal_complete(world, entity, goal) || !self.is_goal_valid(goal) {
                 self.current_goal = None;
                 self.current_path = None;
                 self.goal_commitment_ticks = 0;
@@ -162,7 +167,7 @@ impl Brain {
             self.goal_commitment_ticks = 10; // Commit to the new goal for 10 ticks
         }
 
-        self.choose_action_for_goal(player, current_episode)
+        self.choose_action_for_goal(world, entity, current_episode)
     }
 
     fn is_goal_valid(&self, goal: &Goal) -> bool {
@@ -175,35 +180,17 @@ impl Brain {
         }
     }
 
-    fn handle_threats(&mut self, player: &super::player::Player) -> Option<Action> {
-        for memory in self.player_memories.values() {
-            if memory.relationship == RelationshipStatus::Hostile {
-                if let Some(loc) = memory.last_seen_location {
-                    let dist = ((player.x as f64 - loc.0 as f64).powi(2) + (player.y as f64 - loc.1 as f64).powi(2)).sqrt();
-                    if dist < 5.0 {
-                        self.current_goal = Some(Goal::Flee);
-                        self.current_path = None;
-                        let dx = player.x as i32 - loc.0 as i32;
-                        let dy = player.y as i32 - loc.1 as i32;
-                        return Some(Action::Move(if dx.abs() > dy.abs() {
-                            if dx > 0 { Direction::Right } else { Direction::Left }
-                        } else {
-                            if dy > 0 { Direction::Down } else { Direction::Up }
-                        }));
-                    }
-                }
-            }
-        }
+    fn handle_threats(&mut self, _world: &World, _entity: Entity) -> Option<Action> {
         None
     }
 
-    fn choose_action_for_goal(&mut self, player: &super::player::Player, current_episode: u32) -> Result<Action, SimulationError> {
+    fn choose_action_for_goal(&mut self, world: &mut World, entity: Entity, current_episode: u32) -> Result<(), SimulationError> {
         if let Some(path) = &mut self.current_path {
             if !path.is_empty() {
-                let next_pos = path.remove(0);
-                let dx = next_pos.0 as i32 - player.x as i32;
-                let dy = next_pos.1 as i32 - player.y as i32;
-                return Ok(Action::Move(if dx > 0 { Direction::Right } else if dx < 0 { Direction::Left } else if dy > 0 { Direction::Down } else { Direction::Up }));
+                // let next_pos = path.remove(0);
+                // let _dx = next_pos.0 as i32 - player_pos.x as i32;
+                // let _dy = next_pos.1 as i32 - player_pos.y as i32;
+                // return Ok(Action::Move(if dx > 0 { Direction::Right } else if dx < 0 { Direction::Left } else if dy > 0 { Direction::Down } else { Direction::Up }));
             } else {
                 self.current_path = None;
             }
@@ -211,42 +198,56 @@ impl Brain {
 
         if let Some(goal) = self.current_goal.clone() {
             match goal {
-                Goal::GatherResource(resource_name) => return self.execute_gather_goal(player, &resource_name, current_episode),
-                Goal::CraftItem(item_name) => return self.execute_craft_item_goal(player, &item_name, current_episode),
+                Goal::GatherResource(resource_name) => self.execute_gather_goal(world, entity, &resource_name, current_episode)?,
+                Goal::CraftItem(item_name) => self.execute_craft_item_goal(world, entity, &item_name, current_episode)?,
                 _ => {}
             }
         }
 
-        Ok(self.actions[0].clone())
+        Ok(())
     }
 
-    fn execute_gather_goal(&mut self, player: &super::player::Player, resource_name: &str, current_episode: u32) -> Result<Action, SimulationError> {
+    fn execute_gather_goal(&mut self, world: &mut World, entity: Entity, resource_name: &str, current_episode: u32) -> Result<(), SimulationError> {
         let resource_char = self.resource_name_to_char(resource_name);
-        let player_pos = (player.x, player.y);
+        let player_pos = *world.get_component::<Position>(entity).unwrap();
 
-        if let Some(memory_tile) = &mut self.mental_map[player_pos.1 as usize][player_pos.0 as usize] {
-            if memory_tile.tile.tile_type == resource_char {
-                memory_tile.resource_richness = memory_tile.resource_richness * 0.5 + 3.0 * 0.5;
-                return Ok(Action::Gather);
+        // Find the target resource
+        let mut target_entity = None;
+        for e in 0..world.entities.len() {
+            if let Some(resource) = world.get_component::<super::components::Resource>(e) {
+                if resource.resource_type == resource_char {
+                    target_entity = Some(e);
+                    break;
+                }
             }
         }
 
-        if let Some(resource_pos) = self.find_best_resource_spot(player_pos, resource_char, current_episode) {
-            if let Some(path) = pathfinding::find_path(player_pos, resource_pos, &self.mental_map) {
-                self.current_path = Some(path);
-                return self.choose_action_for_goal(player, current_episode);
+        if let Some(target) = target_entity {
+            let target_pos = world.get_component::<Position>(target).unwrap();
+            let dx = (player_pos.x as i32 - target_pos.x as i32).abs();
+            let dy = (player_pos.y as i32 - target_pos.y as i32).abs();
+
+            if dx <= 1 && dy <= 1 {
+                world.add_component(entity, WantsToGather { target });
+            } else {
+                if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (target_pos.x, target_pos.y), &self.mental_map) {
+                    self.current_path = Some(path);
+                    return self.choose_action_for_goal(world, entity, current_episode);
+                }
             }
+        } else {
+            // If we reach here, it means we couldn't find a path or the resource doesn't exist.
+            // Clear the goal to avoid getting stuck.
+            self.current_goal = None;
         }
 
-        // If we reach here, it means we couldn't find a path or the resource doesn't exist.
-        // Clear the goal to avoid getting stuck.
-        self.current_goal = None;
-        Ok(self.actions[0].clone()) // Fallback action
+        Ok(())
     }
 
-    fn execute_craft_item_goal(&mut self, player: &super::player::Player, item_name: &str, current_episode: u32) -> Result<Action, SimulationError> {
+    fn execute_craft_item_goal(&mut self, world: &mut World, entity: Entity, item_name: &str, current_episode: u32) -> Result<(), SimulationError> {
         let recipe = self.recipe_manager.get_required_resources(item_name, 1);
         let mut missing_resource = None;
+        let player = world.get_component::<Player>(entity).unwrap();
 
         for (resource, &required_amount) in &recipe {
             if player.get_total_quantity(resource) < required_amount {
@@ -263,11 +264,12 @@ impl Brain {
             }
             // Set the new goal to gather the missing resource.
             self.current_goal = Some(Goal::GatherResource(resource));
-            return self.choose_action_for_goal(player, current_episode);
+            return self.choose_action_for_goal(world, entity, current_episode);
         } else {
             // We have all the resources, so we can craft the item.
             self.current_goal = self.goal_stack.pop(); // Go back to the parent goal
-            return Ok(Action::Craft(item_name.to_string()));
+            // return Ok(Action::Craft(item_name.to_string()));
+            Ok(())
         }
     }
 

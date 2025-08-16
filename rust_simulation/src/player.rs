@@ -2,9 +2,6 @@ const INVENTORY_SLOTS: usize = 6;
 
 use serde::{Serialize, Deserialize};
 use super::item::ItemRegistry;
-use super::actions::Action;
-use super::game::Game;
-use super::errors::SimulationError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Slot {
@@ -23,7 +20,6 @@ pub struct Player {
 }
 
 use std::collections::HashMap;
-use std::any::Any;
 
 impl Player {
     pub fn new(id: u32) -> Self {
@@ -34,14 +30,6 @@ impl Player {
             inventory: vec![None; INVENTORY_SLOTS],
         }
     }
-
-    pub fn reset(&mut self) {
-        self.health = 100;
-        self.inventory = vec![None; INVENTORY_SLOTS];
-        self.held_item = None;
-    }
-
-    // --- Inventory Helper Methods ---
 
     fn find_item_slot(&self, item_name: &str) -> Option<usize> {
         self.inventory.iter().position(|slot| {
@@ -55,24 +43,6 @@ impl Player {
 
     fn find_empty_slot(&self) -> Option<usize> {
         self.inventory.iter().position(|slot| slot.is_none())
-    }
-
-    pub fn has_lock(&self) -> bool {
-        self.inventory.iter().any(|s| s.as_ref().map_or(false, |slot| slot.item == "lock"))
-    }
-
-    pub fn find_and_remove_lock(&mut self) -> Option<u32> {
-        let lock_slot_index = self.inventory.iter().position(|s| s.as_ref().map_or(false, |slot| slot.item == "lock"));
-        if let Some(index) = lock_slot_index {
-            let lock_id = self.inventory[index].as_ref().unwrap().instance_id;
-            self.inventory[index] = None;
-            return lock_id;
-        }
-        None
-    }
-
-    pub fn has_key(&self, key_id: u32) -> bool {
-        self.inventory.iter().any(|s| s.as_ref().map_or(false, |slot| slot.item == "key" && slot.instance_id == Some(key_id)))
     }
 
     pub fn get_total_quantity(&self, item_name: &str) -> u32 {

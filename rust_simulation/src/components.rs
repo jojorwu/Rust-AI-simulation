@@ -1,4 +1,4 @@
-use crate::ecs::Component;
+use crate::ecs::{Component, Entity};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Position {
@@ -15,3 +15,18 @@ pub struct Velocity {
 }
 
 impl Component for Velocity {}
+
+#[derive(Debug, Clone, Copy)]
+pub struct WantsToGather {
+    pub target: Entity,
+}
+
+impl Component for WantsToGather {}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Resource {
+    pub resource_type: char,
+    pub quantity: u32,
+}
+
+impl Component for Resource {}

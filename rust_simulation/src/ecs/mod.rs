@@ -6,9 +6,9 @@ pub type Entity = usize;
 pub trait Component: 'static {}
 
 pub struct World {
-    entities: Vec<Entity>,
+    pub entities: Vec<Entity>,
     next_entity_id: usize,
-    components: HashMap<TypeId, Box<dyn Any>>,
+    components: HashMap<TypeId, Box<dyn Any + Send>>,
 }
 
 impl World {
@@ -27,7 +27,7 @@ impl World {
         entity_id
     }
 
-    pub fn add_component<T: Component>(&mut self, entity: Entity, component: T) {
+    pub fn add_component<T: Component + Send>(&mut self, entity: Entity, component: T) {
         let type_id = TypeId::of::<T>();
         let components = self.components
             .entry(type_id)
