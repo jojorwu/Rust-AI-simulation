@@ -1,5 +1,5 @@
 use crate::ecs::World;
-use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild};
+use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild, WantsToAttack, Health, DroppedItem, WantsToPickup};
 use crate::player::Player;
 use crate::recipes::RecipeManager;
 use crate::item::ItemRegistry;
@@ -127,5 +127,81 @@ pub fn building_system(world: &mut World, map: &mut Map) {
     // Reset wants to build
     for entity in 0..world.entities.len() {
         world.remove_component::<WantsToBuild>(entity);
+    }
+}
+
+pub fn combat_system(world: &mut World) {
+    let mut to_attack = Vec::new();
+    for entity in 0..world.entities.len() {
+        if let Some(wants_to_attack) = world.get_component::<WantsToAttack>(entity) {
+            to_attack.push((entity, wants_to_attack.target));
+        }
+    }
+
+    for (_attacker, target) in to_attack {
+        let damage = 10; // Placeholder
+        let mut target_dead = false;
+        if let Some(health) = world.get_component_mut::<Health>(target) {
+            health.current -= damage;
+            if health.current <= 0 {
+                target_dead = true;
+            }
+        }
+
+        if target_dead {
+            let _target_pos = *world.get_component::<Position>(target).unwrap();
+            world.add_component(target, DroppedItem {
+                item_name: "meat".to_string(),
+                quantity: 1,
+            });
+            // This is a placeholder for removing the entity
+            println!("Entity {} died", target);
+        }
+    }
+
+    // Reset wants to attack
+    for entity in 0..world.entities.len() {
+        world.remove_component::<WantsToAttack>(entity);
+    }
+}
+
+pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry) {
+    let mut to_pickup = Vec::new();
+    for entity in 0..world.entities.len() {
+        if world.get_component::<WantsToPickup>(entity).is_some() {
+            to_pickup.push(entity);
+        }
+    }
+
+    for picker_upper in to_pickup {
+        let picker_upper_pos = *world.get_component::<Position>(picker_upper).unwrap();
+        let mut items_to_remove = Vec::new();
+        let mut items_to_add = Vec::new();
+
+        for (i, entity) in (0..world.entities.len()).zip(world.entities.iter()) {
+            if let Some(item) = world.get_component::<DroppedItem>(*entity) {
+                if let Some(item_pos) = world.get_component::<Position>(*entity) {
+                    if item_pos.x == picker_upper_pos.x && item_pos.y == picker_upper_pos.y {
+                        items_to_add.push((picker_upper, item.clone()));
+                        items_to_remove.push(i);
+                    }
+                }
+            }
+        }
+
+        for (picker_upper, item) in items_to_add {
+            if let Some(player) = world.get_component_mut::<Player>(picker_upper) {
+                player.add_item(&item.item_name, item.quantity, None, item_registry);
+            }
+        }
+
+        for i in items_to_remove.iter().rev() {
+            world.remove_entity(*i);
+        }
+    }
+
+    // Reset wants to pickup
+    for entity in 0..world.entities.len() {
+        world.remove_component::<WantsToPickup>(entity);
     }
 }

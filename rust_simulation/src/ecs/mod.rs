@@ -75,4 +75,14 @@ impl World {
             }
         }
     }
+
+    pub fn remove_entity(&mut self, entity: Entity) {
+        for (_type_id, _components) in self.components.iter_mut() {
+            // This is a hack to get around the fact that we can't downcast
+            // a `Box<dyn Any>` to a `Vec<Option<T>>` without knowing `T`.
+            // A better solution would be to use a macro or a different
+            // data structure for component storage.
+        }
+        self.entities.retain(|&e| e != entity);
+    }
 }

@@ -19,7 +19,7 @@ pub enum Goal {
     GatherResource(String),
     CraftItem(String),
     Build(String),
-    AttackPlayer(u32),
+    Attack(u32),
     Flee,
 }
 
@@ -75,6 +75,7 @@ impl Brain {
             Goal::GatherResource("stone".to_string()),
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
+            Goal::Attack(1), // Attack player 1
         ];
         Brain {
             _actions: actions,

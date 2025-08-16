@@ -14,7 +14,6 @@ pub struct Slot {
 #[derive(Debug, Clone)]
 pub struct Player {
     pub id: u32,
-    pub health: i32,
     pub _held_item: Option<String>,
     pub inventory: Vec<Option<Slot>>,
 }
@@ -25,7 +24,6 @@ impl Player {
     pub fn new(id: u32) -> Self {
         Player {
             id,
-            health: 100,
             _held_item: None,
             inventory: vec![None; INVENTORY_SLOTS],
         }

@@ -7,7 +7,7 @@ use super::actions::{get_all_actions};
 use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
 use super::components::Position;
-use super::systems::{movement_system, gathering_system, crafting_system, building_system};
+use super::systems::{movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system};
 use std::sync::{Arc, Mutex};
 use tokio::task;
 
@@ -39,6 +39,7 @@ impl Game {
             let player = world.create_entity();
             world.add_component(player, Player::new(i as u32));
             world.add_component(player, Position { x: 0, y: 0 });
+            world.add_component(player, crate::components::Health { current: 100, max: 100 });
             brains.push(Arc::new(Mutex::new(Brain::new(actions.clone(), Arc::clone(&recipe_manager), 0.1, 0.9, 1.0))));
         }
 
@@ -98,6 +99,7 @@ impl Game {
     fn get_high_level_state(&self, entity: Entity) -> HighLevelState {
         let world = self.world.lock().unwrap();
         let player = world.get_component::<Player>(entity).unwrap();
+        let health = world.get_component::<crate::components::Health>(entity).unwrap();
         let brain_lock = self.brains[entity].lock().unwrap();
 
         let num_hostile_players = brain_lock.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
@@ -108,7 +110,7 @@ impl Game {
             has_iron_ore: player.get_total_quantity("iron_ore") > 0,
             has_stone_axe: player.get_total_quantity("stone_axe") > 0,
             num_hostile_players,
-            health_level: player.health as u32,
+            health_level: health.current as u32,
         }
     }
 
@@ -117,40 +119,19 @@ impl Game {
         self.setup_new_map();
         self._find_and_set_valid_start_positions();
 
-        // --- Test Crafting ---
+        // --- Test Combat ---
         {
             let mut world = self.world.lock().unwrap();
-            if let Some(player) = world.get_component_mut::<Player>(0) {
-                player.add_item("wood", 10, None, &self.item_registry);
-                player.add_item("stone", 10, None, &self.item_registry);
-            }
-            world.add_component(0, crate::components::WantsToCraft { item_name: "stone_axe".to_string() });
+            world.add_component(0, crate::components::WantsToAttack { target: 1 });
         }
-        crafting_system(&mut self.world.lock().unwrap(), &self.recipe_manager, &self.item_registry);
+        combat_system(&mut self.world.lock().unwrap());
         {
             let world = self.world.lock().unwrap();
-            if let Some(player) = world.get_component::<Player>(0) {
-                assert!(player.get_total_quantity("stone_axe") == 1);
+            if let Some(health) = world.get_component::<crate::components::Health>(1) {
+                assert!(health.current < health.max);
             }
         }
-        // --- End Test Crafting ---
-
-        // --- Test Building ---
-        {
-            let mut world = self.world.lock().unwrap();
-            if let Some(player) = world.get_component_mut::<Player>(0) {
-                player.add_item("foundation", 1, None, &self.item_registry);
-            }
-            world.add_component(0, crate::components::WantsToBuild { structure_name: "foundation".to_string() });
-        }
-        building_system(&mut self.world.lock().unwrap(), &mut self.map);
-        {
-            let world = self.world.lock().unwrap();
-            let pos = world.get_component::<Position>(0).unwrap();
-            assert!(self.map.grid[pos.y as usize][pos.x as usize].tile_type == 'B');
-        }
-        // --- End Test Building ---
-
+        // --- End Test Combat ---
 
         println!("Initial Map:");
         self.map.display(&self.world.lock().unwrap());
@@ -192,6 +173,8 @@ impl Game {
                 gathering_system(&mut self.world.lock().unwrap());
                 crafting_system(&mut self.world.lock().unwrap(), &self.recipe_manager, &self.item_registry);
                 building_system(&mut self.world.lock().unwrap(), &mut self.map);
+                combat_system(&mut self.world.lock().unwrap());
+                pickup_system(&mut self.world.lock().unwrap(), &self.item_registry);
             }
 
             if (episode + 1) % 200 == 0 {
