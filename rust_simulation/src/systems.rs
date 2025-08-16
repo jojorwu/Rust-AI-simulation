@@ -1,8 +1,9 @@
 use crate::ecs::World;
-use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft};
+use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild};
 use crate::player::Player;
 use crate::recipes::RecipeManager;
 use crate::item::ItemRegistry;
+use crate::map::Map;
 
 pub fn movement_system(world: &mut World) {
     for entity in 0..world.entities.len() {
@@ -90,5 +91,41 @@ pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, item_r
     // Reset wants to craft
     for entity in 0..world.entities.len() {
         world.remove_component::<WantsToCraft>(entity);
+    }
+}
+
+pub fn building_system(world: &mut World, map: &mut Map) {
+    let mut to_build = Vec::new();
+    for entity in 0..world.entities.len() {
+        if let Some(wants_to_build) = world.get_component::<WantsToBuild>(entity) {
+            to_build.push((entity, wants_to_build.clone()));
+        }
+    }
+
+    for (builder, wants_to_build) in to_build {
+        let builder_pos = world.get_component::<Position>(builder).unwrap();
+        let tile = &mut map.grid[builder_pos.y as usize][builder_pos.x as usize];
+
+        if tile.tile_type == '.' {
+            if let Some(player) = world.get_component_mut::<Player>(builder) {
+                if player.get_total_quantity(&wants_to_build.structure_name) > 0 {
+                    let mut recipe = std::collections::HashMap::new();
+                    recipe.insert(wants_to_build.structure_name.clone(), 1);
+                    player.remove_resources(&recipe);
+
+                    tile.tile_type = match wants_to_build.structure_name.as_str() {
+                        "foundation" => 'B',
+                        "wall" => '#',
+                        "doorway" => 'O',
+                        _ => 'X',
+                    };
+                }
+            }
+        }
+    }
+
+    // Reset wants to build
+    for entity in 0..world.entities.len() {
+        world.remove_component::<WantsToBuild>(entity);
     }
 }

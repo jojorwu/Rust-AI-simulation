@@ -7,7 +7,7 @@ use super::actions::{get_all_actions};
 use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
 use super::components::Position;
-use super::systems::{movement_system, gathering_system, crafting_system};
+use super::systems::{movement_system, gathering_system, crafting_system, building_system};
 use std::sync::{Arc, Mutex};
 use tokio::task;
 
@@ -135,6 +135,22 @@ impl Game {
         }
         // --- End Test Crafting ---
 
+        // --- Test Building ---
+        {
+            let mut world = self.world.lock().unwrap();
+            if let Some(player) = world.get_component_mut::<Player>(0) {
+                player.add_item("foundation", 1, None, &self.item_registry);
+            }
+            world.add_component(0, crate::components::WantsToBuild { structure_name: "foundation".to_string() });
+        }
+        building_system(&mut self.world.lock().unwrap(), &mut self.map);
+        {
+            let world = self.world.lock().unwrap();
+            let pos = world.get_component::<Position>(0).unwrap();
+            assert!(self.map.grid[pos.y as usize][pos.x as usize].tile_type == 'B');
+        }
+        // --- End Test Building ---
+
 
         println!("Initial Map:");
         self.map.display(&self.world.lock().unwrap());
@@ -175,6 +191,7 @@ impl Game {
                 movement_system(&mut self.world.lock().unwrap());
                 gathering_system(&mut self.world.lock().unwrap());
                 crafting_system(&mut self.world.lock().unwrap(), &self.recipe_manager, &self.item_registry);
+                building_system(&mut self.world.lock().unwrap(), &mut self.map);
             }
 
             if (episode + 1) % 200 == 0 {

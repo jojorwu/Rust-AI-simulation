@@ -30,6 +30,13 @@ pub struct WantsToCraft {
 
 impl Component for WantsToCraft {}
 
+#[derive(Debug, Clone)]
+pub struct WantsToBuild {
+    pub structure_name: String,
+}
+
+impl Component for WantsToBuild {}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Resource {
     pub resource_type: char,

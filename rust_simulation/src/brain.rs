@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 use super::actions::{Action};
 use super::map::Tile;
 use super::pathfinding;
-use crate::components::{WantsToGather, WantsToCraft};
+use crate::components::{WantsToGather, WantsToCraft, WantsToBuild};
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
 use super::components::Position;
@@ -18,6 +18,7 @@ use std::sync::Arc;
 pub enum Goal {
     GatherResource(String),
     CraftItem(String),
+    Build(String),
     AttackPlayer(u32),
     Flee,
 }
@@ -73,6 +74,7 @@ impl Brain {
             Goal::GatherResource("wood".to_string()),
             Goal::GatherResource("stone".to_string()),
             Goal::CraftItem("stone_axe".to_string()),
+            Goal::Build("foundation".to_string()),
         ];
         Brain {
             _actions: actions,
@@ -188,6 +190,7 @@ impl Brain {
             match goal {
                 Goal::GatherResource(resource_name) => self.execute_gather_goal(world, entity, &resource_name, current_episode)?,
                 Goal::CraftItem(item_name) => self.execute_craft_item_goal(world, entity, &item_name, current_episode)?,
+                Goal::Build(structure_name) => self.execute_build_goal(world, entity, &structure_name, current_episode)?,
                 _ => {}
             }
         }
@@ -259,6 +262,11 @@ impl Brain {
             world.add_component(entity, WantsToCraft { item_name: item_name.to_string() });
             Ok(())
         }
+    }
+
+    fn execute_build_goal(&mut self, world: &mut World, entity: Entity, structure_name: &str, _current_episode: u32) -> Result<(), SimulationError> {
+        world.add_component(entity, WantsToBuild { structure_name: structure_name.to_string() });
+        Ok(())
     }
 
     fn resource_name_to_char(&self, resource_name: &str) -> char {
