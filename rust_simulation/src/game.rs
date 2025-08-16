@@ -3,7 +3,7 @@ use super::map::{Map, Tile};
 use super::player::Player;
 use super::brain::Brain;
 use super::state::StateKey;
-use super::recipes;
+use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::actions::{Action, Direction, get_all_actions};
 use super::item::ItemRegistry;
@@ -18,6 +18,7 @@ pub struct Game {
     pub players: Vec<Player>,
     pub brains: Vec<Brain>,
     pub item_registry: ItemRegistry,
+    pub recipe_manager: RecipeManager,
     next_instance_id: u32,
 }
 
@@ -25,6 +26,7 @@ impl Game {
     pub fn new() -> Self {
         let map = Map::new(WIDTH, HEIGHT);
         let item_registry = ItemRegistry::new("items.json");
+        let recipe_manager = RecipeManager::new("recipes.json");
 
         let mut players = Vec::new();
         let mut brains = Vec::new();
@@ -40,6 +42,7 @@ impl Game {
             players,
             brains,
             item_registry,
+            recipe_manager,
             next_instance_id: 0,
         }
     }
@@ -229,11 +232,12 @@ impl Game {
     }
 
     fn _handle_craft_action(&mut self, player_index: usize, item: &str) -> f64 {
-        let recipes = recipes::get_recipes();
-        if let Some(recipe) = recipes.get(item) {
+        let required_resources = self.recipe_manager.get_required_resources(item, 1);
+
+        if !required_resources.is_empty() && required_resources.get(item).is_none() {
             let player = &mut self.players[player_index];
-            if player.has_resources(recipe) {
-                if player.remove_resources(recipe) {
+            if player.has_resources(&required_resources) {
+                if player.remove_resources(&required_resources) {
                     if item == "lock" {
                         let lock_id = self.next_instance_id;
                         self.next_instance_id += 1;
