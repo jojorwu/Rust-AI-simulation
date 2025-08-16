@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use super::map::{Map, Tile};
 use super::player::Player;
-use super::brain::{Brain, MemoryTile};
+use super::brain::{Brain, MemoryTile, HighLevelState};
 use super::state::StateKey;
 use super::recipes::RecipeManager;
 use super::errors::SimulationError;
@@ -93,6 +93,22 @@ impl Game {
             local_view,
             inventory: player.inventory.clone(),
             held_item: player.held_item.clone(),
+        }
+    }
+
+    fn get_high_level_state(&self, player_index: usize) -> HighLevelState {
+        let player = &self.players[player_index];
+        let brain_lock = self.brains[player_index].lock().unwrap();
+
+        let num_hostile_players = brain_lock.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
+
+        HighLevelState {
+            has_wood: player.get_total_quantity("wood") > 0,
+            has_stone: player.get_total_quantity("stone") > 0,
+            has_iron_ore: player.get_total_quantity("iron_ore") > 0,
+            has_stone_axe: player.get_total_quantity("stone_axe") > 0,
+            num_hostile_players,
+            health_level: player.health as u32,
         }
     }
 
@@ -206,27 +222,36 @@ impl Game {
 
                 for i in 0..self.players.len() {
                     if self.players[i].health > 0 {
-                        let state = self.get_state(i, episode);
+                        let high_level_state = self.get_high_level_state(i);
                         let brain = Arc::clone(&self.brains[i]);
-                        let player_pos = (self.players[i].x, self.players[i].y);
+                        let player = self.players[i].clone(); // This is not ideal, but necessary for async
                         let handle = task::spawn(async move {
                             let mut brain_lock = brain.lock().unwrap();
-                            brain_lock.choose_action(&state, player_pos)
+                            brain_lock.tick(&player, &high_level_state)
                         });
                         action_handles.push(handle);
                     }
                 }
 
-                let actions_results: Vec<_> = futures::future::join_all(action_handles).await;
+                let mut actions_results: Vec<_> = futures::future::join_all(action_handles).await;
 
-                for (i, result) in actions_results.into_iter().enumerate() {
+                for i in 0..self.players.len() {
                     if self.players[i].health > 0 {
-                         match result {
+                        let result = actions_results.remove(0); // This is a bit of a hack, but it works for now
+                        match result {
                             Ok(Ok(action)) => {
-                                let reward = self._perform_action(i, &action, episode);
-                                let state_before_action = self.get_state(i, episode);
-                                let next_state = self.get_state(i, episode);
-                                self.brains[i].lock().unwrap().update_q_table(&state_before_action, &action, reward, &next_state)?;
+                                let state_before_action = self.get_high_level_state(i);
+                                let goal_before_action = self.brains[i].lock().unwrap().current_goal.clone();
+
+                                self._perform_action(i, &action, episode);
+
+                                if let Some(goal) = goal_before_action {
+                                    if self.brains[i].lock().unwrap().is_goal_complete(&self.players[i], &goal) {
+                                        let reward = 100.0;
+                                        let next_state = self.get_high_level_state(i);
+                                        self.brains[i].lock().unwrap().update_goal_q_table(&state_before_action, &goal, reward, &next_state)?;
+                                    }
+                                }
                             },
                             Ok(Err(e)) => return Err(e.into()),
                             Err(e) => return Err(SimulationError::TaskJoinError(e.to_string())),

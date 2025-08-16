@@ -10,7 +10,7 @@ pub struct Slot {
     pub instance_id: Option<u32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Player {
     pub id: u32,
     pub x: u32,
