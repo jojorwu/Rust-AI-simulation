@@ -3,9 +3,7 @@ use rand::Rng;
 use serde::{Serialize, Deserialize};
 use std::fs;
 use std::error::Error;
-use super::entity::Entity;
 use super::player::Player;
-use super::animal::Animal;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Tile {
@@ -105,24 +103,24 @@ impl Map {
         }
     }
 
-    pub fn display(&self, entities: &[Box<dyn Entity>]) {
+    pub fn display(&self, world: &super::ecs::World) {
         for y in 0..self.height {
             for x in 0..self.width {
                 let mut entity_on_tile = None;
-                for entity in entities {
-                    let (ex, ey) = entity.get_position();
-                    if ex == x && ey == y {
-                        entity_on_tile = Some(entity.as_ref());
-                        break;
+                for entity in 0..world.entities.len() {
+                    if let Some(pos) = world.get_component::<super::components::Position>(entity) {
+                        if pos.x == x && pos.y == y {
+                            entity_on_tile = Some(entity);
+                            break;
+                        }
                     }
                 }
 
                 if let Some(entity) = entity_on_tile {
-                    let any_entity = entity.as_any();
-                    if let Some(_) = any_entity.downcast_ref::<Player>() {
+                    if world.get_component::<Player>(entity).is_some() {
                         print!("P ");
-                    } else if let Some(_) = any_entity.downcast_ref::<Animal>() {
-                        print!("A ");
+                    } else {
+                        print!("E ");
                     }
                 } else {
                     print!("{} ", self.grid[y as usize][x as usize].tile_type);

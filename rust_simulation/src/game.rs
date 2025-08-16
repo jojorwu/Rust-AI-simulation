@@ -6,12 +6,10 @@ use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::actions::{Action, Direction, get_all_actions};
 use super::item::ItemRegistry;
-use super::ecs::World;
+use super::ecs::{World, Entity};
 use super::components::{Position, Velocity};
 use super::systems::movement_system;
-use std::any::Any;
 use std::sync::{Arc, Mutex};
-use tokio::task;
 
 use rand::Rng;
 
@@ -40,14 +38,6 @@ impl Game {
             world.add_component(player, Player::new(i as u32));
             world.add_component(player, Position { x: 0, y: 0 });
         }
-
-        let animal = world.create_entity();
-        world.add_component(animal, Animal {
-            id: 100,
-            health: 50,
-            species: "deer".to_string(),
-        });
-        world.add_component(animal, Position { x: 5, y: 5 });
 
         Game {
             map,
@@ -135,7 +125,7 @@ impl Game {
         self._find_and_set_valid_start_positions();
 
         println!("Initial Map:");
-        // self.map.display(&self.world); // This needs to be updated
+        self.map.display(&self.world);
 
         for episode in 0..EPISODES {
             self._respawn_resources(episode);
@@ -151,7 +141,18 @@ impl Game {
                     2 => Direction::Left,
                     _ => Direction::Right,
                 };
-                self._perform_action(0, &Action::Move(direction), episode);
+                self.world.add_component(0, Velocity {
+                    dx: match direction {
+                        Direction::Left => -1,
+                        Direction::Right => 1,
+                        _ => 0,
+                    },
+                    dy: match direction {
+                        Direction::Up => -1,
+                        Direction::Down => 1,
+                        _ => 0,
+                    },
+                });
                 movement_system(&mut self.world);
             }
 

@@ -2,7 +2,6 @@ const INVENTORY_SLOTS: usize = 6;
 
 use serde::{Serialize, Deserialize};
 use super::item::ItemRegistry;
-use super::entity::Entity;
 use super::actions::Action;
 use super::game::Game;
 use super::errors::SimulationError;
@@ -160,30 +159,6 @@ impl Player {
 
 }
 
-impl Entity for Player {
-    fn as_any(&mut self) -> &mut dyn Any {
-        self
-    }
+use crate::ecs::Component;
 
-    fn get_id(&self) -> u32 {
-        self.id
-    }
-
-    fn get_position(&self) -> (u32, u32) {
-        // This will be handled by the Position component
-        (0, 0)
-    }
-
-    fn get_health(&self) -> i32 {
-        self.health
-    }
-
-    fn is_alive(&self) -> bool {
-        self.health > 0
-    }
-
-    fn update(&mut self, _game: &Game) -> Result<Option<Action>, SimulationError> {
-        // Player logic is handled in the game loop for now
-        Ok(None)
-    }
-}
+impl Component for Player {}
