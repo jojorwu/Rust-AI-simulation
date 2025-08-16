@@ -18,8 +18,6 @@ pub struct Slot {
 #[derive(Debug, Clone)]
 pub struct Player {
     pub id: u32,
-    pub x: u32,
-    pub y: u32,
     pub health: i32,
     pub held_item: Option<String>,
     pub inventory: Vec<Option<Slot>>,
@@ -29,11 +27,9 @@ use std::collections::HashMap;
 use std::any::Any;
 
 impl Player {
-    pub fn new(id: u32, x: u32, y: u32) -> Self {
+    pub fn new(id: u32) -> Self {
         Player {
             id,
-            x,
-            y,
             health: 100,
             held_item: None,
             inventory: vec![None; INVENTORY_SLOTS],
@@ -162,40 +158,6 @@ impl Player {
         true
     }
 
-    pub fn move_player(&mut self, direction: &str, map: &super::map::Map, entities: &[Box<dyn Entity>]) -> bool {
-        let (mut dx, mut dy) = (0, 0);
-        match direction {
-            "up" => dy = -1,
-            "down" => dy = 1,
-            "left" => dx = -1,
-            "right" => dx = 1,
-            _ => return false,
-        }
-
-        let new_x = (self.x as i32 + dx) as u32;
-        let new_y = (self.y as i32 + dy) as u32;
-
-        if new_x < map.width && new_y < map.height {
-            let target_tile = &map.grid[new_y as usize][new_x as usize];
-            let blocking_tiles = ['W', '#', 'D', 'L'];
-            if !blocking_tiles.contains(&target_tile.tile_type) {
-                // Check for other entities
-                for entity in entities {
-                    if entity.get_id() != self.id {
-                        let (ex, ey) = entity.get_position();
-                        if ex == new_x && ey == new_y {
-                            return false; // Another entity is in the way
-                        }
-                    }
-                }
-
-                self.x = new_x;
-                self.y = new_y;
-                return true;
-            }
-        }
-        false
-    }
 }
 
 impl Entity for Player {
@@ -208,7 +170,8 @@ impl Entity for Player {
     }
 
     fn get_position(&self) -> (u32, u32) {
-        (self.x, self.y)
+        // This will be handled by the Position component
+        (0, 0)
     }
 
     fn get_health(&self) -> i32 {

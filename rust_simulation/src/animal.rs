@@ -7,8 +7,6 @@ use std::any::Any;
 
 pub struct Animal {
     pub id: u32,
-    pub x: u32,
-    pub y: u32,
     pub health: i32,
     pub species: String,
 }
@@ -23,7 +21,8 @@ impl Entity for Animal {
     }
 
     fn get_position(&self) -> (u32, u32) {
-        (self.x, self.y)
+        // This will be handled by the Position component
+        (0, 0)
     }
 
     fn get_health(&self) -> i32 {
