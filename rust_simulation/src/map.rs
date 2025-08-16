@@ -1,19 +1,75 @@
 use noise::{NoiseFn, Fbm, Perlin};
 use rand::Rng;
+use serde::{Serialize, Deserialize};
+use std::fs;
+use std::error::Error;
+use super::player::Player;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Tile {
+    pub tile_type: char,
+    pub biome: String,
+    pub lock_id: Option<u32>,
+    pub remaining_resources: Option<u32>,
+    pub depletion_episode: Option<u32>,
+    pub original_tile_type: char,
+    pub health: Option<f64>,
+}
+
+impl Tile {
+    pub fn new(tile_type: char, biome: String) -> Self {
+        Tile {
+            tile_type,
+            biome,
+            lock_id: None,
+            remaining_resources: None,
+            depletion_episode: None,
+            original_tile_type: tile_type,
+            health: None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Biome {
+    pub name: String,
+    pub tile_type: char,
+    pub height_range: [f64; 2],
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Resource {
+    pub _name: String,
+    pub tile_type: char,
+    pub biomes: Vec<String>,
+    pub density: f64,
+}
 
 pub struct Map {
     pub width: u32,
     pub height: u32,
-    pub grid: Vec<Vec<char>>,
+    pub grid: Vec<Vec<Tile>>,
+    pub biomes: Vec<Biome>,
+    pub resources: Vec<Resource>,
 }
 
 impl Map {
-    pub fn new(width: u32, height: u32) -> Self {
-        Map {
+    pub fn new(width: u32, height: u32) -> Result<Self, Box<dyn Error>> {
+        let biomes_data = fs::read_to_string("biomes.json")?;
+        let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
+
+        let resources_data = fs::read_to_string("resources.json")?;
+        let resources: Vec<Resource> = serde_json::from_str(&resources_data)?;
+
+        let grid = vec![vec![Tile::new(' ', "none".to_string()); width as usize]; height as usize];
+
+        Ok(Map {
             width,
             height,
-            grid: vec![vec![' '; width as usize]; height as usize],
-        }
+            grid,
+            biomes,
+            resources,
+        })
     }
 
     pub fn generate_island_map(&mut self, scale: f64, octaves: i32, persistence: f64, lacunarity: f64) {
@@ -25,65 +81,59 @@ impl Map {
 
         for y in 0..self.height {
             for x in 0..self.width {
-                // Calculate distance from center for radial gradient
                 let nx = 2.0 * x as f64 / self.width as f64 - 1.0;
                 let ny = 2.0 * y as f64 / self.height as f64 - 1.0;
                 let dist = 1.0 - (1.0 - nx.powi(2)) * (1.0 - ny.powi(2));
-
-                // Generate FBM noise value
                 let noise_val = fbm.get([x as f64 / scale, y as f64 / scale]);
-
-                // Combine noise with radial gradient to form an island
-                let island_val = (noise_val + 1.0) / 2.0; // Normalize to 0-1
+                let island_val = (noise_val + 1.0) / 2.0;
                 let height = island_val * (1.0 - dist);
 
-                // Assign tile based on height
-                let tile = if height < 0.1 {
-                    'W' // Water
-                } else if height < 0.15 {
-                    'S' // Sand
-                } else if height < 0.5 {
-                    '.' // Plains
-                } else {
-                    'M' // Mountain
-                };
-                self.grid[y as usize][x as usize] = tile;
+                let mut tile_char = ' ';
+                let mut biome_name = "none".to_string();
+
+                for biome in &self.biomes {
+                    if height >= biome.height_range[0] && height < biome.height_range[1] {
+                        tile_char = biome.tile_type;
+                        biome_name = biome.name.clone();
+                        break;
+                    }
+                }
+                self.grid[y as usize][x as usize] = Tile::new(tile_char, biome_name);
             }
         }
     }
 
-    pub fn display(&self, players: &[super::player::Player]) {
+    pub fn display(&self, world: &super::ecs::World) {
         for y in 0..self.height {
             for x in 0..self.width {
-                let mut is_player_on_tile = false;
-                for p in players {
-                    if p.x == x && p.y == y {
-                        print!("P ");
-                        is_player_on_tile = true;
-                        break;
+                let mut entity_on_tile = None;
+                for entity in 0..world.entities.len() {
+                    if let Some(pos) = world.get_component::<super::components::Position>(entity) {
+                        if pos.x == x && pos.y == y {
+                            entity_on_tile = Some(entity);
+                            break;
+                        }
                     }
                 }
-                if !is_player_on_tile {
-                    print!("{} ", self.grid[y as usize][x as usize]);
+
+                if let Some(entity) = entity_on_tile {
+                    if world.get_component::<Player>(entity).is_some() {
+                        print!("P ");
+                    } else {
+                        print!("E ");
+                    }
+                } else {
+                    print!("{} ", self.grid[y as usize][x as usize].tile_type);
                 }
             }
             println!();
         }
     }
 
-    pub fn add_tree(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'T';
-    }
-
-    pub fn add_rock(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'R';
-    }
-
-    pub fn add_sulfur(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'U';
-    }
-
-    pub fn add_iron_ore_node(&mut self, x: u32, y: u32) {
-        self.grid[y as usize][x as usize] = 'I';
+    pub fn add_resource(&mut self, x: u32, y: u32, resource_type: char) {
+        let tile = &mut self.grid[y as usize][x as usize];
+        tile.tile_type = resource_type;
+        tile.original_tile_type = resource_type;
+        tile.remaining_resources = Some(5);
     }
 }

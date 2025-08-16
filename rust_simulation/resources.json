@@ -1,0 +1,26 @@
+[
+  {
+    "name": "tree",
+    "tile_type": "T",
+    "biomes": ["plains"],
+    "density": 0.1
+  },
+  {
+    "name": "rock",
+    "tile_type": "R",
+    "biomes": ["plains", "mountain"],
+    "density": 0.05
+  },
+  {
+    "name": "sulfur",
+    "tile_type": "U",
+    "biomes": ["plains", "mountain"],
+    "density": 0.05
+  },
+  {
+    "name": "iron_ore",
+    "tile_type": "I",
+    "biomes": ["mountain"],
+    "density": 0.1
+  }
+]

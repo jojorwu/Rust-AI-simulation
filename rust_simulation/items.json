@@ -1,0 +1,74 @@
+[
+  { "name": "wood", "stackable": true, "tool": false },
+  { "name": "stone", "stackable": true, "tool": false },
+  { "name": "sulfur", "stackable": true, "tool": false },
+  { "name": "iron_ore", "stackable": true, "tool": false },
+  { "name": "iron_bars", "stackable": true, "tool": false },
+  {
+    "name": "stone_axe",
+    "stackable": false,
+    "tool": true,
+    "properties": {
+      "damage": 5.0,
+      "efficiency": 3.0,
+      "max_durability": 100.0
+    }
+  },
+  {
+    "name": "stone_pickaxe",
+    "stackable": false,
+    "tool": true,
+    "properties": {
+      "damage": 3.0,
+      "efficiency": 4.0,
+      "max_durability": 120.0
+    }
+  },
+  {
+    "name": "metal_pickaxe",
+    "stackable": false,
+    "tool": true,
+    "properties": {
+      "damage": 5.0,
+      "efficiency": 6.0,
+      "max_durability": 200.0
+    }
+  },
+  {
+    "name": "iron_axe",
+    "stackable": false,
+    "tool": true,
+    "properties": {
+      "damage": 8.0,
+      "efficiency": 5.0,
+      "max_durability": 150.0
+    }
+  },
+  { "name": "furnace", "stackable": false, "tool": false },
+  {
+    "name": "door",
+    "stackable": false,
+    "tool": false,
+    "properties": {
+      "health": 100.0
+    }
+  },
+  { "name": "lock", "stackable": false, "tool": false },
+  { "name": "key", "stackable": false, "tool": false },
+  {
+    "name": "foundation",
+    "stackable": true,
+    "tool": false,
+    "properties": {
+      "health": 200.0
+    }
+  },
+  {
+    "name": "wall",
+    "stackable": true,
+    "tool": false,
+    "properties": {
+      "health": 150.0
+    }
+  }
+]

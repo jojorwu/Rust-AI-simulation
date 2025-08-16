@@ -1,0 +1,33 @@
+{
+  "stone_axe": {
+    "wood": 2,
+    "stone": 3
+  },
+  "stone_pickaxe": {
+    "wood": 2,
+    "stone": 3
+  },
+  "furnace": {
+    "stone": 50
+  },
+  "metal_pickaxe": {
+    "wood": 2,
+    "iron_bars": 10
+  },
+  "iron_axe": {
+    "wood": 2,
+    "iron_bars": 5
+  },
+  "door": {
+    "wood": 10
+  },
+  "lock": {
+    "iron_bars": 10
+  },
+  "foundation": {
+    "stone": 20
+  },
+  "wall": {
+    "stone": 10
+  }
+}

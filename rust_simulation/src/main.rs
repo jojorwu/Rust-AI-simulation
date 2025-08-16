@@ -1,8 +1,14 @@
+mod actions;
 mod map;
+mod pathfinding;
 mod player;
+mod ecs;
+mod components;
+mod systems;
 mod state;
 mod brain;
 mod game;
+mod item;
 mod config;
 mod recipes;
 mod errors;
@@ -10,9 +16,10 @@ mod errors;
 use game::Game;
 use std::error::Error;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let mut game = Game::new();
-    game.run()?;
+    game.run().await?;
 
     Ok(())
 }

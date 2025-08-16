@@ -1,39 +1,33 @@
 const INVENTORY_SLOTS: usize = 6;
 
 use serde::{Serialize, Deserialize};
+use super::item::ItemRegistry;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Slot {
     pub item: String,
     pub quantity: u32,
+    pub instance_id: Option<u32>,
+    pub durability: Option<f64>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Player {
-    pub x: u32,
-    pub y: u32,
-    pub held_item: Option<String>,
+    pub id: u32,
+    pub _held_item: Option<String>,
     pub inventory: Vec<Option<Slot>>,
 }
 
 use std::collections::HashMap;
 
 impl Player {
-    pub fn new(x: u32, y: u32) -> Self {
+    pub fn new(id: u32) -> Self {
         Player {
-            x,
-            y,
-            held_item: None,
+            id,
+            _held_item: None,
             inventory: vec![None; INVENTORY_SLOTS],
         }
     }
-
-    pub fn reset(&mut self) {
-        self.inventory = vec![None; INVENTORY_SLOTS];
-        self.held_item = None;
-    }
-
-    // --- Inventory Helper Methods ---
 
     fn find_item_slot(&self, item_name: &str) -> Option<usize> {
         self.inventory.iter().position(|slot| {
@@ -66,22 +60,34 @@ impl Player {
         true
     }
 
-    pub fn add_item(&mut self, item_name: &str, quantity: u32) -> bool {
-        let stackable_items = ["wood", "stone", "sulfur", "iron_ore", "iron_bars"];
+    pub fn add_item(&mut self, item_name: &str, quantity: u32, instance_id: Option<u32>, item_registry: &ItemRegistry) -> bool {
+        let item = item_registry.get_item(item_name);
 
-        if stackable_items.contains(&item_name) {
-            if let Some(slot_index) = self.find_item_slot(item_name) {
-                if let Some(slot) = &mut self.inventory[slot_index] {
-                    slot.quantity += quantity;
-                    return true;
+        if let Some(item_def) = item {
+            // Stack only if the item is stackable AND we are not adding a unique instance
+            if item_def.stackable && instance_id.is_none() {
+                if let Some(slot_index) = self.find_item_slot(item_name) {
+                    if let Some(slot) = &mut self.inventory[slot_index] {
+                        slot.quantity += quantity;
+                        return true;
+                    }
                 }
             }
         }
 
+        // If not stackable, or a unique instance, or no existing stack, find an empty slot
         if let Some(empty_slot_index) = self.find_empty_slot() {
+            let initial_durability = if let Some(item_def) = item {
+                if item_def.tool {
+                    item_def.properties.as_ref().and_then(|p| p.get("max_durability").cloned())
+                } else { None }
+            } else { None };
+
             self.inventory[empty_slot_index] = Some(Slot {
                 item: item_name.to_string(),
                 quantity,
+                instance_id,
+                durability: initial_durability,
             });
             true
         } else {
@@ -119,25 +125,8 @@ impl Player {
         true
     }
 
-    pub fn move_player(&mut self, direction: &str, map: &super::map::Map) -> bool {
-        let (mut dx, mut dy) = (0, 0);
-        match direction {
-            "up" => dy = -1,
-            "down" => dy = 1,
-            "left" => dx = -1,
-            "right" => dx = 1,
-            _ => return false,
-        }
-
-        let new_x = (self.x as i32 + dx) as u32;
-        let new_y = (self.y as i32 + dy) as u32;
-
-        if new_x < map.width && new_y < map.height && map.grid[new_y as usize][new_x as usize] != 'W' {
-            self.x = new_x;
-            self.y = new_y;
-            true
-        } else {
-            false
-        }
-    }
 }
+
+use crate::ecs::Component;
+
+impl Component for Player {}

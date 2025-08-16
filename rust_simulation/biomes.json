@@ -1,0 +1,22 @@
+[
+  {
+    "name": "water",
+    "tile_type": "W",
+    "height_range": [0.0, 0.1]
+  },
+  {
+    "name": "sand",
+    "tile_type": "S",
+    "height_range": [0.1, 0.15]
+  },
+  {
+    "name": "plains",
+    "tile_type": ".",
+    "height_range": [0.15, 0.5]
+  },
+  {
+    "name": "mountain",
+    "tile_type": "M",
+    "height_range": [0.5, 1.0]
+  }
+]

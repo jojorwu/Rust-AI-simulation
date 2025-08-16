@@ -1,30 +1,36 @@
 use std::collections::HashMap;
+use std::fs;
 
-pub fn get_recipes() -> HashMap<String, HashMap<String, u32>> {
-    let mut recipes: HashMap<String, HashMap<String, u32>> = HashMap::new();
+pub struct RecipeManager {
+    pub recipes: HashMap<String, HashMap<String, u32>>,
+}
 
-    // Stone Axe
-    let mut r = HashMap::new();
-    r.insert("wood".to_string(), 2);
-    r.insert("stone".to_string(), 3);
-    recipes.insert("stone_axe".to_string(), r);
+impl RecipeManager {
+    pub fn new(filepath: &str) -> Self {
+        let file_content = fs::read_to_string(filepath)
+            .expect(&format!("Unable to read recipes file at {}", filepath));
+        let recipes: HashMap<String, HashMap<String, u32>> = serde_json::from_str(&file_content)
+            .expect("Unable to parse recipes.json");
 
-    // Stone Pickaxe
-    let mut r = HashMap::new();
-    r.insert("wood".to_string(), 2);
-    r.insert("stone".to_string(), 3);
-    recipes.insert("stone_pickaxe".to_string(), r);
+        RecipeManager { recipes }
+    }
 
-    // Furnace
-    let mut r = HashMap::new();
-    r.insert("stone".to_string(), 50);
-    recipes.insert("furnace".to_string(), r);
+    pub fn get_required_resources(&self, item: &str, quantity: u32) -> HashMap<String, u32> {
+        let mut required_resources = HashMap::new();
 
-    // Metal Pickaxe
-    let mut r = HashMap::new();
-    r.insert("iron_bars".to_string(), 10);
-    r.insert("wood".to_string(), 2);
-    recipes.insert("metal_pickaxe".to_string(), r);
+        if let Some(recipe) = self.recipes.get(item) {
+            for _ in 0..quantity {
+                for (ingredient, &ing_quantity) in recipe {
+                    let sub_resources = self.get_required_resources(ingredient, ing_quantity);
+                    for (sub_resource, sub_quantity) in sub_resources {
+                        *required_resources.entry(sub_resource).or_insert(0) += sub_quantity;
+                    }
+                }
+            }
+        } else {
+            required_resources.insert(item.to_string(), quantity);
+        }
 
-    recipes
+        required_resources
+    }
 }
