@@ -7,7 +7,7 @@ use super::actions::{get_all_actions};
 use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
 use super::components::Position;
-use super::systems::{movement_system, gathering_system};
+use super::systems::{movement_system, gathering_system, crafting_system};
 use std::sync::{Arc, Mutex};
 use tokio::task;
 
@@ -22,7 +22,7 @@ pub struct Game {
     pub brains: Vec<Arc<Mutex<Brain>>>,
     pub item_registry: ItemRegistry,
     pub recipe_manager: Arc<RecipeManager>,
-    next_instance_id: u32,
+    _next_instance_id: u32,
 }
 
 impl Game {
@@ -48,7 +48,7 @@ impl Game {
             brains,
             item_registry,
             recipe_manager,
-            next_instance_id: 0,
+            _next_instance_id: 0,
         }
     }
 
@@ -117,6 +117,25 @@ impl Game {
         self.setup_new_map();
         self._find_and_set_valid_start_positions();
 
+        // --- Test Crafting ---
+        {
+            let mut world = self.world.lock().unwrap();
+            if let Some(player) = world.get_component_mut::<Player>(0) {
+                player.add_item("wood", 10, None, &self.item_registry);
+                player.add_item("stone", 10, None, &self.item_registry);
+            }
+            world.add_component(0, crate::components::WantsToCraft { item_name: "stone_axe".to_string() });
+        }
+        crafting_system(&mut self.world.lock().unwrap(), &self.recipe_manager, &self.item_registry);
+        {
+            let world = self.world.lock().unwrap();
+            if let Some(player) = world.get_component::<Player>(0) {
+                assert!(player.get_total_quantity("stone_axe") == 1);
+            }
+        }
+        // --- End Test Crafting ---
+
+
         println!("Initial Map:");
         self.map.display(&self.world.lock().unwrap());
 
@@ -155,6 +174,7 @@ impl Game {
 
                 movement_system(&mut self.world.lock().unwrap());
                 gathering_system(&mut self.world.lock().unwrap());
+                crafting_system(&mut self.world.lock().unwrap(), &self.recipe_manager, &self.item_registry);
             }
 
             if (episode + 1) % 200 == 0 {

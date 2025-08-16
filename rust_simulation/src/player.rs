@@ -15,7 +15,7 @@ pub struct Slot {
 pub struct Player {
     pub id: u32,
     pub health: i32,
-    pub held_item: Option<String>,
+    pub _held_item: Option<String>,
     pub inventory: Vec<Option<Slot>>,
 }
 
@@ -26,7 +26,7 @@ impl Player {
         Player {
             id,
             health: 100,
-            held_item: None,
+            _held_item: None,
             inventory: vec![None; INVENTORY_SLOTS],
         }
     }

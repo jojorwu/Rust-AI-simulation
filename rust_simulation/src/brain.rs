@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 use super::actions::{Action};
 use super::map::Tile;
 use super::pathfinding;
-use crate::components::WantsToGather;
+use crate::components::{WantsToGather, WantsToCraft};
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
 use super::components::Position;
@@ -35,28 +35,28 @@ pub struct HighLevelState {
 #[derive(Debug, Clone)]
 pub struct MemoryTile {
     pub tile: Tile,
-    pub last_seen_episode: u32,
-    pub resource_richness: f32,
+    pub _last_seen_episode: u32,
+    pub _resource_richness: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelationshipStatus {
-    Neutral,
+    _Neutral,
     Hostile,
 }
 
 #[derive(Debug, Clone)]
 pub struct PlayerMemory {
-    pub last_seen_location: Option<(u32, u32)>,
+    pub _last_seen_location: Option<(u32, u32)>,
     pub relationship: RelationshipStatus,
 }
 
 pub struct Brain {
-    pub actions: Vec<Action>,
+    pub _actions: Vec<Action>,
     pub goals: Vec<Goal>,
     pub recipe_manager: Arc<RecipeManager>,
-    pub learning_rate: f64,
-    pub discount_factor: f64,
+    pub _learning_rate: f64,
+    pub _discount_factor: f64,
     pub epsilon: f64,
     pub goal_q_table: HashMap<String, HashMap<Goal, f64>>,
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
@@ -68,18 +68,18 @@ pub struct Brain {
 }
 
 impl Brain {
-    pub fn new(actions: Vec<Action>, recipe_manager: Arc<RecipeManager>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
+    pub fn new(actions: Vec<Action>, recipe_manager: Arc<RecipeManager>, _learning_rate: f64, _discount_factor: f64, epsilon: f64) -> Self {
         let goals = vec![
             Goal::GatherResource("wood".to_string()),
             Goal::GatherResource("stone".to_string()),
             Goal::CraftItem("stone_axe".to_string()),
         ];
         Brain {
-            actions,
+            _actions: actions,
             goals,
             recipe_manager,
-            learning_rate,
-            discount_factor,
+            _learning_rate,
+            _discount_factor,
             epsilon,
             goal_q_table: HashMap::new(),
             mental_map: vec![vec![None; WIDTH as usize]; HEIGHT as usize],
@@ -116,15 +116,6 @@ impl Brain {
         }
     }
 
-    pub fn update_goal_q_table(&mut self, state: &HighLevelState, goal: &Goal, reward: f64, next_state: &HighLevelState) -> Result<(), SimulationError> {
-        let state_key_str = serde_json::to_string(state)?;
-        let next_state_key_str = serde_json::to_string(next_state)?;
-        let old_value = self.goal_q_table.get(&state_key_str).and_then(|goals| goals.get(goal)).cloned().unwrap_or(0.0);
-        let next_max = self.goal_q_table.get(&next_state_key_str).map_or(0.0, |goals| goals.values().cloned().fold(f64::NEG_INFINITY, f64::max));
-        let new_value = old_value + self.learning_rate * (reward + self.discount_factor * next_max - old_value);
-        self.goal_q_table.entry(state_key_str).or_insert_with(HashMap::new).insert(goal.clone(), new_value);
-        Ok(())
-    }
 
     pub fn is_goal_complete(&self, world: &World, entity: Entity, goal: &Goal) -> bool {
         let player = world.get_component::<Player>(entity).unwrap();
@@ -146,9 +137,9 @@ impl Brain {
     }
 
     pub fn tick(&mut self, world: &mut World, entity: Entity, high_level_state: &HighLevelState, current_episode: u32) -> Result<(), SimulationError> {
-        if let Some(_action) = self.handle_threats(world, entity) {
-            // return Ok(action);
-        }
+        // if let Some(_action) = self.handle_threats(world, entity) {
+        //     // return Ok(action);
+        // }
 
         if self.goal_commitment_ticks > 0 {
             self.goal_commitment_ticks -= 1;
@@ -180,9 +171,6 @@ impl Brain {
         }
     }
 
-    fn handle_threats(&mut self, _world: &World, _entity: Entity) -> Option<Action> {
-        None
-    }
 
     fn choose_action_for_goal(&mut self, world: &mut World, entity: Entity, current_episode: u32) -> Result<(), SimulationError> {
         if let Some(path) = &mut self.current_path {
@@ -268,7 +256,7 @@ impl Brain {
         } else {
             // We have all the resources, so we can craft the item.
             self.current_goal = self.goal_stack.pop(); // Go back to the parent goal
-            // return Ok(Action::Craft(item_name.to_string()));
+            world.add_component(entity, WantsToCraft { item_name: item_name.to_string() });
             Ok(())
         }
     }
@@ -281,35 +269,6 @@ impl Brain {
         }
     }
 
-    fn find_best_resource_spot(&self, player_pos: (u32, u32), resource_char: char, current_episode: u32) -> Option<(u32, u32)> {
-        let mut best_score = f64::MIN;
-        let mut best_pos = None;
 
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                if let Some(memory_tile) = &self.mental_map[y as usize][x as usize] {
-                    if memory_tile.tile.tile_type == resource_char {
-                        let dist = ((player_pos.0 as f64 - x as f64).powi(2) + (player_pos.1 as f64 - y as f64).powi(2)).sqrt();
-                        let time_since_seen = (current_episode - memory_tile.last_seen_episode) as f64;
-                        // Score now also considers how recently the resource was seen.
-                        let score = memory_tile.resource_richness as f64 / ((dist + 1.0) * (time_since_seen + 1.0));
-                        if score > best_score {
-                            best_score = score;
-                            best_pos = Some((x, y));
-                        }
-                    }
-                }
-            }
-        }
-        best_pos
-    }
-
-    pub fn record_attack_from(&mut self, attacker_id: u32) {
-        let memory = self.player_memories.entry(attacker_id).or_insert(PlayerMemory {
-            last_seen_location: None,
-            relationship: RelationshipStatus::Neutral,
-        });
-        memory.relationship = RelationshipStatus::Hostile;
-    }
 
 }

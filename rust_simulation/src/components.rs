@@ -23,6 +23,13 @@ pub struct WantsToGather {
 
 impl Component for WantsToGather {}
 
+#[derive(Debug, Clone)]
+pub struct WantsToCraft {
+    pub item_name: String,
+}
+
+impl Component for WantsToCraft {}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Resource {
     pub resource_type: char,

@@ -1,6 +1,8 @@
 use crate::ecs::World;
-use crate::components::{Position, Velocity, WantsToGather, Resource};
+use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft};
 use crate::player::Player;
+use crate::recipes::RecipeManager;
+use crate::item::ItemRegistry;
 
 pub fn movement_system(world: &mut World) {
     for entity in 0..world.entities.len() {
@@ -63,5 +65,30 @@ pub fn gathering_system(world: &mut World) {
     // Reset wants to gather
     for entity in 0..world.entities.len() {
         world.remove_component::<WantsToGather>(entity);
+    }
+}
+
+pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, item_registry: &ItemRegistry) {
+    let mut to_craft = Vec::new();
+    for entity in 0..world.entities.len() {
+        if let Some(wants_to_craft) = world.get_component::<WantsToCraft>(entity) {
+            to_craft.push((entity, wants_to_craft.clone()));
+        }
+    }
+
+    for (crafter, wants_to_craft) in to_craft {
+        let required_resources = recipe_manager.get_required_resources(&wants_to_craft.item_name, 1);
+        if let Some(player) = world.get_component_mut::<Player>(crafter) {
+            if player.has_resources(&required_resources) {
+                if player.remove_resources(&required_resources) {
+                    player.add_item(&wants_to_craft.item_name, 1, None, item_registry);
+                }
+            }
+        }
+    }
+
+    // Reset wants to craft
+    for entity in 0..world.entities.len() {
+        world.remove_component::<WantsToCraft>(entity);
     }
 }
