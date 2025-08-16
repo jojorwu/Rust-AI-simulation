@@ -1,7 +1,11 @@
 const INVENTORY_SLOTS: usize = 6;
 
 use serde::{Serialize, Deserialize};
-use super::item::ItemRegistry; // Import ItemRegistry
+use super::item::ItemRegistry;
+use super::entity::Entity;
+use super::actions::Action;
+use super::game::Game;
+use super::errors::SimulationError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Slot {
@@ -22,6 +26,7 @@ pub struct Player {
 }
 
 use std::collections::HashMap;
+use std::any::Any;
 
 impl Player {
     pub fn new(id: u32, x: u32, y: u32) -> Self {
@@ -157,7 +162,7 @@ impl Player {
         true
     }
 
-    pub fn move_player(&mut self, direction: &str, map: &super::map::Map) -> bool {
+    pub fn move_player(&mut self, direction: &str, map: &super::map::Map, entities: &[Box<dyn Entity>]) -> bool {
         let (mut dx, mut dy) = (0, 0);
         match direction {
             "up" => dy = -1,
@@ -174,11 +179,48 @@ impl Player {
             let target_tile = &map.grid[new_y as usize][new_x as usize];
             let blocking_tiles = ['W', '#', 'D', 'L'];
             if !blocking_tiles.contains(&target_tile.tile_type) {
+                // Check for other entities
+                for entity in entities {
+                    if entity.get_id() != self.id {
+                        let (ex, ey) = entity.get_position();
+                        if ex == new_x && ey == new_y {
+                            return false; // Another entity is in the way
+                        }
+                    }
+                }
+
                 self.x = new_x;
                 self.y = new_y;
                 return true;
             }
         }
         false
+    }
+}
+
+impl Entity for Player {
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    fn get_position(&self) -> (u32, u32) {
+        (self.x, self.y)
+    }
+
+    fn get_health(&self) -> i32 {
+        self.health
+    }
+
+    fn is_alive(&self) -> bool {
+        self.health > 0
+    }
+
+    fn update(&mut self, _game: &Game) -> Result<Option<Action>, SimulationError> {
+        // Player logic is handled in the game loop for now
+        Ok(None)
     }
 }

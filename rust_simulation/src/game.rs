@@ -1,11 +1,15 @@
 use std::collections::HashMap;
-use super::map::{Map, Tile};
+use super::map::Map;
 use super::player::Player;
 use super::brain::{Brain, HighLevelState};
 use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::actions::{Action, Direction, get_all_actions};
 use super::item::ItemRegistry;
+use super::entity::Entity;
+use super::animal::Animal;
+use super::dropped_item::DroppedItem;
+use std::any::Any;
 use std::sync::{Arc, Mutex};
 use tokio::task;
 
@@ -16,8 +20,7 @@ use super::config::*;
 
 pub struct Game {
     pub map: Map,
-    pub players: Vec<Player>,
-    pub brains: Vec<Arc<Mutex<Brain>>>,
+    pub entities: Vec<Box<dyn Entity>>,
     pub item_registry: ItemRegistry,
     pub recipe_manager: Arc<RecipeManager>,
     next_instance_id: u32,
@@ -25,42 +28,31 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Self {
-        let map = Map::new(WIDTH, HEIGHT);
+        let map = Map::new(WIDTH, HEIGHT).expect("Failed to create map");
         let item_registry = ItemRegistry::new("items.json");
         let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
 
-        let mut players = Vec::new();
-        let mut brains = Vec::new();
+        let mut entities: Vec<Box<dyn Entity>> = Vec::new();
         let actions = get_all_actions();
 
         for i in 0..NUM_PLAYERS {
-            players.push(Player::new(i as u32, 0, 0));
-            brains.push(Arc::new(Mutex::new(Brain::new(actions.clone(), Arc::clone(&recipe_manager), LEARNING_RATE, DISCOUNT_FACTOR, INITIAL_EPSILON))));
+            entities.push(Box::new(Player::new(i as u32, 0, 0)));
         }
+
+        entities.push(Box::new(Animal {
+            id: 100,
+            x: 5,
+            y: 5,
+            health: 50,
+            species: "deer".to_string(),
+        }));
 
         Game {
             map,
-            players,
-            brains,
+            entities,
             item_registry,
             recipe_manager,
             next_instance_id: 0,
-        }
-    }
-
-    fn get_high_level_state(&self, player_index: usize) -> HighLevelState {
-        let player = &self.players[player_index];
-        let brain_lock = self.brains[player_index].lock().unwrap();
-
-        let num_hostile_players = brain_lock.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
-
-        HighLevelState {
-            has_wood: player.get_total_quantity("wood") > 0,
-            has_stone: player.get_total_quantity("stone") > 0,
-            has_iron_ore: player.get_total_quantity("iron_ore") > 0,
-            has_stone_axe: player.get_total_quantity("stone_axe") > 0,
-            num_hostile_players,
-            health_level: player.health as u32,
         }
     }
 
@@ -91,13 +83,14 @@ impl Game {
     }
 
     fn _find_adjacent_player(&self, player_index: usize) -> Option<usize> {
-        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
-        for i in 0..self.players.len() {
+        let (px, py) = self.entities[player_index].get_position();
+        for i in 0..self.entities.len() {
             if i != player_index {
-                let other_player = &self.players[i];
-                if (other_player.x == px && (other_player.y == py + 1 || other_player.y == py.wrapping_sub(1))) ||
-                   (other_player.y == py && (other_player.x == px + 1 || other_player.x == px.wrapping_sub(1))) {
-                    if other_player.health > 0 {
+                let other_player = &self.entities[i];
+                let (other_px, other_py) = other_player.get_position();
+                if (other_px == px && (other_py == py + 1 || other_py == py.wrapping_sub(1))) ||
+                   (other_py == py && (other_px == px + 1 || other_px == px.wrapping_sub(1))) {
+                    if other_player.is_alive() {
                         return Some(i);
                     }
                 }
@@ -110,13 +103,24 @@ impl Game {
         let mut rng = rand::thread_rng();
         let mut occupied_positions = std::collections::HashSet::new();
 
-        for player in &mut self.players {
+        let plains_biome = self.map.biomes.iter().find(|b| b.name == "plains");
+        let plains_tile_type = plains_biome.map_or('.', |b| b.tile_type);
+
+        for entity in &mut self.entities {
             loop {
                 let x = rng.gen_range(0..self.map.width);
                 let y = rng.gen_range(0..self.map.height);
-                if self.map.grid[y as usize][x as usize].tile_type == '.' && !occupied_positions.contains(&(x, y)) {
-                    player.x = x;
-                    player.y = y;
+                if self.map.grid[y as usize][x as usize].tile_type == plains_tile_type && !occupied_positions.contains(&(x, y)) {
+                    // This is a bit of a hack, but we need to set the position of the entity.
+                    // We can't do this through the Entity trait, so we need to downcast.
+                    let any_entity = entity.as_any();
+                    if let Some(player) = any_entity.downcast_mut::<Player>() {
+                        player.x = x;
+                        player.y = y;
+                    } else if let Some(animal) = any_entity.downcast_mut::<Animal>() {
+                        animal.x = x;
+                        animal.y = y;
+                    }
                     occupied_positions.insert((x, y));
                     break;
                 }
@@ -126,32 +130,21 @@ impl Game {
 
     fn setup_new_map(&mut self) {
         self.map.generate_island_map(25.0, 5, 0.5, 2.0);
+        let mut rng = rand::thread_rng();
 
-        let mut plains_tiles = Vec::new();
-        let mut mountain_tiles = Vec::new();
         for y in 0..self.map.height {
             for x in 0..self.map.width {
-                match self.map.grid[y as usize][x as usize].tile_type {
-                    '.' => plains_tiles.push((x, y)),
-                    'M' => mountain_tiles.push((x, y)),
-                    _ => (),
+                let tile = &self.map.grid[y as usize][x as usize];
+                for resource in &self.map.resources {
+                    if resource.biomes.contains(&tile.biome) {
+                        if rng.r#gen::<f64>() < resource.density {
+                            self.map.add_resource(x, y, resource.tile_type);
+                            break;
+                        }
+                    }
                 }
             }
         }
-
-        let mut rng = rand::thread_rng();
-        let tree_locations = get_random_samples(&plains_tiles, NUM_TREES as usize, &mut rng);
-        for (x, y) in tree_locations { self.map.add_tree(x, y); }
-
-        let rock_candidates = [&plains_tiles[..], &mountain_tiles[..]].concat();
-        let rock_locations = get_random_samples(&rock_candidates, NUM_STONE as usize, &mut rng);
-        for (x, y) in rock_locations { self.map.add_rock(x, y); }
-
-        let sulfur_locations = get_random_samples(&rock_candidates, NUM_SULFUR as usize, &mut rng);
-        for (x, y) in sulfur_locations { self.map.add_sulfur(x, y); }
-
-        let iron_locations = get_random_samples(&mountain_tiles, NUM_IRON_ORE as usize, &mut rng);
-        for (x, y) in iron_locations { self.map.add_iron_ore_node(x, y); }
     }
 
     pub async fn run(&mut self) -> Result<(), SimulationError> {
@@ -160,69 +153,36 @@ impl Game {
         self._find_and_set_valid_start_positions();
 
         println!("Initial Map:");
-        self.map.display(&self.players);
+        self.map.display(&self.entities);
 
         for episode in 0..EPISODES {
             self._respawn_resources(episode);
-            for player in &mut self.players {
-                player.reset();
+            for entity in &mut self.entities {
+                let any_entity = entity.as_any();
+                if let Some(player) = any_entity.downcast_mut::<Player>() {
+                    player.reset();
+                }
             }
             self._find_and_set_valid_start_positions();
 
             for _step in 0..MAX_STEPS_PER_EPISODE {
-                let mut action_handles = Vec::new();
-
-                for i in 0..self.players.len() {
-                    if self.players[i].health > 0 {
-                        let high_level_state = self.get_high_level_state(i);
-                        let brain = Arc::clone(&self.brains[i]);
-                        let player = self.players[i].clone();
-                        let handle = task::spawn(async move {
-                            let mut brain_lock = brain.lock().unwrap();
-                            brain_lock.tick(&player, &high_level_state, episode)
-                        });
-                        action_handles.push(handle);
+                let mut actions = Vec::new();
+                for i in 0..self.entities.len() {
+                    if self.entities[i].is_alive() {
+                        let action = self.entities[i].update(self)?;
+                        actions.push((i, action));
                     }
                 }
 
-                let actions_results: Vec<_> = futures::future::join_all(action_handles).await;
-
-                for (i, result) in actions_results.into_iter().enumerate() {
-                    if self.players[i].health > 0 {
-                        match result {
-                            Ok(Ok(action)) => {
-                                let state_before_action = self.get_high_level_state(i);
-                                let goal_before_action = self.brains[i].lock().unwrap().current_goal.clone();
-
-                                self._perform_action(i, &action, episode);
-
-                                if let Some(goal) = goal_before_action {
-                                    if self.brains[i].lock().unwrap().is_goal_complete(&self.players[i], &goal) {
-                                        let reward = match goal {
-                                            super::brain::Goal::GatherResource(_) => 50.0,
-                                            super::brain::Goal::CraftItem(_) => 200.0,
-                                            _ => 10.0,
-                                        };
-                                        let next_state = self.get_high_level_state(i);
-                                        self.brains[i].lock().unwrap().update_goal_q_table(&state_before_action, &goal, reward, &next_state)?;
-                                    }
-                                }
-                            },
-                            Ok(Err(e)) => return Err(e.into()),
-                            Err(e) => return Err(SimulationError::TaskJoinError(e.to_string())),
-                        }
+                for (i, action) in actions {
+                    if let Some(action) = action {
+                        self._perform_action(i, &action, episode);
                     }
                 }
-            }
-
-            let mut brain_lock = self.brains[0].lock().unwrap();
-            if brain_lock.epsilon > MIN_EPSILON {
-                brain_lock.epsilon *= EPSILON_DECAY;
             }
 
             if (episode + 1) % 200 == 0 {
-                println!("Episode {}/{} | P1 Epsilon: {:.3}", brain_lock.epsilon, episode + 1, EPISODES);
-                self._display_mental_map(0);
+                println!("Episode {}/{}", episode + 1, EPISODES);
             }
         }
 
@@ -236,7 +196,13 @@ impl Game {
                 let tile = &mut self.map.grid[y as usize][x as usize];
                 if let Some(depletion_episode) = tile.depletion_episode {
                     if current_episode >= depletion_episode + 4 {
-                        tile.tile_type = tile.original_tile_type;
+                        // Find the original biome tile type
+                        for biome in &self.map.biomes {
+                            if biome.name == tile.biome {
+                                tile.tile_type = biome.tile_type;
+                                break;
+                            }
+                        }
                         tile.remaining_resources = Some(5);
                         tile.depletion_episode = None;
                     }
@@ -247,26 +213,29 @@ impl Game {
 
     fn _display_mental_map(&self, player_index: usize) {
         println!("--- Player {} Mental Map ---", player_index);
-        let brain = self.brains[player_index].lock().unwrap();
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                match &brain.mental_map[y as usize][x as usize] {
-                    Some(memory_tile) => print!("{} ", memory_tile.tile.tile_type),
-                    None => print!("? "),
-                }
-            }
-            println!();
-        }
+        // let brain = self.brains[player_index].lock().unwrap();
+        // for y in 0..HEIGHT {
+        //     for x in 0..WIDTH {
+        //         match &brain.mental_map[y as usize][x as usize] {
+        //             Some(memory_tile) => print!("{} ", memory_tile.tile.tile_type),
+        //             None => print!("? "),
+        //         }
+        //     }
+        //     println!();
+        // }
         println!("--------------------------");
     }
 
     fn _handle_equip_action(&mut self, player_index: usize, item: &str) -> f64 {
-        let player = &mut self.players[player_index];
-        if player.get_total_quantity(item) > 0 {
-            player.held_item = Some(item.to_string());
-            2.0
+        if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+            if player.get_total_quantity(item) > 0 {
+                player.held_item = Some(item.to_string());
+                2.0
+            } else {
+                -2.0
+            }
         } else {
-            -2.0
+            -1.0 // Not a player
         }
     }
 
@@ -274,61 +243,69 @@ impl Game {
         let required_resources = self.recipe_manager.get_required_resources(item, 1);
 
         if !required_resources.is_empty() && required_resources.get(item).is_none() {
-            let player = &mut self.players[player_index];
-            if player.has_resources(&required_resources) {
-                if player.remove_resources(&required_resources) {
-                    if item == "lock" {
-                        let lock_id = self.next_instance_id;
-                        self.next_instance_id += 1;
-                        let key_id = lock_id;
+            if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+                if player.has_resources(&required_resources) {
+                    if player.remove_resources(&required_resources) {
+                        if item == "lock" {
+                            let lock_id = self.next_instance_id;
+                            self.next_instance_id += 1;
+                            let key_id = lock_id;
 
-                        if player.add_item("lock", 1, Some(lock_id), &self.item_registry) &&
-                           player.add_item("key", 1, Some(key_id), &self.item_registry) {
-                            50.0
+                            if player.add_item("lock", 1, Some(lock_id), &self.item_registry) &&
+                               player.add_item("key", 1, Some(key_id), &self.item_registry) {
+                                50.0
+                            } else {
+                                -15.0
+                            }
                         } else {
-                            -15.0
+                            if player.add_item(item, 1, None, &self.item_registry) {
+                                50.0
+                            } else { -15.0 }
                         }
-                    } else {
-                        if player.add_item(item, 1, None, &self.item_registry) {
-                            50.0
-                        } else { -15.0 }
-                    }
-                } else { -15.0 }
-            } else { -10.0 }
+                    } else { -15.0 }
+                } else { -10.0 }
+            } else { -1.0 }
         } else { -1.0 }
     }
 
     fn _handle_move_action(&mut self, player_index: usize, direction: &Direction) -> f64 {
-        let player = &mut self.players[player_index];
-        let direction_str = match direction {
-            Direction::Up => "up",
-            Direction::Down => "down",
-            Direction::Left => "left",
-            Direction::Right => "right",
-        };
-        if player.move_player(direction_str, &self.map) {
-            let (new_px, new_py) = (player.x, player.y);
-            let current_tile = &self.map.grid[new_py as usize][new_px as usize];
-            if current_tile.tile_type == 'M' { -2.0 }
-            else if "RUIT".contains(current_tile.tile_type) { 1.0 }
-            else { 0.0 }
-        } else { -5.0 }
+        if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+            let direction_str = match direction {
+                Direction::Up => "up",
+                Direction::Down => "down",
+                Direction::Left => "left",
+                Direction::Right => "right",
+            };
+            if player.move_player(direction_str, &self.map, &self.entities) {
+                let (new_px, new_py) = (player.x, player.y);
+                let current_tile = &self.map.grid[new_py as usize][new_px as usize];
+                if current_tile.tile_type == 'M' { -2.0 }
+                else if "RUIT".contains(current_tile.tile_type) { 1.0 }
+                else { 0.0 }
+            } else { -5.0 }
+        } else {
+            -1.0
+        }
     }
 
     fn _handle_gather_action(&mut self, player_index: usize, px: u32, py: u32, episode: u32) -> f64 {
-        let tile = &mut self.map.grid[py as usize][px as usize];
-        if tile.remaining_resources.is_none() || tile.remaining_resources == Some(0) {
+        let (tile_type, biome_name) = {
+            let tile = &self.map.grid[py as usize][px as usize];
+            (tile.tile_type, tile.biome.clone())
+        };
+
+        if self.map.grid[py as usize][px as usize].remaining_resources.is_none() || self.map.grid[py as usize][px as usize].remaining_resources == Some(0) {
             return -2.0; // Nothing to gather
         }
 
-        let player = &mut self.players[player_index];
-        let held_item_name = player.held_item.as_deref();
-        let held_item = held_item_name.and_then(|name| self.item_registry.get_item(name));
+        if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+            let held_item_name = player.held_item.as_deref();
+            let held_item = held_item_name.and_then(|name| self.item_registry.get_item(name));
 
         if let Some(item) = held_item {
             if let Some(properties) = &item.properties {
                 let efficiency = properties.get("efficiency").cloned().unwrap_or(1.0) as u32;
-                let required_tool = match tile.tile_type {
+                let required_tool = match tile_type {
                     'T' => "stone_axe",
                     'R' => "stone_pickaxe",
                     'U' => "stone_pickaxe",
@@ -337,7 +314,7 @@ impl Game {
                 };
 
                 if item.name == required_tool {
-                    let resource = match tile.tile_type {
+                    let resource = match tile_type {
                         'T' => "wood",
                         'R' => "stone",
                         'U' => "sulfur",
@@ -346,15 +323,20 @@ impl Game {
                     };
 
                     if player.add_item(resource, efficiency, None, &self.item_registry) {
-                        if let Some(res) = &mut tile.remaining_resources {
+                        if let Some(res) = &mut self.map.grid[py as usize][px as usize].remaining_resources {
                             *res -= 1;
                             if *res == 0 {
-                                tile.tile_type = '.';
-                                tile.depletion_episode = Some(episode);
+                                // Find the original biome tile type
+                                for biome in &self.map.biomes {
+                                    if biome.name == biome_name {
+                                        self.map.grid[py as usize][px as usize].tile_type = biome.tile_type;
+                                        break;
+                                    }
+                                }
+                                self.map.grid[py as usize][px as usize].depletion_episode = Some(episode);
                             }
                         }
 
-                        let player = &mut self.players[player_index];
                         if let Some(slot_index) = player.inventory.iter().position(|s| s.is_some() && s.as_ref().unwrap().item == item.name) {
                             if let Some(slot) = &mut player.inventory[slot_index] {
                                 if let Some(durability) = &mut slot.durability {
@@ -367,30 +349,52 @@ impl Game {
                         }
 
                         return 20.0;
-                    } else { -15.0 }
-                } else { -10.0 }
-            } else { -10.0 }
-        } else { -10.0 }
+                    } else { return -15.0; }
+                } else { return -10.0; }
+            } else { return -10.0; }
+        } else { return -10.0; }
+        }
+        -1.0
     }
 
     fn _handle_place_furnace_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
-        let player = &mut self.players[player_index];
-        if player.get_total_quantity("furnace") > 0 && self.map.grid[py as usize][px as usize].tile_type == '.' {
-            let mut recipe = HashMap::new(); recipe.insert("furnace".to_string(), 1);
-            player.remove_resources(&recipe);
-            self.map.grid[py as usize][px as usize].tile_type = 'F';
-            40.0
-        } else { -5.0 }
+        if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+            if player.get_total_quantity("furnace") > 0 && self.map.grid[py as usize][px as usize].tile_type == '.' {
+                // Check for other entities
+                for entity in &self.entities {
+                    if entity.get_id() != player.id {
+                        let (ex, ey) = entity.get_position();
+                        if ex == px && ey == py {
+                            return -5.0; // Another entity is in the way
+                        }
+                    }
+                }
+                let mut recipe = HashMap::new(); recipe.insert("furnace".to_string(), 1);
+                player.remove_resources(&recipe);
+                self.map.grid[py as usize][px as usize].tile_type = 'F';
+                40.0
+            } else { -5.0 }
+        } else { -1.0 }
     }
 
     fn _handle_place_door_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
-        let player = &mut self.players[player_index];
-        if player.get_total_quantity("door") > 0 && self.map.grid[py as usize][px as usize].tile_type == 'O' {
-            let mut recipe = HashMap::new(); recipe.insert("door".to_string(), 1);
-            player.remove_resources(&recipe);
-            self.map.grid[py as usize][px as usize].tile_type = 'D';
-            40.0
-        } else { -5.0 }
+        if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+            if player.get_total_quantity("door") > 0 && self.map.grid[py as usize][px as usize].tile_type == 'O' {
+                // Check for other entities
+                for entity in &self.entities {
+                    if entity.get_id() != player.id {
+                        let (ex, ey) = entity.get_position();
+                        if ex == px && ey == py {
+                            return -5.0; // Another entity is in the way
+                        }
+                    }
+                }
+                let mut recipe = HashMap::new(); recipe.insert("door".to_string(), 1);
+                player.remove_resources(&recipe);
+                self.map.grid[py as usize][px as usize].tile_type = 'D';
+                40.0
+            } else { -5.0 }
+        } else { -1.0 }
     }
 
     fn _handle_smelt_iron_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
@@ -399,55 +403,73 @@ impl Game {
         recipe.insert("wood".to_string(), 1);
 
         if self._is_adjacent_to(px, py, 'F') {
-            let player = &mut self.players[player_index];
-            if player.has_resources(&recipe) {
-                if player.remove_resources(&recipe) {
-                    player.add_item("iron_bars", 1, None, &self.item_registry);
-                    60.0
-                } else { -15.0 }
-            } else { -12.0 }
+            if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+                if player.has_resources(&recipe) {
+                    if player.remove_resources(&recipe) {
+                        player.add_item("iron_bars", 1, None, &self.item_registry);
+                        60.0
+                    } else { -15.0 }
+                } else { -12.0 }
+            } else { -1.0 }
         } else { -12.0 }
     }
 
     fn _handle_build_action(&mut self, player_index: usize, structure: &str, px: u32, py: u32) -> f64 {
-        let player = &mut self.players[player_index];
-        if player.get_total_quantity(structure) > 0 {
-            let current_tile = &mut self.map.grid[py as usize][px as usize];
-            let item = self.item_registry.get_item(structure);
-            let health = item.and_then(|i| i.properties.as_ref()).and_then(|p| p.get("health")).cloned().unwrap_or(100.0);
+        if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+            if player.get_total_quantity(structure) > 0 {
+                // Check for other entities
+                for entity in &self.entities {
+                    if entity.get_id() != player.id {
+                        let (ex, ey) = entity.get_position();
+                        if ex == px && ey == py {
+                            return -5.0; // Another entity is in the way
+                        }
+                    }
+                }
 
-            let tile_char = match structure {
-                "foundation" => 'B',
-                "wall" => '#',
-                "doorway" => 'O',
-                _ => 'X',
-            };
+                let current_tile = &mut self.map.grid[py as usize][px as usize];
+                let item = self.item_registry.get_item(structure);
+                let health = item.and_then(|i| i.properties.as_ref()).and_then(|p| p.get("health")).cloned().unwrap_or(100.0);
 
-            if tile_char != 'X' {
-                current_tile.tile_type = tile_char;
-                current_tile.health = Some(health);
-                let mut recipe = HashMap::new();
-                recipe.insert(structure.to_string(), 1);
-                player.remove_resources(&recipe);
-                30.0
-            } else { -0.1 }
-        } else { -5.0 }
+                let tile_char = match structure {
+                    "foundation" => 'B',
+                    "wall" => '#',
+                    "doorway" => 'O',
+                    _ => 'X',
+                };
+
+                if tile_char != 'X' {
+                    current_tile.tile_type = tile_char;
+                    current_tile.health = Some(health);
+                    let mut recipe = HashMap::new();
+                    recipe.insert(structure.to_string(), 1);
+                    player.remove_resources(&recipe);
+                    30.0
+                } else { -0.1 }
+            } else { -5.0 }
+        } else { -1.0 }
     }
 
     fn _handle_attach_lock_action(&mut self, player_index: usize, px: u32, py: u32) -> f64 {
-        let player = &mut self.players[player_index];
-        if !player.has_lock() {
+        let has_lock = if let Some(player) = self.entities[player_index].as_any().downcast_ref::<Player>() {
+            player.has_lock()
+        } else {
+            false
+        };
+
+        if !has_lock {
             return -10.0;
         }
 
         if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'D') {
             let door_tile = &mut self.map.grid[door_y as usize][door_x as usize];
             if door_tile.lock_id.is_none() {
-                let player = &mut self.players[player_index];
-                if let Some(lock_id) = player.find_and_remove_lock() {
-                    door_tile.tile_type = 'L';
-                    door_tile.lock_id = Some(lock_id);
-                    return 50.0;
+                if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+                    if let Some(lock_id) = player.find_and_remove_lock() {
+                        door_tile.tile_type = 'L';
+                        door_tile.lock_id = Some(lock_id);
+                        return 50.0;
+                    }
                 }
             }
         }
@@ -463,12 +485,13 @@ impl Game {
         if let Some((door_x, door_y)) = self._find_adjacent_tile(px, py, 'L') {
             let door_tile = &self.map.grid[door_y as usize][door_x as usize];
             if let Some(lock_id) = door_tile.lock_id {
-                let player = &self.players[player_index];
-                if player.has_key(lock_id) {
-                    self.map.grid[door_y as usize][door_x as usize].tile_type = 'd';
-                    return 20.0;
-                } else {
-                    return -15.0;
+                if let Some(player) = self.entities[player_index].as_any().downcast_ref::<Player>() {
+                    if player.has_key(lock_id) {
+                        self.map.grid[door_y as usize][door_x as usize].tile_type = 'd';
+                        return 20.0;
+                    } else {
+                        return -15.0;
+                    }
                 }
             }
         }
@@ -517,76 +540,94 @@ impl Game {
     }
 
     fn _handle_attack_action(&mut self, player_index: usize) -> f64 {
-        let attacker_id = self.players[player_index].id;
-        let held_item_name = self.players[player_index].held_item.clone();
+        let attacker_id = self.entities[player_index].get_id();
+        let held_item_name = if let Some(player) = self.entities[player_index].as_any().downcast_ref::<Player>() {
+            player.held_item.clone()
+        } else {
+            None
+        };
+
         let damage = if let Some(item_name) = &held_item_name {
             self.item_registry.get_item(item_name).and_then(|item| item.properties.as_ref()).and_then(|p| p.get("damage")).cloned().unwrap_or(1.0)
-        } else { 1.0 };
-
-        // Try to attack a building first
-        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
-        for (dx, dy) in &[(0, 1), (0, -1), (1, 0), (-1, 0)] {
-            let nx = (px as i32 + dx) as u32;
-            let ny = (py as i32 + dy) as u32;
-            if nx < self.map.width && ny < self.map.height {
-                let tile = &mut self.map.grid[ny as usize][nx as usize];
-                if "B#DO".contains(tile.tile_type) {
-                    if let Some(health) = &mut tile.health {
-                        *health -= damage;
-                        if *health <= 0.0 {
-                            let was_foundation = tile.tile_type == 'B';
-                            tile.tile_type = '.';
-                            tile.health = None;
-                            if was_foundation {
-                                self._handle_structural_collapse(nx, ny);
-                            }
-                        }
-                        return 20.0;
-                    }
-                }
-            }
-        }
-
-        // If no building, try to attack a player
-        if let Some(other_player_index) = self._find_adjacent_player(player_index) {
-            let (players_slice1, players_slice2) = self.players.split_at_mut(std::cmp::max(player_index, other_player_index));
-            let (attacker, victim) = if player_index < other_player_index {
-                (&mut players_slice1[player_index], &mut players_slice2[0])
-            } else {
-                (&mut players_slice2[0], &mut players_slice1[other_player_index])
-            };
-
-            victim.health -= damage as i32;
-
-            let victim_brain = Arc::clone(&self.brains[other_player_index]);
-            let mut victim_brain_lock = victim_brain.lock().unwrap();
-            victim_brain_lock.record_attack_from(attacker_id);
-
-            if let Some(item_name) = held_item_name {
-                if let Some(slot) = attacker.inventory.iter_mut().find(|s| s.is_some() && s.as_ref().unwrap().item == item_name) {
-                    if let Some(s) = slot {
-                        if let Some(durability) = &mut s.durability {
-                            *durability -= 1.0;
-                            if *durability <= 0.0 {
-                                *slot = None;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if victim.health <= 0 {
-                100.0
-            } else {
-                10.0
-            }
         } else {
-            -1.0
+            1.0
+        };
+
+        if let Some(other_player_index) = self._find_adjacent_player(player_index) {
+            let mut new_entities = Vec::new();
+            let victim = &mut self.entities[other_player_index];
+            let victim_pos = victim.get_position();
+
+            if let Some(player) = victim.as_any().downcast_mut::<Player>() {
+                player.health -= damage as i32;
+                if player.health <= 0 {
+                    // Drop inventory
+                    for slot in &player.inventory {
+                        if let Some(s) = slot {
+                            new_entities.push(Box::new(DroppedItem {
+                                id: self.next_instance_id,
+                                x: victim_pos.0,
+                                y: victim_pos.1,
+                                item: s.item.clone(),
+                                quantity: s.quantity,
+                            }) as Box<dyn Entity>);
+                            self.next_instance_id += 1;
+                        }
+                    }
+                    self.entities.extend(new_entities);
+                    return 100.0;
+                }
+            } else if let Some(animal) = victim.as_any().downcast_mut::<Animal>() {
+                animal.health -= damage as i32;
+                if animal.health <= 0 {
+                    // Drop meat
+                    new_entities.push(Box::new(DroppedItem {
+                        id: self.next_instance_id,
+                        x: victim_pos.0,
+                        y: victim_pos.1,
+                        item: "meat".to_string(),
+                        quantity: 1,
+                    }) as Box<dyn Entity>);
+                    self.next_instance_id += 1;
+                    self.entities.extend(new_entities);
+                    return 50.0;
+                }
+            }
+            return 10.0;
         }
+        -1.0
+    }
+
+    fn _handle_pickup_action(&mut self, player_index: usize) -> f64 {
+        let player_pos = self.entities[player_index].get_position();
+        let mut items_to_pickup = Vec::new();
+
+        for (i, entity) in self.entities.iter().enumerate() {
+            if let Some(item) = entity.as_any().downcast_ref::<DroppedItem>() {
+                if item.get_position() == player_pos {
+                    items_to_pickup.push(i);
+                }
+            }
+        }
+
+        if items_to_pickup.is_empty() {
+            return -1.0;
+        }
+
+        for i in items_to_pickup.iter().rev() {
+            let item_entity = self.entities.remove(*i);
+            if let Some(item) = item_entity.as_any().downcast_ref::<DroppedItem>() {
+                if let Some(player) = self.entities[player_index].as_any().downcast_mut::<Player>() {
+                    player.add_item(&item.item, item.quantity, None, &self.item_registry);
+                }
+            }
+        }
+
+        20.0
     }
 
     pub fn _perform_action(&mut self, player_index: usize, action: &Action, episode: u32) -> f64 {
-        let (px, py) = (self.players[player_index].x, self.players[player_index].y);
+        let (px, py) = self.entities[player_index].get_position();
 
         match action {
             Action::Move(direction) => self._handle_move_action(player_index, direction),
@@ -608,18 +649,8 @@ impl Game {
             Action::Close => self._handle_close_door_action(player_index, px, py),
             Action::AttachLock => self._handle_attach_lock_action(player_index, px, py),
             Action::Attack => self._handle_attack_action(player_index),
+            Action::Pickup => self._handle_pickup_action(player_index),
         }
     }
 }
 
-fn get_random_samples<T: Clone>(population: &[T], k: usize, rng: &mut impl Rng) -> Vec<T> {
-    let mut samples = Vec::new();
-    let mut indices: Vec<usize> = (0..population.len()).collect();
-    for _ in 0..k {
-        if indices.is_empty() { break; }
-        let i = rng.gen_range(0..indices.len());
-        let selected_index = indices.swap_remove(i);
-        samples.push(population[selected_index].clone());
-    }
-    samples
-}

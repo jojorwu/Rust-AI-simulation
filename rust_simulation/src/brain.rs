@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use rand::Rng;
-use super::state::StateKey;
 use super::errors::SimulationError;
 use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
