@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use super::map::{Map, Tile};
 use super::player::Player;
 use super::brain::{Brain, MemoryTile, HighLevelState};
-use super::state::StateKey;
 use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::actions::{Action, Direction, get_all_actions};
@@ -20,7 +19,7 @@ pub struct Game {
     pub players: Vec<Player>,
     pub brains: Vec<Arc<Mutex<Brain>>>,
     pub item_registry: ItemRegistry,
-    pub recipe_manager: RecipeManager,
+    pub recipe_manager: Arc<RecipeManager>,
     next_instance_id: u32,
 }
 
@@ -28,7 +27,7 @@ impl Game {
     pub fn new() -> Self {
         let map = Map::new(WIDTH, HEIGHT);
         let item_registry = ItemRegistry::new("items.json");
-        let recipe_manager = RecipeManager::new("recipes.json");
+        let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
 
         let mut players = Vec::new();
         let mut brains = Vec::new();
@@ -36,7 +35,7 @@ impl Game {
 
         for i in 0..NUM_PLAYERS {
             players.push(Player::new(i as u32, 0, 0));
-            brains.push(Arc::new(Mutex::new(Brain::new(actions.clone(), LEARNING_RATE, DISCOUNT_FACTOR, INITIAL_EPSILON))));
+            brains.push(Arc::new(Mutex::new(Brain::new(actions.clone(), Arc::clone(&recipe_manager), LEARNING_RATE, DISCOUNT_FACTOR, INITIAL_EPSILON))));
         }
 
         Game {
@@ -46,53 +45,6 @@ impl Game {
             item_registry,
             recipe_manager,
             next_instance_id: 0,
-        }
-    }
-
-    fn get_state(&mut self, player_index: usize, episode: u32) -> StateKey {
-        let player = &self.players[player_index];
-        let mut local_view = Vec::new();
-        let view_radius = 1;
-
-        let mut brain_lock = self.brains[player_index].lock().unwrap();
-
-        // Update player memories
-        for other_player in &self.players {
-            if other_player.id != player.id {
-                let dist = ((player.x as f64 - other_player.x as f64).powi(2) + (player.y as f64 - other_player.y as f64).powi(2)).sqrt();
-                if dist < 5.0 { // arbitrary vision range for seeing other players
-                    brain_lock.player_memories.entry(other_player.id).or_insert(super::brain::PlayerMemory {
-                        last_seen_location: Some((other_player.x, other_player.y)),
-                        relationship: super::brain::RelationshipStatus::Neutral,
-                    }).last_seen_location = Some((other_player.x, other_player.y));
-                }
-            }
-        }
-
-        for dy in -view_radius..=view_radius {
-            for dx in -view_radius..=view_radius {
-                let nx = player.x as i32 + dx;
-                let ny = player.y as i32 + dy;
-
-                if nx >= 0 && nx < self.map.width as i32 && ny >= 0 && ny < self.map.height as i32 {
-                    let tile = self.map.grid[ny as usize][nx as usize].clone();
-                    local_view.push(tile.clone());
-                    let memory_tile = MemoryTile {
-                        tile: tile.clone(),
-                        last_seen_episode: episode,
-                        resource_richness: brain_lock.mental_map[ny as usize][nx as usize].as_ref().map_or(0.0, |mt| mt.resource_richness),
-                    };
-                    brain_lock.mental_map[ny as usize][nx as usize] = Some(memory_tile);
-                } else {
-                    local_view.push(Tile::new('X'));
-                }
-            }
-        }
-
-        StateKey {
-            local_view,
-            inventory: player.inventory.clone(),
-            held_item: player.held_item.clone(),
         }
     }
 
@@ -224,7 +176,7 @@ impl Game {
                     if self.players[i].health > 0 {
                         let high_level_state = self.get_high_level_state(i);
                         let brain = Arc::clone(&self.brains[i]);
-                        let player = self.players[i].clone(); // This is not ideal, but necessary for async
+                        let player = self.players[i].clone();
                         let handle = task::spawn(async move {
                             let mut brain_lock = brain.lock().unwrap();
                             brain_lock.tick(&player, &high_level_state, episode)
@@ -246,7 +198,11 @@ impl Game {
 
                                 if let Some(goal) = goal_before_action {
                                     if self.brains[i].lock().unwrap().is_goal_complete(&self.players[i], &goal) {
-                                        let reward = 100.0;
+                                        let reward = match goal {
+                                            super::brain::Goal::GatherResource(_) => 50.0,
+                                            super::brain::Goal::CraftItem(_) => 200.0,
+                                            _ => 10.0,
+                                        };
                                         let next_state = self.get_high_level_state(i);
                                         self.brains[i].lock().unwrap().update_goal_q_table(&state_before_action, &goal, reward, &next_state)?;
                                     }

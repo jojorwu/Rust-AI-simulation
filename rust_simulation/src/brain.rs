@@ -7,7 +7,9 @@ use std::cmp::Ordering;
 use super::actions::{Action, Direction};
 use super::map::Tile;
 use super::pathfinding;
+use super::recipes::RecipeManager;
 use serde::{Serialize, Deserialize};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
@@ -49,6 +51,7 @@ pub struct PlayerMemory {
 pub struct Brain {
     pub actions: Vec<Action>,
     pub goals: Vec<Goal>,
+    pub recipe_manager: Arc<RecipeManager>,
     pub learning_rate: f64,
     pub discount_factor: f64,
     pub epsilon: f64,
@@ -56,11 +59,13 @@ pub struct Brain {
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
     pub player_memories: HashMap<u32, PlayerMemory>,
     pub current_goal: Option<Goal>,
+    pub goal_stack: Vec<Goal>,
     pub current_path: Option<Vec<(u32, u32)>>,
+    pub goal_commitment_ticks: u32,
 }
 
 impl Brain {
-    pub fn new(actions: Vec<Action>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
+    pub fn new(actions: Vec<Action>, recipe_manager: Arc<RecipeManager>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
         let goals = vec![
             Goal::GatherResource("wood".to_string()),
             Goal::GatherResource("stone".to_string()),
@@ -69,6 +74,7 @@ impl Brain {
         Brain {
             actions,
             goals,
+            recipe_manager,
             learning_rate,
             discount_factor,
             epsilon,
@@ -76,7 +82,9 @@ impl Brain {
             mental_map: vec![vec![None; WIDTH as usize]; HEIGHT as usize],
             player_memories: HashMap::new(),
             current_goal: None,
+            goal_stack: Vec::new(),
             current_path: None,
+            goal_commitment_ticks: 0,
         }
     }
 
@@ -117,7 +125,17 @@ impl Brain {
 
     pub fn is_goal_complete(&self, player: &super::player::Player, goal: &Goal) -> bool {
         match goal {
-            Goal::GatherResource(resource) => player.get_total_quantity(resource) > 10,
+            Goal::GatherResource(resource) => {
+                if let Some(parent_goal) = self.goal_stack.last() {
+                    if let Goal::CraftItem(item_name) = parent_goal {
+                        let recipe = self.recipe_manager.get_required_resources(item_name, 1);
+                        if let Some(&required_amount) = recipe.get(resource) {
+                            return player.get_total_quantity(resource) >= required_amount;
+                        }
+                    }
+                }
+                player.get_total_quantity(resource) > 10 // Default
+            },
             Goal::CraftItem(item) => player.get_total_quantity(item) > 0,
             _ => false,
         }
@@ -128,15 +146,21 @@ impl Brain {
             return Ok(action);
         }
 
+        if self.goal_commitment_ticks > 0 {
+            self.goal_commitment_ticks -= 1;
+        }
+
         if let Some(goal) = &self.current_goal {
             if self.is_goal_complete(player, goal) || !self.is_goal_valid(goal) {
                 self.current_goal = None;
                 self.current_path = None;
+                self.goal_commitment_ticks = 0;
             }
         }
 
-        if self.current_goal.is_none() {
+        if self.current_goal.is_none() && self.goal_commitment_ticks == 0 {
             self.current_goal = Some(self.choose_goal(high_level_state)?);
+            self.goal_commitment_ticks = 10; // Commit to the new goal for 10 ticks
         }
 
         self.choose_action_for_goal(player, current_episode)
@@ -189,7 +213,7 @@ impl Brain {
         if let Some(goal) = self.current_goal.clone() {
             match goal {
                 Goal::GatherResource(resource_name) => return self.execute_gather_goal(player, &resource_name, current_episode),
-                Goal::CraftItem(item_name) => return Ok(Action::Craft(item_name.clone())),
+                Goal::CraftItem(item_name) => return self.execute_craft_item_goal(player, &item_name, current_episode),
                 _ => {}
             }
         }
@@ -219,6 +243,33 @@ impl Brain {
         // Clear the goal to avoid getting stuck.
         self.current_goal = None;
         Ok(self.actions[0].clone()) // Fallback action
+    }
+
+    fn execute_craft_item_goal(&mut self, player: &super::player::Player, item_name: &str, current_episode: u32) -> Result<Action, SimulationError> {
+        let recipe = self.recipe_manager.get_required_resources(item_name, 1);
+        let mut missing_resource = None;
+
+        for (resource, &required_amount) in &recipe {
+            if player.get_total_quantity(resource) < required_amount {
+                missing_resource = Some(resource.clone());
+                break;
+            }
+        }
+
+        if let Some(resource) = missing_resource {
+            // We are missing a resource, so we need to gather it.
+            // Push the current CraftItem goal onto the stack.
+            if let Some(craft_goal) = self.current_goal.clone() {
+                self.goal_stack.push(craft_goal);
+            }
+            // Set the new goal to gather the missing resource.
+            self.current_goal = Some(Goal::GatherResource(resource));
+            return self.choose_action_for_goal(player, current_episode);
+        } else {
+            // We have all the resources, so we can craft the item.
+            self.current_goal = self.goal_stack.pop(); // Go back to the parent goal
+            return Ok(Action::Craft(item_name.to_string()));
+        }
     }
 
     fn resource_name_to_char(&self, resource_name: &str) -> char {
