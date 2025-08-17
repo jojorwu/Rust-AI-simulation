@@ -216,8 +216,8 @@ pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
                         item_name: "meat".to_string(),
                         quantity: 1,
                     });
-                    // Note: The entity is not removed here. A separate system should handle that.
                 }
+                world.remove_entity(entity);
             }
         }
     }
