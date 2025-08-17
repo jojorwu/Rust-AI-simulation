@@ -391,3 +391,76 @@ impl Brain {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ecs::World;
+    use crate::recipes::RecipeManager;
+    use crate::item::{ItemRegistry, Item};
+    use crate::player::Player;
+    use std::sync::Arc;
+
+    fn create_test_brain() -> Brain {
+        let actions = Vec::new();
+        let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
+        Brain::new(actions, recipe_manager, 0.1, 0.9, 0.1)
+    }
+
+    #[test]
+    fn test_choose_goal_randomly() {
+        let brain = create_test_brain();
+        let state = HighLevelState {
+            has_wood: false,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+        let goal = brain.choose_goal(&state).unwrap();
+        assert!(brain.goals.contains(&goal));
+    }
+
+    #[test]
+    fn test_choose_goal_q_learning() {
+        let mut brain = create_test_brain();
+        brain.epsilon = 0.0; // Ensure Q-table is used
+
+        let state = HighLevelState {
+            has_wood: true,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+        let state_key = serde_json::to_string(&state).unwrap();
+        let mut q_values = HashMap::new();
+        q_values.insert(Goal::GatherResource("stone".to_string()), 10.0);
+        q_values.insert(Goal::CraftItem("stone_axe".to_string()), 5.0);
+        brain.goal_q_table.insert(state_key, q_values);
+
+        let chosen_goal = brain.choose_goal(&state).unwrap();
+        assert_eq!(chosen_goal, Goal::GatherResource("stone".to_string()));
+    }
+
+    #[test]
+    fn test_is_goal_complete() {
+        let brain = create_test_brain();
+        let mut world = World::new();
+        let mut item_registry = ItemRegistry::new("items.json");
+        item_registry.items.insert("wood".to_string(), Item { name: "wood".to_string(), stackable: true, tool: false, properties: None });
+
+        let player_entity = world.create_entity();
+        let mut player = Player::new(0);
+        player.add_item("wood", 11, None, &item_registry);
+        world.add_component(player_entity, player);
+
+        let goal = Goal::GatherResource("wood".to_string());
+        assert!(brain.is_goal_complete(&world, player_entity, &goal));
+
+        let goal = Goal::GatherResource("stone".to_string());
+        assert!(!brain.is_goal_complete(&world, player_entity, &goal));
+    }
+}
