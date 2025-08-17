@@ -4,6 +4,8 @@ use crate::player::Player;
 use crate::recipes::RecipeManager;
 use crate::item::ItemRegistry;
 use crate::map::Map;
+use crate::events::{EventBus, Event};
+use std::sync::{Arc, Mutex};
 
 pub fn movement_system(world: &mut World) {
     for entity in 0..world.entities.len() {
@@ -27,7 +29,7 @@ pub fn movement_system(world: &mut World) {
     }
 }
 
-pub fn gathering_system(world: &mut World) {
+pub fn gathering_system(world: &mut World, item_registry: &ItemRegistry) {
     let mut to_gather = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_gather) = world.get_component::<WantsToGather>(entity) {
@@ -36,28 +38,29 @@ pub fn gathering_system(world: &mut World) {
     }
 
     for (gatherer, target) in to_gather {
-        let gatherer_pos = world.get_component::<Position>(gatherer).unwrap();
-        let target_pos = world.get_component::<Position>(target).unwrap();
+        if let (Some(gatherer_pos), Some(target_pos)) = (
+            world.get_component::<Position>(gatherer).map(|p| *p),
+            world.get_component::<Position>(target).map(|p| *p),
+        ) {
+            let dx = (gatherer_pos.x as i32 - target_pos.x as i32).abs();
+            let dy = (gatherer_pos.y as i32 - target_pos.y as i32).abs();
 
-        let dx = (gatherer_pos.x as i32 - target_pos.x as i32).abs();
-        let dy = (gatherer_pos.y as i32 - target_pos.y as i32).abs();
-
-        if dx <= 1 && dy <= 1 {
-            let resource_type = if let Some(resource) = world.get_component_mut::<Resource>(target) {
-                if resource.quantity > 0 {
-                    resource.quantity -= 1;
-                    Some(resource.resource_type)
+            if dx <= 1 && dy <= 1 {
+                let resource_name = if let Some(resource) = world.get_component_mut::<Resource>(target) {
+                    if resource.quantity > 0 {
+                        resource.quantity -= 1;
+                        Some(resource.name.clone())
+                    } else {
+                        None
+                    }
                 } else {
                     None
-                }
-            } else {
-                None
-            };
+                };
 
-            if let Some(resource_type) = resource_type {
-                if let Some(player) = world.get_component_mut::<Player>(gatherer) {
-                    // This is a placeholder for adding the item to the inventory
-                    println!("Player {} gathered 1 of {}", player.id, resource_type);
+                if let Some(name) = resource_name {
+                    if let Some(player) = world.get_component_mut::<Player>(gatherer) {
+                        player.add_item(&name, 1, None, item_registry);
+                    }
                 }
             }
         }
@@ -103,22 +106,23 @@ pub fn building_system(world: &mut World, map: &mut Map) {
     }
 
     for (builder, wants_to_build) in to_build {
-        let builder_pos = world.get_component::<Position>(builder).unwrap();
-        let tile = &mut map.grid[builder_pos.y as usize][builder_pos.x as usize];
+        if let Some(builder_pos) = world.get_component::<Position>(builder).map(|p| *p) {
+            let tile = &mut map.grid[builder_pos.y as usize][builder_pos.x as usize];
 
-        if tile.tile_type == '.' {
-            if let Some(player) = world.get_component_mut::<Player>(builder) {
-                if player.get_total_quantity(&wants_to_build.structure_name) > 0 {
-                    let mut recipe = std::collections::HashMap::new();
-                    recipe.insert(wants_to_build.structure_name.clone(), 1);
-                    player.remove_resources(&recipe);
+            if tile.tile_type == '.' {
+                if let Some(player) = world.get_component_mut::<Player>(builder) {
+                    if player.get_total_quantity(&wants_to_build.structure_name) > 0 {
+                        let mut recipe = std::collections::HashMap::new();
+                        recipe.insert(wants_to_build.structure_name.clone(), 1);
+                        player.remove_resources(&recipe);
 
-                    tile.tile_type = match wants_to_build.structure_name.as_str() {
-                        "foundation" => 'B',
-                        "wall" => '#',
-                        "doorway" => 'O',
-                        _ => 'X',
-                    };
+                        tile.tile_type = match wants_to_build.structure_name.as_str() {
+                            "foundation" => 'B',
+                            "wall" => '#',
+                            "doorway" => 'O',
+                            _ => 'X',
+                        };
+                    }
                 }
             }
         }
@@ -130,7 +134,7 @@ pub fn building_system(world: &mut World, map: &mut Map) {
     }
 }
 
-pub fn combat_system(world: &mut World) {
+pub fn combat_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
     let mut to_attack = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_attack) = world.get_component::<WantsToAttack>(entity) {
@@ -149,13 +153,7 @@ pub fn combat_system(world: &mut World) {
         }
 
         if target_dead {
-            let _target_pos = *world.get_component::<Position>(target).unwrap();
-            world.add_component(target, DroppedItem {
-                item_name: "meat".to_string(),
-                quantity: 1,
-            });
-            // This is a placeholder for removing the entity
-            println!("Entity {} died", target);
+            event_bus.lock().expect("Failed to lock event bus").publish(Event::EntityDied(target));
         }
     }
 
@@ -174,34 +172,53 @@ pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry) {
     }
 
     for picker_upper in to_pickup {
-        let picker_upper_pos = *world.get_component::<Position>(picker_upper).unwrap();
-        let mut items_to_remove = Vec::new();
-        let mut items_to_add = Vec::new();
+        if let Some(picker_upper_pos) = world.get_component::<Position>(picker_upper).map(|p| *p) {
+            let mut items_to_remove = Vec::new();
+            let mut items_to_add = Vec::new();
 
-        for (i, entity) in (0..world.entities.len()).zip(world.entities.iter()) {
-            if let Some(item) = world.get_component::<DroppedItem>(*entity) {
-                if let Some(item_pos) = world.get_component::<Position>(*entity) {
-                    if item_pos.x == picker_upper_pos.x && item_pos.y == picker_upper_pos.y {
-                        items_to_add.push((picker_upper, item.clone()));
-                        items_to_remove.push(i);
+            for (i, entity) in (0..world.entities.len()).zip(world.entities.iter()) {
+                if let Some(item) = world.get_component::<DroppedItem>(*entity) {
+                    if let Some(item_pos) = world.get_component::<Position>(*entity) {
+                        if item_pos.x == picker_upper_pos.x && item_pos.y == picker_upper_pos.y {
+                            items_to_add.push((picker_upper, item.clone()));
+                            items_to_remove.push(i);
+                        }
                     }
                 }
             }
-        }
 
-        for (picker_upper, item) in items_to_add {
-            if let Some(player) = world.get_component_mut::<Player>(picker_upper) {
-                player.add_item(&item.item_name, item.quantity, None, item_registry);
+            for (picker_upper, item) in items_to_add {
+                if let Some(player) = world.get_component_mut::<Player>(picker_upper) {
+                    player.add_item(&item.item_name, item.quantity, None, item_registry);
+                }
             }
-        }
 
-        for i in items_to_remove.iter().rev() {
-            world.remove_entity(*i);
+            for i in items_to_remove.iter().rev() {
+                world.remove_entity(*i);
+            }
         }
     }
 
     // Reset wants to pickup
     for entity in 0..world.entities.len() {
         world.remove_component::<WantsToPickup>(entity);
+    }
+}
+
+pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
+    let events = event_bus.lock().expect("Failed to lock event bus").take_events();
+    for event in events {
+        match event {
+            Event::EntityDied(entity) => {
+                // Turn the dead entity into a dropped item (meat)
+                if world.get_component::<Position>(entity).is_some() {
+                    world.add_component(entity, DroppedItem {
+                        item_name: "meat".to_string(),
+                        quantity: 1,
+                    });
+                }
+                world.remove_entity(entity);
+            }
+        }
     }
 }

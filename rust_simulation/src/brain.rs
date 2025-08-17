@@ -1,18 +1,17 @@
-use std::collections::HashMap;
 use rand::Rng;
 use super::errors::SimulationError;
 use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
-use super::actions::{Action};
 use super::map::Tile;
 use super::pathfinding;
-use crate::components::{WantsToGather, WantsToCraft, WantsToBuild};
+use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource};
+use std::collections::HashMap;
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
-use super::components::Position;
 use super::player::Player;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
+use std::fs;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
@@ -36,28 +35,25 @@ pub struct HighLevelState {
 #[derive(Debug, Clone)]
 pub struct MemoryTile {
     pub tile: Tile,
-    pub _last_seen_episode: u32,
-    pub _resource_richness: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelationshipStatus {
-    _Neutral,
     Hostile,
 }
 
 #[derive(Debug, Clone)]
 pub struct PlayerMemory {
-    pub _last_seen_location: Option<(u32, u32)>,
     pub relationship: RelationshipStatus,
 }
 
+/// The Brain struct represents the AI for an agent in the simulation.
+/// It uses a goal-oriented architecture to make decisions.
 pub struct Brain {
-    pub _actions: Vec<Action>,
     pub goals: Vec<Goal>,
     pub recipe_manager: Arc<RecipeManager>,
-    pub _learning_rate: f64,
-    pub _discount_factor: f64,
+    pub learning_rate: f64,
+    pub discount_factor: f64,
     pub epsilon: f64,
     pub goal_q_table: HashMap<String, HashMap<Goal, f64>>,
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
@@ -66,90 +62,141 @@ pub struct Brain {
     pub goal_stack: Vec<Goal>,
     pub current_path: Option<Vec<(u32, u32)>>,
     pub goal_commitment_ticks: u32,
+    pub prev_state: Option<HighLevelState>,
+    pub prev_goal: Option<Goal>,
 }
 
 impl Brain {
-    pub fn new(actions: Vec<Action>, recipe_manager: Arc<RecipeManager>, _learning_rate: f64, _discount_factor: f64, epsilon: f64) -> Self {
+    pub fn new(recipe_manager: Arc<RecipeManager>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
         let goals = vec![
             Goal::GatherResource("wood".to_string()),
             Goal::GatherResource("stone".to_string()),
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
-            Goal::Attack(1), // Attack player 1
         ];
+
+        let goal_q_table = if let Ok(file) = fs::read_to_string("rust_simulation/q_table.json") {
+            serde_json::from_str(&file).unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
+
         Brain {
-            _actions: actions,
             goals,
             recipe_manager,
-            _learning_rate,
-            _discount_factor,
+            learning_rate,
+            discount_factor,
             epsilon,
-            goal_q_table: HashMap::new(),
+            goal_q_table,
             mental_map: vec![vec![None; WIDTH as usize]; HEIGHT as usize],
             player_memories: HashMap::new(),
             current_goal: None,
             goal_stack: Vec::new(),
             current_path: None,
             goal_commitment_ticks: 0,
+            prev_state: None,
+            prev_goal: None,
         }
     }
 
-    pub fn choose_goal(&self, state: &HighLevelState) -> Result<Goal, SimulationError> {
-        println!("Choosing a new goal...");
-        let valid_goals: Vec<_> = self.goals.iter().filter(|g| self.is_goal_valid(g)).cloned().collect();
+    pub fn save_q_table(&self) -> Result<(), SimulationError> {
+        let json = serde_json::to_string_pretty(&self.goal_q_table)?;
+        fs::write("rust_simulation/q_table.json", json)?;
+        Ok(())
+    }
+
+    pub fn choose_goal(&self, world: &World, state: &HighLevelState) -> Result<Goal, SimulationError> {
+        let valid_goals: Vec<_> = self.goals.iter().filter(|g| self.is_goal_valid(world, g)).cloned().collect();
         if valid_goals.is_empty() {
             return Ok(Goal::Flee); // Fallback goal
         }
 
-        if rand::thread_rng().r#gen::<f64>() < self.epsilon {
+        let choose_random_goal = || {
             let index = rand::thread_rng().gen_range(0..valid_goals.len());
             Ok(valid_goals[index].clone())
+        };
+
+        if rand::thread_rng().r#gen::<f64>() < self.epsilon {
+            return choose_random_goal();
+        }
+
+        let state_key_str = serde_json::to_string(state)?;
+        if let Some(q_values) = self.goal_q_table.get(&state_key_str) {
+            q_values.iter()
+                .filter(|(g, _)| self.is_goal_valid(world, g))
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal))
+                .map(|(goal, _)| goal.clone())
+                .map(Ok) // wrap in Result
+                .unwrap_or_else(choose_random_goal) // if max_by is None, choose random
         } else {
-            let state_key_str = serde_json::to_string(state)?;
-            if let Some(q_values) = self.goal_q_table.get(&state_key_str) {
-                q_values.iter()
-                    .filter(|(g, _)| self.is_goal_valid(g))
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal))
-                    .map(|(goal, _)| goal.clone())
-                    .ok_or_else(|| SimulationError::Other("No best goal found".to_string()))
-            } else {
-                let index = rand::thread_rng().gen_range(0..valid_goals.len());
-                Ok(valid_goals[index].clone())
-            }
+            choose_random_goal()
         }
     }
-
 
     pub fn is_goal_complete(&self, world: &World, entity: Entity, goal: &Goal) -> bool {
-        let player = world.get_component::<Player>(entity).unwrap();
-        match goal {
-            Goal::GatherResource(resource) => {
-                if let Some(parent_goal) = self.goal_stack.last() {
-                    if let Goal::CraftItem(item_name) = parent_goal {
-                        let recipe = self.recipe_manager.get_required_resources(item_name, 1);
-                        if let Some(&required_amount) = recipe.get(resource) {
-                            return player.get_total_quantity(resource) >= required_amount;
+        if let Some(player) = world.get_component::<Player>(entity) {
+            match goal {
+                Goal::GatherResource(resource) => {
+                    if let Some(parent_goal) = self.goal_stack.last() {
+                        if let Goal::CraftItem(item_name) = parent_goal {
+                            let recipe = self.recipe_manager.get_required_resources(item_name, 1);
+                            if let Some(&required_amount) = recipe.get(resource) {
+                                return player.get_total_quantity(resource) >= required_amount;
+                            }
                         }
                     }
-                }
-                player.get_total_quantity(resource) > 10 // Default
-            },
-            Goal::CraftItem(item) => player.get_total_quantity(item) > 0,
-            _ => false,
+                    player.get_total_quantity(resource) > 10 // Default
+                },
+                Goal::CraftItem(item) => player.get_total_quantity(item) > 0,
+                _ => false,
+            }
+        } else {
+            false
         }
     }
 
-    pub fn tick(&mut self, world: &mut World, entity: Entity, high_level_state: &HighLevelState, current_episode: u32) -> Result<(), SimulationError> {
-        // if let Some(_action) = self.handle_threats(world, entity) {
-        //     // return Ok(action);
-        // }
+    pub fn tick(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, high_level_state: &HighLevelState, visible_tiles: &Vec<(Position, Tile)>) -> Result<(), SimulationError> {
+        // Update Q-table based on the outcome of the previous action
+        if let (Some(prev_state), Some(prev_goal)) = (self.prev_state.clone(), self.prev_goal.clone()) {
+            let reward = if self.is_goal_complete(world, entity, &prev_goal) {
+                10.0
+            } else {
+                -0.1
+            };
+            self.update_q_table(&prev_state, &prev_goal, reward, high_level_state)?;
+        }
+
+        self.update_mental_map(visible_tiles);
+        self.update_current_goal(world, entity, high_level_state)?;
+        self.choose_action_for_goal(world, spatial_map, entity, 0)?; // episode is not used anymore
+
+        // Store the current state and goal for the next tick's Q-table update
+        self.prev_state = Some(high_level_state.clone());
+        self.prev_goal = self.current_goal.clone();
+
+        Ok(())
+    }
+
+    fn update_mental_map(&mut self, visible_tiles: &Vec<(Position, Tile)>) {
+        for (pos, tile) in visible_tiles {
+            self.mental_map[pos.y as usize][pos.x as usize] = Some(MemoryTile {
+                tile: tile.clone(),
+            });
+        }
+    }
+
+    fn update_current_goal(&mut self, world: &World, entity: Entity, high_level_state: &HighLevelState) -> Result<(), SimulationError> {
+        if self.handle_threats(world, entity) {
+            self.goal_commitment_ticks = 5; // Commit to the threat response
+            return Ok(());
+        }
 
         if self.goal_commitment_ticks > 0 {
             self.goal_commitment_ticks -= 1;
         }
 
         if let Some(goal) = &self.current_goal {
-            if self.is_goal_complete(world, entity, goal) || !self.is_goal_valid(goal) {
+            if self.is_goal_complete(world, entity, goal) || !self.is_goal_valid(world, goal) {
                 self.current_goal = None;
                 self.current_path = None;
                 self.goal_commitment_ticks = 0;
@@ -157,74 +204,151 @@ impl Brain {
         }
 
         if self.current_goal.is_none() && self.goal_commitment_ticks == 0 {
-            self.current_goal = Some(self.choose_goal(high_level_state)?);
+            self.current_goal = Some(self.choose_goal(world, high_level_state)?);
             self.goal_commitment_ticks = 10; // Commit to the new goal for 10 ticks
         }
-
-        self.choose_action_for_goal(world, entity, current_episode)
+        Ok(())
     }
 
-    fn is_goal_valid(&self, goal: &Goal) -> bool {
+    fn is_goal_valid(&self, world: &World, goal: &Goal) -> bool {
         match goal {
             Goal::GatherResource(resource_name) => {
-                let resource_char = self.resource_name_to_char(resource_name);
-                self.mental_map.iter().any(|row| row.iter().any(|tile| tile.as_ref().map_or(false, |t| t.tile.tile_type == resource_char)))
+                for y in 0..self.mental_map.len() {
+                    for x in 0..self.mental_map[y].len() {
+                        if self.mental_map[y][x].is_some() {
+                            // This is not efficient, but it's a start.
+                            // A better approach would be to store resource locations in the mental map.
+                            for entity in 0..world.entities.len() {
+                                if let (Some(pos), Some(res)) = (
+                                    world.get_component::<Position>(entity),
+                                    world.get_component::<Resource>(entity),
+                                ) {
+                                    if pos.x == x as u32 && pos.y == y as u32 && res.name == *resource_name {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                false
             },
             _ => true,
         }
     }
 
-
-    fn choose_action_for_goal(&mut self, world: &mut World, entity: Entity, current_episode: u32) -> Result<(), SimulationError> {
-        if let Some(path) = &mut self.current_path {
-            if !path.is_empty() {
-                // let next_pos = path.remove(0);
-                // let _dx = next_pos.0 as i32 - player_pos.x as i32;
-                // let _dy = next_pos.1 as i32 - player_pos.y as i32;
-                // return Ok(Action::Move(if dx > 0 { Direction::Right } else if dx < 0 { Direction::Left } else if dy > 0 { Direction::Down } else { Direction::Up }));
-            } else {
-                self.current_path = None;
-            }
+    fn choose_action_for_goal(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, current_episode: u32) -> Result<(), SimulationError> {
+        if self.follow_path(world, entity) {
+            return Ok(()); // We have a move action, so we are done for this tick.
         }
 
         if let Some(goal) = self.current_goal.clone() {
             match goal {
-                Goal::GatherResource(resource_name) => self.execute_gather_goal(world, entity, &resource_name, current_episode)?,
+                Goal::GatherResource(resource_name) => self.execute_gather_goal(world, spatial_map, entity, &resource_name, current_episode)?,
                 Goal::CraftItem(item_name) => self.execute_craft_item_goal(world, entity, &item_name, current_episode)?,
                 Goal::Build(structure_name) => self.execute_build_goal(world, entity, &structure_name, current_episode)?,
-                _ => {}
+                Goal::Attack(target_id) => self.execute_attack_goal(world, entity, target_id, current_episode)?,
+                Goal::Flee => self.execute_flee_goal(world, entity, current_episode)?,
             }
         }
 
         Ok(())
     }
 
-    fn execute_gather_goal(&mut self, world: &mut World, entity: Entity, resource_name: &str, current_episode: u32) -> Result<(), SimulationError> {
-        let resource_char = self.resource_name_to_char(resource_name);
-        let player_pos = *world.get_component::<Position>(entity).unwrap();
-
-        // Find the target resource
-        let mut target_entity = None;
-        for e in 0..world.entities.len() {
-            if let Some(resource) = world.get_component::<super::components::Resource>(e) {
-                if resource.resource_type == resource_char {
-                    target_entity = Some(e);
-                    break;
+    fn follow_path(&mut self, world: &mut World, entity: Entity) -> bool {
+        if let Some(path) = &mut self.current_path {
+            if !path.is_empty() {
+                if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
+                    let next_pos = path.remove(0);
+                    let dx = next_pos.0 as i32 - player_pos.x as i32;
+                    let dy = next_pos.1 as i32 - player_pos.y as i32;
+                    world.add_component(entity, crate::components::Velocity { dx, dy });
+                    return true; // Moved along path
                 }
+            } else {
+                self.current_path = None;
+            }
+        }
+        false // Did not move along path
+    }
+
+    pub fn update_q_table(&mut self, prev_state: &HighLevelState, goal: &Goal, reward: f64, new_state: &HighLevelState) -> Result<(), SimulationError> {
+        let prev_state_key = serde_json::to_string(prev_state)?;
+        let new_state_key = serde_json::to_string(new_state)?;
+
+        let old_q_value = self.goal_q_table
+            .get(&prev_state_key)
+            .and_then(|q_values| q_values.get(goal))
+            .cloned()
+            .unwrap_or(0.0);
+
+        let max_future_q = self.goal_q_table
+            .get(&new_state_key)
+            .map(|q_values| {
+                q_values.values().cloned().max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal)).unwrap_or(0.0)
+            })
+            .unwrap_or(0.0);
+
+        let new_q_value = old_q_value + self.learning_rate * (reward + self.discount_factor * max_future_q - old_q_value);
+
+        self.goal_q_table
+            .entry(prev_state_key)
+            .or_default()
+            .insert(goal.clone(), new_q_value);
+
+        Ok(())
+    }
+
+    fn execute_gather_goal(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, resource_name: &str, _current_episode: u32) -> Result<(), SimulationError> {
+        let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) else {
+            return Ok(());
+        };
+
+        // Find the closest resource using the spatial map
+        let mut closest_target = None;
+        let mut min_dist = u32::MAX;
+
+        // Search in a spiral pattern around the player
+        for radius in 0..10 { // search radius
+            for i in -(radius as i32)..=(radius as i32) {
+                for j in -(radius as i32)..=(radius as i32) {
+                    if i.abs() != radius as i32 && j.abs() != radius as i32 {
+                        continue; // only check the perimeter of the search box
+                    }
+                    let search_x = (player_pos.x as i32 + i) as u32;
+                    let search_y = (player_pos.y as i32 + j) as u32;
+
+                    if let Some(entities_at_pos) = spatial_map.get(&(search_x, search_y)) {
+                        for &target_entity in entities_at_pos {
+                            if let Some(resource) = world.get_component::<super::components::Resource>(target_entity) {
+                                if resource.name == resource_name {
+                                    let dist = radius as u32;
+                                    if dist < min_dist {
+                                        min_dist = dist;
+                                        closest_target = Some(target_entity);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if closest_target.is_some() {
+                break; // Found a target in this radius, no need to search further
             }
         }
 
-        if let Some(target) = target_entity {
-            let target_pos = world.get_component::<Position>(target).unwrap();
-            let dx = (player_pos.x as i32 - target_pos.x as i32).abs();
-            let dy = (player_pos.y as i32 - target_pos.y as i32).abs();
+        if let Some(target) = closest_target {
+            if let Some(target_pos) = world.get_component::<Position>(target).map(|p| *p) {
+                let dx = (player_pos.x as i32 - target_pos.x as i32).abs();
+                let dy = (player_pos.y as i32 - target_pos.y as i32).abs();
 
-            if dx <= 1 && dy <= 1 {
-                world.add_component(entity, WantsToGather { target });
-            } else {
-                if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (target_pos.x, target_pos.y), &self.mental_map) {
-                    self.current_path = Some(path);
-                    return self.choose_action_for_goal(world, entity, current_episode);
+                if dx <= 1 && dy <= 1 {
+                    world.add_component(entity, WantsToGather { target });
+                } else if self.current_path.is_none() {
+                    if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (target_pos.x, target_pos.y), &self.mental_map) {
+                        self.current_path = Some(path);
+                    }
                 }
             }
         } else {
@@ -236,10 +360,12 @@ impl Brain {
         Ok(())
     }
 
-    fn execute_craft_item_goal(&mut self, world: &mut World, entity: Entity, item_name: &str, current_episode: u32) -> Result<(), SimulationError> {
+    fn execute_craft_item_goal(&mut self, world: &mut World, entity: Entity, item_name: &str, _current_episode: u32) -> Result<(), SimulationError> {
         let recipe = self.recipe_manager.get_required_resources(item_name, 1);
         let mut missing_resource = None;
-        let player = world.get_component::<Player>(entity).unwrap();
+        let Some(player) = world.get_component::<Player>(entity) else {
+            return Ok(());
+        };
 
         for (resource, &required_amount) in &recipe {
             if player.get_total_quantity(resource) < required_amount {
@@ -256,13 +382,12 @@ impl Brain {
             }
             // Set the new goal to gather the missing resource.
             self.current_goal = Some(Goal::GatherResource(resource));
-            return self.choose_action_for_goal(world, entity, current_episode);
         } else {
             // We have all the resources, so we can craft the item.
             self.current_goal = self.goal_stack.pop(); // Go back to the parent goal
             world.add_component(entity, WantsToCraft { item_name: item_name.to_string() });
-            Ok(())
         }
+        Ok(())
     }
 
     fn execute_build_goal(&mut self, world: &mut World, entity: Entity, structure_name: &str, _current_episode: u32) -> Result<(), SimulationError> {
@@ -270,14 +395,221 @@ impl Brain {
         Ok(())
     }
 
-    fn resource_name_to_char(&self, resource_name: &str) -> char {
-        match resource_name {
-            "wood" => 'T',
-            "stone" => 'R',
-            _ => 'X',
+
+    fn handle_threats(&mut self, world: &World, entity: Entity) -> bool {
+        let Some(health) = world.get_component::<crate::components::Health>(entity) else { return false; };
+        let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) else { return false; };
+
+        let hostile_players: Vec<_> = self.player_memories.iter()
+            .filter(|(_, mem)| mem.relationship == RelationshipStatus::Hostile)
+            .collect();
+
+        if !hostile_players.is_empty() {
+            if health.current < health.max / 2 {
+                self.current_goal = Some(Goal::Flee);
+                self.current_path = None; // Clear any existing path
+                return true;
+            } else {
+                let mut closest_threat = None;
+                let mut min_dist = u32::MAX;
+
+                for (&id, _) in hostile_players {
+                    if let Some(threat_pos) = world.get_component::<Position>(id as usize) {
+                        let dist = player_pos.x.abs_diff(threat_pos.x) + player_pos.y.abs_diff(threat_pos.y);
+                        if dist < min_dist {
+                            min_dist = dist;
+                            closest_threat = Some(id);
+                        }
+                    }
+                }
+
+                if let Some(id) = closest_threat {
+                    self.current_goal = Some(Goal::Attack(id));
+                    self.current_path = None;
+                    return true;
+                }
+            }
         }
+        false
     }
 
+    fn execute_attack_goal(&mut self, world: &mut World, entity: Entity, target_id: u32, _current_episode: u32) -> Result<(), SimulationError> {
+        // Simple attack logic: add WantsToAttack component
+        world.add_component(entity, crate::components::WantsToAttack { target: target_id as usize });
+        Ok(())
+    }
 
+    fn execute_flee_goal(&mut self, world: &mut World, entity: Entity, _current_episode: u32) -> Result<(), SimulationError> {
+        let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) else {
+            return Ok(());
+        };
 
+        let hostile_positions: Vec<_> = self.player_memories.iter()
+            .filter(|(_, mem)| mem.relationship == RelationshipStatus::Hostile)
+            .filter_map(|(&id, _)| world.get_component::<Position>(id as usize).cloned())
+            .collect();
+
+        if hostile_positions.is_empty() {
+            // No threats in memory, stop fleeing.
+            self.current_goal = None;
+            return Ok(());
+        }
+
+        let avg_threat_x = hostile_positions.iter().map(|p| p.x as f32).sum::<f32>() / hostile_positions.len() as f32;
+        let avg_threat_y = hostile_positions.iter().map(|p| p.y as f32).sum::<f32>() / hostile_positions.len() as f32;
+
+        let flee_vec_x = player_pos.x as f32 - avg_threat_x;
+        let flee_vec_y = player_pos.y as f32 - avg_threat_y;
+
+        let norm = (flee_vec_x.powi(2) + flee_vec_y.powi(2)).sqrt();
+        let flee_dx = if norm > 0.0 { (flee_vec_x / norm).round() as i32 } else { 0 };
+        let flee_dy = if norm > 0.0 { (flee_vec_y / norm).round() as i32 } else { 0 };
+
+        world.add_component(entity, crate::components::Velocity { dx: flee_dx, dy: flee_dy });
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ecs::World;
+    use crate::recipes::RecipeManager;
+    use crate::item::{ItemRegistry, Item};
+    use crate::player::Player;
+    use crate::components::Resource;
+    use std::sync::Arc;
+    use std::env;
+
+    fn create_test_brain() -> Brain {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/recipes.json", manifest_dir)));
+        Brain::new(recipe_manager, 0.1, 0.9, 0.1)
+    }
+
+    #[test]
+    fn test_choose_goal_randomly() {
+        let brain = create_test_brain();
+        let world = World::new();
+        let state = HighLevelState {
+            has_wood: false,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+        let goal = brain.choose_goal(&world, &state).unwrap();
+        assert!(brain.goals.contains(&goal));
+    }
+
+    #[test]
+    fn test_choose_goal_q_learning() {
+        let mut brain = create_test_brain();
+        let mut world = World::new();
+        brain.epsilon = 0.0; // Ensure Q-table is used
+
+        let resource_entity = world.create_entity();
+        world.add_component(resource_entity, Resource { name: "stone".to_string(), quantity: 5 });
+        world.add_component(resource_entity, Position { x: 1, y: 1 });
+        brain.mental_map[1][1] = Some(MemoryTile {
+            tile: Tile::new('s', "mountains".to_string()),
+        });
+
+        let state = HighLevelState {
+            has_wood: true,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+        let state_key = serde_json::to_string(&state).unwrap();
+        let mut q_values = HashMap::new();
+        q_values.insert(Goal::GatherResource("stone".to_string()), 10.0);
+        q_values.insert(Goal::CraftItem("stone_axe".to_string()), 5.0);
+        brain.goal_q_table.insert(state_key, q_values);
+
+        let chosen_goal = brain.choose_goal(&world, &state).unwrap();
+        assert_eq!(chosen_goal, Goal::GatherResource("stone".to_string()));
+    }
+
+    #[test]
+    fn test_is_goal_complete() {
+        let brain = create_test_brain();
+        let mut world = World::new();
+        let mut item_registry = ItemRegistry::new("items.json");
+        item_registry.items.insert("wood".to_string(), Item { name: "wood".to_string(), stackable: true, tool: false, properties: None });
+
+        let player_entity = world.create_entity();
+        let mut player = Player::new(0);
+        player.add_item("wood", 11, None, &item_registry);
+        world.add_component(player_entity, player);
+
+        let goal = Goal::GatherResource("wood".to_string());
+        assert!(brain.is_goal_complete(&world, player_entity, &goal));
+
+        let goal = Goal::GatherResource("stone".to_string());
+        assert!(!brain.is_goal_complete(&world, player_entity, &goal));
+    }
+
+    #[test]
+    fn test_mental_map() {
+        let mut brain = create_test_brain();
+        let mut world = World::new();
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, Position { x: 5, y: 5 });
+
+        let visible_tiles = vec![
+            (Position { x: 5, y: 5 }, Tile::new('.', "plains".to_string())),
+            (Position { x: 5, y: 6 }, Tile::new('T', "forest".to_string())),
+        ];
+
+        let resource_entity = world.create_entity();
+        world.add_component(resource_entity, Resource { name: "wood".to_string(), quantity: 5 });
+        world.add_component(resource_entity, Position { x: 5, y: 6 });
+
+        brain.update_mental_map(&visible_tiles);
+
+        assert!(brain.mental_map[5][5].is_some());
+        assert_eq!(brain.mental_map[5][5].as_ref().unwrap().tile.tile_type, '.');
+        assert!(brain.mental_map[6][5].is_some());
+        assert_eq!(brain.mental_map[6][5].as_ref().unwrap().tile.tile_type, 'T');
+
+        let goal = Goal::GatherResource("wood".to_string());
+        assert!(brain.is_goal_valid(&world, &goal));
+
+        let goal = Goal::GatherResource("stone".to_string());
+        assert!(!brain.is_goal_valid(&world, &goal));
+    }
+
+    #[test]
+    fn test_update_q_table() {
+        let mut brain = create_test_brain();
+        let prev_state = HighLevelState {
+            has_wood: false,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+        let goal = Goal::GatherResource("wood".to_string());
+        let reward = 10.0;
+        let new_state = HighLevelState {
+            has_wood: true,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+
+        brain.update_q_table(&prev_state, &goal, reward, &new_state).unwrap();
+
+        let prev_state_key = serde_json::to_string(&prev_state).unwrap();
+        let q_value = brain.goal_q_table.get(&prev_state_key).unwrap().get(&goal).unwrap();
+        assert_eq!(*q_value, 1.0); // 0 + 0.1 * (10 + 0.9 * 0 - 0) = 1.0
+    }
 }

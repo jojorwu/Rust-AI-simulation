@@ -49,9 +49,9 @@ pub struct WantsToPickup {}
 
 impl Component for WantsToPickup {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Resource {
-    pub resource_type: char,
+    pub name: String,
     pub quantity: u32,
 }
 

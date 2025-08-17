@@ -1,10 +1,14 @@
 // MAP SETTINGS
-pub const WIDTH: u32 = 20;
-pub const HEIGHT: u32 = 10;
+pub const WIDTH: u32 = 100;
+pub const HEIGHT: u32 = 100;
 
 // PLAYER/AI SETTINGS
-pub const NUM_PLAYERS: u32 = 2;
+pub const NUM_PLAYERS: u32 = 5;
 
 // TRAINING LOOP SETTINGS
 pub const EPISODES: u32 = 2000;
 pub const MAX_STEPS_PER_EPISODE: u32 = 200;
+
+// DAY/NIGHT CYCLE SETTINGS
+pub const DAY_LENGTH: u32 = 100;
+pub const NIGHT_LENGTH: u32 = 50;

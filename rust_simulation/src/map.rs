@@ -4,6 +4,8 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::error::Error;
 use super::player::Player;
+use std::collections::HashMap;
+use super::ecs::Entity;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Tile {
@@ -37,10 +39,9 @@ pub struct Biome {
     pub height_range: [f64; 2],
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Resource {
-    pub _name: String,
-    pub tile_type: char,
+    pub name: String,
     pub biomes: Vec<String>,
     pub density: f64,
 }
@@ -51,14 +52,15 @@ pub struct Map {
     pub grid: Vec<Vec<Tile>>,
     pub biomes: Vec<Biome>,
     pub resources: Vec<Resource>,
+    pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
 }
 
 impl Map {
-    pub fn new(width: u32, height: u32) -> Result<Self, Box<dyn Error>> {
-        let biomes_data = fs::read_to_string("biomes.json")?;
+    pub fn new(width: u32, height: u32, biomes_path: &str, resources_path: &str) -> Result<Self, Box<dyn Error>> {
+        let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
 
-        let resources_data = fs::read_to_string("resources.json")?;
+        let resources_data = fs::read_to_string(resources_path)?;
         let resources: Vec<Resource> = serde_json::from_str(&resources_data)?;
 
         let grid = vec![vec![Tile::new(' ', "none".to_string()); width as usize]; height as usize];
@@ -69,6 +71,7 @@ impl Map {
             grid,
             biomes,
             resources,
+            spatial_map: HashMap::new(),
         })
     }
 
@@ -128,12 +131,5 @@ impl Map {
             }
             println!();
         }
-    }
-
-    pub fn add_resource(&mut self, x: u32, y: u32, resource_type: char) {
-        let tile = &mut self.grid[y as usize][x as usize];
-        tile.tile_type = resource_type;
-        tile.original_tile_type = resource_type;
-        tile.remaining_resources = Some(5);
     }
 }
