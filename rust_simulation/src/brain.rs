@@ -11,6 +11,7 @@ use super::ecs::{World, Entity};
 use super::player::Player;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
+use std::fs;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
@@ -51,6 +52,8 @@ pub struct PlayerMemory {
 pub struct Brain {
     pub goals: Vec<Goal>,
     pub recipe_manager: Arc<RecipeManager>,
+    pub learning_rate: f64,
+    pub discount_factor: f64,
     pub epsilon: f64,
     pub goal_q_table: HashMap<String, HashMap<Goal, f64>>,
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
@@ -59,28 +62,47 @@ pub struct Brain {
     pub goal_stack: Vec<Goal>,
     pub current_path: Option<Vec<(u32, u32)>>,
     pub goal_commitment_ticks: u32,
+    pub prev_state: Option<HighLevelState>,
+    pub prev_goal: Option<Goal>,
 }
 
 impl Brain {
-    pub fn new(recipe_manager: Arc<RecipeManager>, epsilon: f64) -> Self {
+    pub fn new(recipe_manager: Arc<RecipeManager>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
         let goals = vec![
             Goal::GatherResource("wood".to_string()),
             Goal::GatherResource("stone".to_string()),
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
         ];
+
+        let goal_q_table = if let Ok(file) = fs::read_to_string("q_table.json") {
+            serde_json::from_str(&file).unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
+
         Brain {
             goals,
             recipe_manager,
+            learning_rate,
+            discount_factor,
             epsilon,
-            goal_q_table: HashMap::new(),
+            goal_q_table,
             mental_map: vec![vec![None; WIDTH as usize]; HEIGHT as usize],
             player_memories: HashMap::new(),
             current_goal: None,
             goal_stack: Vec::new(),
             current_path: None,
             goal_commitment_ticks: 0,
+            prev_state: None,
+            prev_goal: None,
         }
+    }
+
+    pub fn save_q_table(&self) -> Result<(), SimulationError> {
+        let json = serde_json::to_string_pretty(&self.goal_q_table)?;
+        fs::write("q_table.json", json)?;
+        Ok(())
     }
 
     pub fn choose_goal(&self, world: &World, state: &HighLevelState) -> Result<Goal, SimulationError> {
@@ -134,9 +156,25 @@ impl Brain {
     }
 
     pub fn tick(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, high_level_state: &HighLevelState, visible_tiles: &Vec<(Position, Tile)>) -> Result<(), SimulationError> {
+        // Update Q-table based on the outcome of the previous action
+        if let (Some(prev_state), Some(prev_goal)) = (self.prev_state.clone(), self.prev_goal.clone()) {
+            let reward = if self.is_goal_complete(world, entity, &prev_goal) {
+                10.0
+            } else {
+                -0.1
+            };
+            self.update_q_table(&prev_state, &prev_goal, reward, high_level_state)?;
+        }
+
         self.update_mental_map(visible_tiles);
         self.update_current_goal(world, entity, high_level_state)?;
-        self.choose_action_for_goal(world, spatial_map, entity, 0) // episode is not used anymore
+        self.choose_action_for_goal(world, spatial_map, entity, 0)?; // episode is not used anymore
+
+        // Store the current state and goal for the next tick's Q-table update
+        self.prev_state = Some(high_level_state.clone());
+        self.prev_goal = self.current_goal.clone();
+
+        Ok(())
     }
 
     fn update_mental_map(&mut self, visible_tiles: &Vec<(Position, Tile)>) {
@@ -232,6 +270,33 @@ impl Brain {
             }
         }
         false // Did not move along path
+    }
+
+    pub fn update_q_table(&mut self, prev_state: &HighLevelState, goal: &Goal, reward: f64, new_state: &HighLevelState) -> Result<(), SimulationError> {
+        let prev_state_key = serde_json::to_string(prev_state)?;
+        let new_state_key = serde_json::to_string(new_state)?;
+
+        let old_q_value = self.goal_q_table
+            .get(&prev_state_key)
+            .and_then(|q_values| q_values.get(goal))
+            .cloned()
+            .unwrap_or(0.0);
+
+        let max_future_q = self.goal_q_table
+            .get(&new_state_key)
+            .map(|q_values| {
+                q_values.values().cloned().max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal)).unwrap_or(0.0)
+            })
+            .unwrap_or(0.0);
+
+        let new_q_value = old_q_value + self.learning_rate * (reward + self.discount_factor * max_future_q - old_q_value);
+
+        self.goal_q_table
+            .entry(prev_state_key)
+            .or_default()
+            .insert(goal.clone(), new_q_value);
+
+        Ok(())
     }
 
     fn execute_gather_goal(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, resource_name: &str, _current_episode: u32) -> Result<(), SimulationError> {
@@ -418,7 +483,7 @@ mod tests {
 
     fn create_test_brain() -> Brain {
         let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
-        Brain::new(recipe_manager, 0.1)
+        Brain::new(recipe_manager, 0.1, 0.9, 0.1)
     }
 
     #[test]
@@ -515,5 +580,34 @@ mod tests {
 
         let goal = Goal::GatherResource("stone".to_string());
         assert!(!brain.is_goal_valid(&world, &goal));
+    }
+
+    #[test]
+    fn test_update_q_table() {
+        let mut brain = create_test_brain();
+        let prev_state = HighLevelState {
+            has_wood: false,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+        let goal = Goal::GatherResource("wood".to_string());
+        let reward = 10.0;
+        let new_state = HighLevelState {
+            has_wood: true,
+            has_stone: false,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+        };
+
+        brain.update_q_table(&prev_state, &goal, reward, &new_state).unwrap();
+
+        let prev_state_key = serde_json::to_string(&prev_state).unwrap();
+        let q_value = brain.goal_q_table.get(&prev_state_key).unwrap().get(&goal).unwrap();
+        assert_eq!(*q_value, 1.0); // 0 + 0.1 * (10 + 0.9 * 0 - 0) = 1.0
     }
 }

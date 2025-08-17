@@ -43,7 +43,7 @@ impl Game {
             world.add_component(player, Player::new(i as u32));
             world.add_component(player, Position { x: 0, y: 0 });
             world.add_component(player, crate::components::Health { current: 100, max: 100 });
-            brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&recipe_manager), 1.0))));
+            brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0))));
         }
 
         Game {
@@ -147,6 +147,9 @@ impl Game {
         }
 
         println!("--- Training Finished ---");
+        for brain in &self.brains {
+            brain.lock().unwrap().save_q_table()?;
+        }
         Ok(())
     }
 
