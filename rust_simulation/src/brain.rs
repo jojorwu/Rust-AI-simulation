@@ -178,10 +178,12 @@ impl Brain {
     fn choose_action_for_goal(&mut self, world: &mut World, entity: Entity, current_episode: u32) -> Result<(), SimulationError> {
         if let Some(path) = &mut self.current_path {
             if !path.is_empty() {
-                // let next_pos = path.remove(0);
-                // let _dx = next_pos.0 as i32 - player_pos.x as i32;
-                // let _dy = next_pos.1 as i32 - player_pos.y as i32;
-                // return Ok(Action::Move(if dx > 0 { Direction::Right } else if dx < 0 { Direction::Left } else if dy > 0 { Direction::Down } else { Direction::Up }));
+                let next_pos = path.remove(0);
+                let player_pos = *world.get_component::<Position>(entity).unwrap();
+                let dx = next_pos.0 as i32 - player_pos.x as i32;
+                let dy = next_pos.1 as i32 - player_pos.y as i32;
+                world.add_component(entity, crate::components::Velocity { dx, dy });
+                return Ok(()); // We have a move action, so we are done for this tick.
             } else {
                 self.current_path = None;
             }
