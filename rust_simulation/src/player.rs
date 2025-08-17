@@ -2,6 +2,7 @@ const INVENTORY_SLOTS: usize = 6;
 
 use serde::{Serialize, Deserialize};
 use super::item::ItemRegistry;
+use super::map::MentalMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Slot {
@@ -15,15 +16,17 @@ pub struct Slot {
 pub struct Player {
     pub _held_item: Option<String>,
     pub inventory: Vec<Option<Slot>>,
+    pub mental_map: MentalMap,
 }
 
 use std::collections::HashMap;
 
 impl Player {
-    pub fn new(_id: u32) -> Self {
+    pub fn new(_id: u32, map_width: u32, map_height: u32) -> Self {
         Player {
             _held_item: None,
             inventory: vec![None; INVENTORY_SLOTS],
+            mental_map: MentalMap::new(map_width, map_height),
         }
     }
 

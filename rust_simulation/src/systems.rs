@@ -3,9 +3,42 @@ use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraf
 use crate::player::Player;
 use crate::recipes::RecipeManager;
 use crate::item::ItemRegistry;
-use crate::map::Map;
+use crate::map::{Map, TileState};
 use crate::events::{EventBus, Event};
+use crate::fov;
 use std::sync::{Arc, Mutex};
+
+pub fn visibility_system(world: &mut World, map: &Map) {
+    for entity in 0..world.entities.len() {
+        // We need both a position and a player component.
+        // We can't get mutable access to player and then immutable access to position in the same loop iteration easily.
+        // So we get the position first.
+        let player_pos = match world.get_component::<Position>(entity) {
+            Some(pos) => *pos,
+            None => continue,
+        };
+
+        if let Some(player) = world.get_component_mut::<Player>(entity) {
+            // Step 1: Set all currently visible tiles to explored.
+            for y in 0..player.mental_map.height {
+                for x in 0..player.mental_map.width {
+                    if player.mental_map.grid[y as usize][x as usize] == TileState::Visible {
+                        player.mental_map.grid[y as usize][x as usize] = TileState::Explored;
+                    }
+                }
+            }
+
+            // Step 2: Calculate the new field of view.
+            const FOV_RADIUS: i32 = 8;
+            let visible_tiles = fov::field_of_view(&player_pos, FOV_RADIUS, map);
+
+            // Step 3: Mark all tiles in the FOV as visible.
+            for pos in visible_tiles.iter() {
+                player.mental_map.grid[pos.y as usize][pos.x as usize] = TileState::Visible;
+            }
+        }
+    }
+}
 
 pub fn movement_system(world: &mut World) {
     for entity in 0..world.entities.len() {

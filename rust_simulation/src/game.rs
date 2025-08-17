@@ -7,9 +7,10 @@ use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
 use super::components::Position;
 use super::events::EventBus;
-use super::systems::{movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system};
+use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system};
 use std::sync::{Arc, Mutex};
 use tokio::task;
+use crate::fov;
 
 use rand::Rng;
 
@@ -46,7 +47,7 @@ impl Game {
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
-            world.add_component(player, Player::new(i as u32));
+            world.add_component(player, Player::new(i as u32, map.width, map.height));
             world.add_component(player, Position { x: 0, y: 0 });
             world.add_component(player, crate::components::Health { current: 100, max: 100 });
             brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0))));
@@ -143,6 +144,12 @@ impl Game {
         self.setup_new_map();
         self.find_and_set_valid_start_positions();
 
+        // Run visibility system once for the initial view
+        {
+            let mut world = self.world.lock().expect("Failed to lock world");
+            visibility_system(&mut world, &self.map);
+        }
+
         println!("Initial Map:");
         self.map.display(&self.world.lock().expect("Failed to lock world"));
 
@@ -221,22 +228,18 @@ impl Game {
     }
 
     fn get_visible_tiles(&self, pos: &Position, is_day: bool) -> Vec<(Position, Tile)> {
-        let mut visible_tiles = Vec::new();
-        let radius = if is_day { 2 } else { 1 };
-        for y in (pos.y as i32 - radius)..=(pos.y as i32 + radius) {
-            for x in (pos.x as i32 - radius)..=(pos.x as i32 + radius) {
-                if x >= 0 && y >= 0 && x < self.map.width as i32 && y < self.map.height as i32 {
-                    let position = Position { x: x as u32, y: y as u32 };
-                    let tile = self.map.grid[y as usize][x as usize].clone();
-                    visible_tiles.push((position, tile));
-                }
-            }
-        }
-        visible_tiles
+        let radius = if is_day { 8 } else { 4 }; // Use a larger radius for day
+        let visible_positions = fov::field_of_view(pos, radius, &self.map);
+
+        visible_positions.iter().map(|position| {
+            let tile = self.map.grid[position.y as usize][position.x as usize].clone();
+            (*position, tile)
+        }).collect()
     }
 
     fn run_systems(&mut self) {
         let mut world = self.world.lock().expect("Failed to lock world");
+        visibility_system(&mut world, &self.map);
         movement_system(&mut world);
         gathering_system(&mut world, &self.item_registry);
         crafting_system(&mut world, &self.recipe_manager, &self.item_registry);
@@ -300,11 +303,23 @@ mod tests {
 
     #[test]
     fn test_get_visible_tiles() {
-        let game = create_test_game();
-        let pos = Position { x: 5, y: 5 };
-        let visible_tiles_day = game.get_visible_tiles(&pos, true);
-        assert_eq!(visible_tiles_day.len(), 25); // 5x5 area
-        let visible_tiles_night = game.get_visible_tiles(&pos, false);
-        assert_eq!(visible_tiles_night.len(), 9); // 3x3 area
+        // Create a game with a blank map (no walls) to make the test deterministic.
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let mut game = Game::new(
+            &format!("{}/biomes.json", manifest_dir),
+            &format!("{}/resources.json", manifest_dir),
+            &format!("{}/items.json", manifest_dir),
+            &format!("{}/recipes.json", manifest_dir),
+        );
+        game.map.grid = vec![vec![Tile::new('.', "plains".to_string()); 100]; 100];
+
+
+        let pos = Position { x: 50, y: 50 }; // Use center of map to avoid edge effects
+
+        let visible_tiles_day = game.get_visible_tiles(&pos, true); // radius = 8
+        assert_eq!(visible_tiles_day.len(), 197);
+
+        let visible_tiles_night = game.get_visible_tiles(&pos, false); // radius = 4
+        assert_eq!(visible_tiles_night.len(), 49);
     }
 }

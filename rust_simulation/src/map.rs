@@ -7,6 +7,30 @@ use super::player::Player;
 use std::collections::HashMap;
 use super::ecs::Entity;
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum TileState {
+    Unseen,
+    Explored,
+    Visible,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MentalMap {
+    pub width: u32,
+    pub height: u32,
+    pub grid: Vec<Vec<TileState>>,
+}
+
+impl MentalMap {
+    pub fn new(width: u32, height: u32) -> Self {
+        MentalMap {
+            width,
+            height,
+            grid: vec![vec![TileState::Unseen; width as usize]; height as usize],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Tile {
     pub tile_type: char,
@@ -107,29 +131,56 @@ impl Map {
     }
 
     pub fn display(&self, world: &super::ecs::World) {
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let mut entity_on_tile = None;
-                for entity in 0..world.entities.len() {
-                    if let Some(pos) = world.get_component::<super::components::Position>(entity) {
-                        if pos.x == x && pos.y == y {
-                            entity_on_tile = Some(entity);
-                            break;
+        // For multi-player, we'd need to specify which player's map to show.
+        // For now, we'll just find the first entity with a Player component.
+        let player_entity = (0..world.entities.len()).find(|&e| world.get_component::<Player>(e).is_some());
+
+        if let Some(player_entity) = player_entity {
+            if let Some(player) = world.get_component::<Player>(player_entity) {
+                let mental_map = &player.mental_map;
+
+                for y in 0..self.height {
+                    for x in 0..self.width {
+                        let tile_state = mental_map.grid[y as usize][x as usize];
+                        match tile_state {
+                            TileState::Unseen => print!("  "), // Two spaces for alignment
+                            TileState::Explored => {
+                                print!("\x1b[90m{} \x1b[0m", self.grid[y as usize][x as usize].tile_type); // Dim gray color
+                            }
+                            TileState::Visible => {
+                                let mut entity_on_tile = None;
+                                for entity in 0..world.entities.len() {
+                                    if let Some(pos) = world.get_component::<super::components::Position>(entity) {
+                                        if pos.x == x && pos.y == y {
+                                            entity_on_tile = Some(entity);
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if let Some(entity) = entity_on_tile {
+                                    if world.get_component::<Player>(entity).is_some() {
+                                        print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
+                                    } else {
+                                        print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
+                                    }
+                                } else {
+                                    print!("\x1b[97m{} \x1b[0m", self.grid[y as usize][x as usize].tile_type); // Bright White
+                                }
+                            }
                         }
                     }
-                }
-
-                if let Some(entity) = entity_on_tile {
-                    if world.get_component::<Player>(entity).is_some() {
-                        print!("P ");
-                    } else {
-                        print!("E ");
-                    }
-                } else {
-                    print!("{} ", self.grid[y as usize][x as usize].tile_type);
+                    println!();
                 }
             }
-            println!();
+        } else {
+            // Fallback if no player is found (e.g., during setup or for debugging)
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    print!("{} ", self.grid[y as usize][x as usize].tile_type);
+                }
+                println!();
+            }
         }
     }
 }

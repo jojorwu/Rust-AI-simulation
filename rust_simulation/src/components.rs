@@ -1,9 +1,23 @@
 use crate::ecs::{Component, Entity};
+use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct Position {
     pub x: u32,
     pub y: u32,
+}
+
+impl Hash for Position {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.x.hash(state);
+        self.y.hash(state);
+    }
+}
+
+impl PartialEq for Position {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y
+    }
 }
 
 impl Component for Position {}

@@ -12,6 +12,7 @@ mod config;
 mod recipes;
 mod errors;
 mod events;
+mod fov;
 
 use game::Game;
 use std::error::Error;

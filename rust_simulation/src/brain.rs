@@ -543,7 +543,7 @@ mod tests {
         item_registry.items.insert("wood".to_string(), Item { name: "wood".to_string(), stackable: true, tool: false, properties: None });
 
         let player_entity = world.create_entity();
-        let mut player = Player::new(0);
+        let mut player = Player::new(0, 100, 100);
         player.add_item("wood", 11, None, &item_registry);
         world.add_component(player_entity, player);
 
