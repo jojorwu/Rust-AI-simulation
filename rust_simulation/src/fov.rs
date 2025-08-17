@@ -31,7 +31,7 @@ fn scan(
     if row > radius { return; }
 
     let mut prev_tile_was_wall = false;
-    let mut last_col = -1;
+    let last_col = -1;
 
     for col in 0..=row {
         if last_col != -1 && col < last_col { continue; }

@@ -12,6 +12,7 @@ use super::player::Player;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 use std::fs;
+use std::env;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
@@ -76,7 +77,9 @@ impl Brain {
             Goal::Build("foundation".to_string()),
         ];
 
-        let goal_q_table = if let Ok(file) = fs::read_to_string("rust_simulation/q_table.json") {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let q_table_path = std::path::Path::new(manifest_dir).join("../q_table.json");
+        let goal_q_table = if let Ok(file) = fs::read_to_string(q_table_path) {
             serde_json::from_str(&file).unwrap_or_default()
         } else {
             HashMap::new()
@@ -102,8 +105,10 @@ impl Brain {
     }
 
     pub fn save_q_table(&self) -> Result<(), SimulationError> {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let q_table_path = std::path::Path::new(manifest_dir).join("../q_table.json");
         let json = serde_json::to_string_pretty(&self.goal_q_table)?;
-        fs::write("rust_simulation/q_table.json", json)?;
+        fs::write(q_table_path, json)?;
         Ok(())
     }
 

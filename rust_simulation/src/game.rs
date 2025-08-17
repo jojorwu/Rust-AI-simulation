@@ -10,6 +10,7 @@ use super::events::EventBus;
 use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system};
 use std::sync::{Arc, Mutex};
 use crate::fov;
+use std::env;
 
 use rand::Rng;
 
@@ -52,7 +53,7 @@ impl Game {
             brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0))));
         }
 
-        Game {
+        let mut game = Game {
             map,
             world: Arc::new(Mutex::new(world)),
             brains,
@@ -60,7 +61,12 @@ impl Game {
             recipe_manager,
             event_bus,
             tick_count: 0,
-        }
+        };
+
+        game.setup_new_map();
+        game.find_and_set_valid_start_positions();
+
+        game
     }
 
     fn find_and_set_valid_start_positions(&mut self) {
@@ -140,8 +146,6 @@ impl Game {
 
     pub fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
-        self.setup_new_map();
-        self.find_and_set_valid_start_positions();
 
         // Run visibility system once for the initial view
         {
@@ -266,6 +270,47 @@ impl Game {
                 }
             }
         }
+    }
+
+    pub fn new_generation(&mut self) -> Result<(), SimulationError> {
+        println!("--- Wiping and creating a new generation ---");
+
+        // Delete the old Q-table to ensure a fresh start
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let q_table_path = std::path::Path::new(manifest_dir).join("../q_table.json");
+        if std::fs::remove_file(q_table_path).is_ok() {
+            println!("Removed old q_table.json");
+        }
+
+        // 1. Reset core game state
+        self.tick_count = 0;
+        self.event_bus = Arc::new(Mutex::new(EventBus::new()));
+
+        // 2. Create a new World and re-initialize brains
+        let mut world = World::new();
+        let mut brains = Vec::new();
+
+        for i in 0..NUM_PLAYERS {
+            let player = world.create_entity();
+            world.add_component(player, Player::new(i as u32, self.map.width, self.map.height));
+            world.add_component(player, Position { x: 0, y: 0 });
+            world.add_component(player, crate::components::Health { current: 100, max: 100 });
+            // This will create a new brain, which will either load a q-table or start fresh
+            brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&self.recipe_manager), 0.1, 0.9, 1.0))));
+        }
+
+        self.world = Arc::new(Mutex::new(world));
+        self.brains = brains;
+
+        // 3. Generate a new map and place resources
+        self.setup_new_map();
+
+        // 4. Set starting positions for players
+        self.find_and_set_valid_start_positions();
+
+        println!("--- New generation is ready ---");
+
+        Ok(())
     }
 }
 
