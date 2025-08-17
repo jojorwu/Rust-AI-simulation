@@ -416,4 +416,39 @@ mod tests {
             assert_eq!(visible_count, 49, "Visible tiles on a clear night");
         }
     }
+
+    #[test]
+    fn test_trees_block_vision() {
+        let mut game = create_test_game();
+        let player_entity = 0;
+        let player_pos = Position { x: 50, y: 50 };
+        let tree_pos = Position { x: 51, y: 51 };
+        let target_pos = Position { x: 52, y: 52 };
+
+        // Set player position
+        {
+            let mut world = game.world.lock().unwrap();
+            if let Some(pos) = world.get_component_mut::<Position>(player_entity) {
+                *pos = player_pos;
+            }
+        }
+
+        // --- Test with tree blocking vision ---
+        game.map.grid = vec![vec![Tile::new('.', "plains".to_string()); 100]; 100];
+        game.map.grid[tree_pos.y as usize][tree_pos.x as usize].tile_type = 'T'; // Place a tree
+
+        let visible_tiles = game.get_visible_tiles(&player_pos, true);
+        let visible_positions: std::collections::HashSet<Position> = visible_tiles.into_iter().map(|(p, _)| p).collect();
+
+        assert!(visible_positions.contains(&tree_pos), "Tree should be visible");
+        assert!(!visible_positions.contains(&target_pos), "Tile behind tree should not be visible");
+
+        // --- Test without tree ---
+        game.map.grid[tree_pos.y as usize][tree_pos.x as usize].tile_type = '.'; // Remove the tree
+
+        let visible_tiles_no_tree = game.get_visible_tiles(&player_pos, true);
+        let visible_positions_no_tree: std::collections::HashSet<Position> = visible_tiles_no_tree.into_iter().map(|(p, _)| p).collect();
+
+        assert!(visible_positions_no_tree.contains(&target_pos), "Tile should be visible without tree");
+    }
 }

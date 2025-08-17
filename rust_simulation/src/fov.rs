@@ -81,7 +81,8 @@ fn is_opaque(pos: Position, map: &Map) -> bool {
     if pos.x >= map.width || pos.y >= map.height {
         return true;
     }
-    map.grid[pos.y as usize][pos.x as usize].tile_type == '#'
+    let tile_type = map.grid[pos.y as usize][pos.x as usize].tile_type;
+    tile_type == '#' || tile_type == 'f' || tile_type == 'T'
 }
 
 fn transform_octant(x: i32, y: i32, octant: u8) -> (i32, i32) {
