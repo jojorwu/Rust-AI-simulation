@@ -66,6 +66,17 @@ impl Game {
         game.setup_new_map();
         game.find_and_set_valid_start_positions();
 
+        // Initial population of the spatial map
+        {
+            let world = game.world.lock().unwrap();
+            game.map.spatial_map.clear();
+            for &entity in &world.entities {
+                if let Some(pos) = world.get_component::<Position>(entity) {
+                    game.map.spatial_map.entry((pos.x, pos.y)).or_default().push(entity);
+                }
+            }
+        }
+
         game
     }
 
@@ -150,7 +161,7 @@ impl Game {
         // Run visibility system once for the initial view
         {
             let mut world = self.world.lock().expect("Failed to lock world");
-            visibility_system(&mut world, &self.map);
+            visibility_system(&mut world, &self.map, self.is_day());
         }
 
         for episode in 0..EPISODES {
@@ -241,14 +252,14 @@ impl Game {
 
     fn run_systems(&mut self) {
         let mut world = self.world.lock().expect("Failed to lock world");
-        visibility_system(&mut world, &self.map);
-        movement_system(&mut world);
+        visibility_system(&mut world, &self.map, self.is_day());
+        movement_system(&mut world, &mut self.map);
         gathering_system(&mut world, &self.item_registry);
         crafting_system(&mut world, &self.recipe_manager, &self.item_registry);
         building_system(&mut world, &mut self.map);
         combat_system(&mut world, &self.event_bus);
-        pickup_system(&mut world, &self.item_registry);
-        death_system(&mut world, &self.event_bus);
+        pickup_system(&mut world, &self.item_registry, &mut self.map);
+        death_system(&mut world, &self.event_bus, &mut self.map);
     }
 
     fn respawn_resources(&mut self, current_episode: u32) {
@@ -317,6 +328,7 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::map::TileState;
     use std::env;
 
     fn create_test_game() -> Game {
@@ -364,5 +376,44 @@ mod tests {
 
         let visible_tiles_night = game.get_visible_tiles(&pos, false); // radius = 4
         assert_eq!(visible_tiles_night.len(), 49);
+    }
+
+    #[test]
+    fn test_visibility_system_day_night() {
+        let mut game = create_test_game();
+        // Create a blank map for deterministic results
+        game.map.grid = vec![vec![Tile::new('.', "plains".to_string()); 100]; 100];
+        let player_entity = 0;
+
+        {
+            let mut world = game.world.lock().unwrap();
+            // Set player position to the center for predictable FOV
+            if let Some(pos) = world.get_component_mut::<Position>(player_entity) {
+                pos.x = 50;
+                pos.y = 50;
+            }
+        }
+
+        // --- Test Day ---
+        game.tick_count = 0; // Day time
+        {
+            let mut world = game.world.lock().unwrap();
+            visibility_system(&mut world, &game.map, game.is_day());
+
+            let player = world.get_component::<Player>(player_entity).unwrap();
+            let visible_count = player.mental_map.grid.iter().flatten().filter(|&&s| s == TileState::Visible).count();
+            assert_eq!(visible_count, 197, "Visible tiles on a clear day");
+        }
+
+        // --- Test Night ---
+        game.tick_count = DAY_LENGTH; // Night time
+        {
+            let mut world = game.world.lock().unwrap();
+            visibility_system(&mut world, &game.map, game.is_day());
+
+            let player = world.get_component::<Player>(player_entity).unwrap();
+            let visible_count = player.mental_map.grid.iter().flatten().filter(|&&s| s == TileState::Visible).count();
+            assert_eq!(visible_count, 49, "Visible tiles on a clear night");
+        }
     }
 }

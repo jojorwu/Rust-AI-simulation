@@ -84,18 +84,9 @@ impl Map {
         println!("\n--- Observer Map ---");
         for y in 0..self.height {
             for x in 0..self.width {
-                let mut entity_on_tile = None;
-                // This is inefficient, but shared with the other display function.
-                for entity in 0..world.entities.len() {
-                    if let Some(pos) = world.get_component::<super::components::Position>(entity) {
-                        if pos.x == x && pos.y == y {
-                            entity_on_tile = Some(entity);
-                            break;
-                        }
-                    }
-                }
+                let entity_on_tile = self.spatial_map.get(&(x, y)).and_then(|v| v.first());
 
-                if let Some(entity) = entity_on_tile {
+                if let Some(&entity) = entity_on_tile {
                     if world.get_component::<Player>(entity).is_some() {
                         print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
                     } else {
@@ -192,17 +183,9 @@ impl Map {
                                 print!("\x1b[90m{} \x1b[0m", self.grid[y as usize][x as usize].tile_type); // Dim gray color
                             }
                             TileState::Visible => {
-                                let mut entity_on_tile = None;
-                                for entity in 0..world.entities.len() {
-                                    if let Some(pos) = world.get_component::<super::components::Position>(entity) {
-                                        if pos.x == x && pos.y == y {
-                                            entity_on_tile = Some(entity);
-                                            break;
-                                        }
-                                    }
-                                }
+                                let entity_on_tile = self.spatial_map.get(&(x, y)).and_then(|v| v.first());
 
-                                if let Some(entity) = entity_on_tile {
+                                if let Some(&entity) = entity_on_tile {
                                     if world.get_component::<Player>(entity).is_some() {
                                         print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
                                     } else {

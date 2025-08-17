@@ -8,7 +8,7 @@ use crate::events::{EventBus, Event};
 use crate::fov;
 use std::sync::{Arc, Mutex};
 
-pub fn visibility_system(world: &mut World, map: &Map) {
+pub fn visibility_system(world: &mut World, map: &Map, is_day: bool) {
     for entity in 0..world.entities.len() {
         // We need both a position and a player component.
         // We can't get mutable access to player and then immutable access to position in the same loop iteration easily.
@@ -29,8 +29,8 @@ pub fn visibility_system(world: &mut World, map: &Map) {
             }
 
             // Step 2: Calculate the new field of view.
-            const FOV_RADIUS: i32 = 8;
-            let visible_tiles = fov::field_of_view(&player_pos, FOV_RADIUS, map);
+            let fov_radius = if is_day { 8 } else { 4 };
+            let visible_tiles = fov::field_of_view(&player_pos, fov_radius, map);
 
             // Step 3: Mark all tiles in the FOV as visible.
             for pos in visible_tiles.iter() {
@@ -40,24 +40,27 @@ pub fn visibility_system(world: &mut World, map: &Map) {
     }
 }
 
-pub fn movement_system(world: &mut World) {
-    for entity in 0..world.entities.len() {
-        let (dx, dy) = if let Some(vel) = world.get_component::<Velocity>(entity) {
-            (vel.dx, vel.dy)
-        } else {
-            (0, 0)
-        };
+pub fn movement_system(world: &mut World, map: &mut Map) {
+    let entities_with_velocity: Vec<_> = world.entities.iter().filter_map(|&entity| {
+        world.get_component::<Velocity>(entity).map(|vel| (entity, *vel))
+    }).collect();
 
-        if dx != 0 || dy != 0 {
-            if let Some(pos) = world.get_component_mut::<Position>(entity) {
-                pos.x = (pos.x as i32 + dx) as u32;
-                pos.y = (pos.y as i32 + dy) as u32;
-            }
+    for (entity, vel) in entities_with_velocity {
+        if let Some(pos) = world.get_component_mut::<Position>(entity) {
+            // Remove from old position in spatial map
+            map.spatial_map.entry((pos.x, pos.y)).and_modify(|v| v.retain(|&e| e != entity));
+
+            pos.x = (pos.x as i32 + vel.dx) as u32;
+            pos.y = (pos.y as i32 + vel.dy) as u32;
+
+            // Add to new position in spatial map
+            map.spatial_map.entry((pos.x, pos.y)).or_default().push(entity);
         }
     }
 
     // Reset velocities
-    for entity in 0..world.entities.len() {
+    let entities_with_velocity: Vec<_> = world.entities.iter().copied().collect();
+    for entity in entities_with_velocity {
         world.remove_component::<Velocity>(entity);
     }
 }
@@ -196,9 +199,9 @@ pub fn combat_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
     }
 }
 
-pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry) {
+pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry, map: &mut Map) {
     let mut to_pickup = Vec::new();
-    for entity in 0..world.entities.len() {
+    for entity in world.entities.clone() {
         if world.get_component::<WantsToPickup>(entity).is_some() {
             to_pickup.push(entity);
         }
@@ -209,16 +212,15 @@ pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry) {
             let mut items_to_remove = Vec::new();
             let mut items_to_add = Vec::new();
 
-            for (i, entity) in (0..world.entities.len()).zip(world.entities.iter()) {
-                if let Some(item) = world.get_component::<DroppedItem>(*entity) {
-                    if let Some(item_pos) = world.get_component::<Position>(*entity) {
-                        if item_pos.x == picker_upper_pos.x && item_pos.y == picker_upper_pos.y {
-                            items_to_add.push((picker_upper, item.clone()));
-                            items_to_remove.push(i);
-                        }
+            if let Some(entities_on_tile) = map.spatial_map.get(&(picker_upper_pos.x, picker_upper_pos.y)) {
+                for &entity in entities_on_tile {
+                    if let Some(item) = world.get_component::<DroppedItem>(entity) {
+                        items_to_add.push((picker_upper, item.clone()));
+                        items_to_remove.push(entity);
                     }
                 }
             }
+
 
             for (picker_upper, item) in items_to_add {
                 if let Some(player) = world.get_component_mut::<Player>(picker_upper) {
@@ -226,25 +228,31 @@ pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry) {
                 }
             }
 
-            for i in items_to_remove.iter().rev() {
-                world.remove_entity(*i);
+            for entity in items_to_remove.iter() {
+                if let Some(pos) = world.get_component::<Position>(*entity) {
+                    map.spatial_map.entry((pos.x, pos.y)).and_modify(|v| v.retain(|&e| e != *entity));
+                }
+                world.remove_entity(*entity);
             }
         }
     }
 
     // Reset wants to pickup
-    for entity in 0..world.entities.len() {
+    for entity in world.entities.clone() {
         world.remove_component::<WantsToPickup>(entity);
     }
 }
 
-pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
+pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>, map: &mut Map) {
     let events = event_bus.lock().expect("Failed to lock event bus").take_events();
     for event in events {
         match event {
             Event::EntityDied(entity) => {
-                // Turn the dead entity into a dropped item (meat)
-                if world.get_component::<Position>(entity).is_some() {
+                if let Some(pos) = world.get_component::<Position>(entity) {
+                    // Remove from spatial map
+                    map.spatial_map.entry((pos.x, pos.y)).and_modify(|v| v.retain(|&e| e != entity));
+
+                    // Turn the dead entity into a dropped item (meat)
                     world.add_component(entity, DroppedItem {
                         item_name: "meat".to_string(),
                         quantity: 1,
