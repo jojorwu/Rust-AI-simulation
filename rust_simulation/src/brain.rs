@@ -75,7 +75,7 @@ impl Brain {
             Goal::Build("foundation".to_string()),
         ];
 
-        let goal_q_table = if let Ok(file) = fs::read_to_string("q_table.json") {
+        let goal_q_table = if let Ok(file) = fs::read_to_string("rust_simulation/q_table.json") {
             serde_json::from_str(&file).unwrap_or_default()
         } else {
             HashMap::new()
@@ -101,7 +101,7 @@ impl Brain {
 
     pub fn save_q_table(&self) -> Result<(), SimulationError> {
         let json = serde_json::to_string_pretty(&self.goal_q_table)?;
-        fs::write("q_table.json", json)?;
+        fs::write("rust_simulation/q_table.json", json)?;
         Ok(())
     }
 
@@ -480,9 +480,11 @@ mod tests {
     use crate::player::Player;
     use crate::components::Resource;
     use std::sync::Arc;
+    use std::env;
 
     fn create_test_brain() -> Brain {
-        let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/recipes.json", manifest_dir)));
         Brain::new(recipe_manager, 0.1, 0.9, 0.1)
     }
 

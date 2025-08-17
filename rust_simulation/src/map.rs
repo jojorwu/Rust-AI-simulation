@@ -56,11 +56,11 @@ pub struct Map {
 }
 
 impl Map {
-    pub fn new(width: u32, height: u32) -> Result<Self, Box<dyn Error>> {
-        let biomes_data = fs::read_to_string("biomes.json")?;
+    pub fn new(width: u32, height: u32, biomes_path: &str, resources_path: &str) -> Result<Self, Box<dyn Error>> {
+        let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
 
-        let resources_data = fs::read_to_string("resources.json")?;
+        let resources_data = fs::read_to_string(resources_path)?;
         let resources: Vec<Resource> = serde_json::from_str(&resources_data)?;
 
         let grid = vec![vec![Tile::new(' ', "none".to_string()); width as usize]; height as usize];

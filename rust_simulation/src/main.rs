@@ -18,7 +18,12 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mut game = Game::new();
+    let mut game = Game::new(
+        "biomes.json",
+        "resources.json",
+        "items.json",
+        "recipes.json",
+    );
     game.run().await?;
 
     Ok(())

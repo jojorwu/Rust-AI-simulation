@@ -25,14 +25,20 @@ pub struct Game {
     pub item_registry: ItemRegistry,
     pub recipe_manager: Arc<RecipeManager>,
     pub event_bus: Arc<Mutex<EventBus>>,
+    pub tick_count: u32,
 }
 
 
 impl Game {
-    pub fn new() -> Self {
-        let map = Map::new(WIDTH, HEIGHT).expect("Failed to create map");
-        let item_registry = ItemRegistry::new("items.json");
-        let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
+    pub fn new(
+        biomes_path: &str,
+        resources_path: &str,
+        items_path: &str,
+        recipes_path: &str,
+    ) -> Self {
+        let map = Map::new(WIDTH, HEIGHT, biomes_path, resources_path).expect("Failed to create map");
+        let item_registry = ItemRegistry::new(items_path);
+        let recipe_manager = Arc::new(RecipeManager::new(recipes_path));
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
 
         let mut world = World::new();
@@ -53,6 +59,7 @@ impl Game {
             item_registry,
             recipe_manager,
             event_bus,
+            tick_count: 0,
         }
     }
 
@@ -159,10 +166,15 @@ impl Game {
         self.find_and_set_valid_start_positions();
 
         for _step in 0..MAX_STEPS_PER_EPISODE {
+            self.tick_count += 1;
             self.spawn_brain_tasks(episode).await?;
             self.run_systems();
         }
         Ok(())
+    }
+
+    fn is_day(&self) -> bool {
+        (self.tick_count % (DAY_LENGTH + NIGHT_LENGTH)) < DAY_LENGTH
     }
 
     fn reset_players(&mut self) {
@@ -185,7 +197,7 @@ impl Game {
                         let brain = Arc::clone(&self.brains[i]);
                         let world_clone = Arc::clone(&self.world);
                         let spatial_map_clone = self.map.spatial_map.clone();
-                        let visible_tiles = self.get_visible_tiles(&pos);
+                        let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
                         let handle = task::spawn(async move {
                             let mut brain_lock = brain.lock().expect("Failed to lock brain");
                             let mut world_lock = world_clone.lock().expect("Failed to lock world");
@@ -208,9 +220,9 @@ impl Game {
         Ok(())
     }
 
-    fn get_visible_tiles(&self, pos: &Position) -> Vec<(Position, Tile)> {
+    fn get_visible_tiles(&self, pos: &Position, is_day: bool) -> Vec<(Position, Tile)> {
         let mut visible_tiles = Vec::new();
-        let radius = 2; // 5x5 area
+        let radius = if is_day { 2 } else { 1 };
         for y in (pos.y as i32 - radius)..=(pos.y as i32 + radius) {
             for x in (pos.x as i32 - radius)..=(pos.x as i32 + radius) {
                 if x >= 0 && y >= 0 && x < self.map.width as i32 && y < self.map.height as i32 {
@@ -253,5 +265,46 @@ impl Game {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    fn create_test_game() -> Game {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        Game::new(
+            &format!("{}/biomes.json", manifest_dir),
+            &format!("{}/resources.json", manifest_dir),
+            &format!("{}/items.json", manifest_dir),
+            &format!("{}/recipes.json", manifest_dir),
+        )
+    }
+
+    #[test]
+    fn test_is_day() {
+        let mut game = create_test_game();
+        game.tick_count = 0;
+        assert!(game.is_day());
+        game.tick_count = DAY_LENGTH - 1;
+        assert!(game.is_day());
+        game.tick_count = DAY_LENGTH;
+        assert!(!game.is_day());
+        game.tick_count = DAY_LENGTH + NIGHT_LENGTH - 1;
+        assert!(!game.is_day());
+        game.tick_count = DAY_LENGTH + NIGHT_LENGTH;
+        assert!(game.is_day());
+    }
+
+    #[test]
+    fn test_get_visible_tiles() {
+        let game = create_test_game();
+        let pos = Position { x: 5, y: 5 };
+        let visible_tiles_day = game.get_visible_tiles(&pos, true);
+        assert_eq!(visible_tiles_day.len(), 25); // 5x5 area
+        let visible_tiles_night = game.get_visible_tiles(&pos, false);
+        assert_eq!(visible_tiles_night.len(), 9); // 3x3 area
     }
 }
