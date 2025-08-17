@@ -1,1 +1,19 @@
    Compiling rust_simulation v0.1.0 (/app/rust_simulation)
+warning: variable does not need to be mutable
+  --> src/fov.rs:34:9
+   |
+34 |     let mut last_col = -1;
+   |         ----^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `rust_simulation` (bin "rust_simulation") generated 1 warning (run `cargo fix --bin "rust_simulation"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.46s
+     Running `target/debug/rust_simulation`
+[DEBUG] run
+--- Starting Rust Training Simulation ---
+[DEBUG] visibility_system
+[DEBUG] run_episode
+[DEBUG] spawn_brain_tasks

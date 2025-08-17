@@ -9,7 +9,6 @@ use super::components::Position;
 use super::events::EventBus;
 use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system};
 use std::sync::{Arc, Mutex};
-use tokio::task;
 use crate::fov;
 
 use rand::Rng;
@@ -139,7 +138,7 @@ impl Game {
         })
     }
 
-    pub async fn run(&mut self) -> Result<(), SimulationError> {
+    pub fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
         self.setup_new_map();
         self.find_and_set_valid_start_positions();
@@ -150,11 +149,8 @@ impl Game {
             visibility_system(&mut world, &self.map);
         }
 
-        println!("Initial Map:");
-        self.map.display(&self.world.lock().expect("Failed to lock world"));
-
         for episode in 0..EPISODES {
-            self.run_episode(episode).await?;
+            self.run_episode(episode)?;
             if (episode + 1) % 200 == 0 {
                 println!("Episode {}/{}", episode + 1, EPISODES);
             }
@@ -167,15 +163,27 @@ impl Game {
         Ok(())
     }
 
-    async fn run_episode(&mut self, episode: u32) -> Result<(), SimulationError> {
+    fn run_episode(&mut self, episode: u32) -> Result<(), SimulationError> {
         self.respawn_resources(episode);
         self.reset_players();
         self.find_and_set_valid_start_positions();
 
-        for _step in 0..MAX_STEPS_PER_EPISODE {
+        for step in 0..MAX_STEPS_PER_EPISODE {
             self.tick_count += 1;
-            self.spawn_brain_tasks(episode).await?;
+            self.run_brain_ticks(episode)?;
             self.run_systems();
+
+            // Display logic moved inside the loop
+            print!("\x1B[2J\x1B[1;1H"); // Clear screen
+            println!("--- Episode: {}/{} | Step: {}/{} ---", episode + 1, EPISODES, step + 1, MAX_STEPS_PER_EPISODE);
+            let time_of_day = if self.is_day() { "Day" } else { "Night" };
+            println!("Time: {}", time_of_day);
+
+            self.map.display(&self.world.lock().expect("Failed to lock world"));
+            self.map.display_observer_map(&self.world.lock().expect("Failed to lock world"));
+
+            // Add a small delay to make the animation viewable
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
         Ok(())
     }
@@ -193,36 +201,26 @@ impl Game {
         }
     }
 
-    async fn spawn_brain_tasks(&mut self, _episode: u32) -> Result<(), SimulationError> {
-        let mut action_handles = Vec::new();
-        {
-            let world = self.world.lock().expect("Failed to lock world");
-            for i in 0..world.entities.len() {
-                if let Some(pos) = world.get_component::<Position>(i).map(|p| *p) {
-                    if world.get_component::<Player>(i).is_some() {
-                        let high_level_state = self.get_high_level_state(i)?;
-                        let brain = Arc::clone(&self.brains[i]);
-                        let world_clone = Arc::clone(&self.world);
-                        let spatial_map_clone = self.map.spatial_map.clone();
-                        let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
-                        let handle = task::spawn(async move {
-                            let mut brain_lock = brain.lock().expect("Failed to lock brain");
-                            let mut world_lock = world_clone.lock().expect("Failed to lock world");
-                            brain_lock.tick(&mut world_lock, &spatial_map_clone, i, &high_level_state, &visible_tiles)
-                        });
-                        action_handles.push(handle);
-                    }
+    fn run_brain_ticks(&mut self, _episode: u32) -> Result<(), SimulationError> {
+        for i in 0..self.brains.len() {
+            let pos = {
+                let world = self.world.lock().unwrap();
+                if let Some(p) = world.get_component::<Position>(i) {
+                    *p
+                } else {
+                    continue;
                 }
-            }
-        }
+            };
 
-        let results = futures::future::join_all(action_handles).await;
-        for result in results {
-            match result {
-                Ok(Ok(())) => {} // Brain tick succeeded, do nothing.
-                Ok(Err(e)) => return Err(e), // Brain tick returned an error.
-                Err(e) => return Err(SimulationError::Other(format!("Task failed: {}", e))),
-            }
+            let high_level_state = self.get_high_level_state(i)?;
+            let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
+
+            let brain = Arc::clone(&self.brains[i]);
+            let mut brain_lock = brain.lock().expect("Failed to lock brain");
+
+            // The world is locked for the duration of the tick
+            let mut world_lock = self.world.lock().expect("Failed to lock world");
+            brain_lock.tick(&mut world_lock, &self.map.spatial_map, i, &high_level_state, &visible_tiles)?;
         }
         Ok(())
     }

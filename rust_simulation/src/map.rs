@@ -80,6 +80,45 @@ pub struct Map {
 }
 
 impl Map {
+    pub fn display_observer_map(&self, world: &super::ecs::World) {
+        println!("\n--- Observer Map ---");
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let mut entity_on_tile = None;
+                // This is inefficient, but shared with the other display function.
+                for entity in 0..world.entities.len() {
+                    if let Some(pos) = world.get_component::<super::components::Position>(entity) {
+                        if pos.x == x && pos.y == y {
+                            entity_on_tile = Some(entity);
+                            break;
+                        }
+                    }
+                }
+
+                if let Some(entity) = entity_on_tile {
+                    if world.get_component::<Player>(entity).is_some() {
+                        print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
+                    } else {
+                        print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
+                    }
+                } else {
+                    let tile_char = self.grid[y as usize][x as usize].tile_type;
+                    match tile_char {
+                        '.' => print!("\x1b[32m. \x1b[0m"),   // Green
+                        'f' => print!("\x1b[93mf \x1b[0m"),   // Bright Yellow
+                        'M' => print!("\x1b[97mM \x1b[0m"),   // Bright White
+                        'T' => print!("\x1b[32m T\x1b[0m"),  // Dark Green
+                        '~' => print!("\x1b[34m~ \x1b[0m"),   // Blue
+                        '#' => print!("\x1b[90m# \x1b[0m"),   // Dim White
+                        'O' => print!("\x1b[36mO \x1b[0m"),   // Cyan
+                        _ => print!("{} ", tile_char),
+                    }
+                }
+            }
+            println!();
+        }
+    }
+
     pub fn new(width: u32, height: u32, biomes_path: &str, resources_path: &str) -> Result<Self, Box<dyn Error>> {
         let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
@@ -125,6 +164,11 @@ impl Map {
                         break;
                     }
                 }
+
+                if biome_name == "plains" && tile_char == '.' && rand::thread_rng().gen_range(0..100) < 5 {
+                    tile_char = 'f';
+                }
+
                 self.grid[y as usize][x as usize] = Tile::new(tile_char, biome_name);
             }
         }
