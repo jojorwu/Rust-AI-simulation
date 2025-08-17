@@ -248,16 +248,22 @@ pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>, map: &m
     for event in events {
         match event {
             Event::EntityDied(entity) => {
-                if let Some(pos) = world.get_component::<Position>(entity) {
-                    // Remove from spatial map
+                if let Some(pos) = world.get_component::<Position>(entity).copied() {
+                    // Remove the dead entity from the spatial map
                     map.spatial_map.entry((pos.x, pos.y)).and_modify(|v| v.retain(|&e| e != entity));
 
-                    // Turn the dead entity into a dropped item (meat)
-                    world.add_component(entity, DroppedItem {
+                    // Create a new entity for the dropped item
+                    let dropped_item_entity = world.create_entity();
+                    world.add_component(dropped_item_entity, DroppedItem {
                         item_name: "meat".to_string(),
                         quantity: 1,
                     });
+                    world.add_component(dropped_item_entity, pos);
+
+                    // Add the new dropped item to the spatial map
+                    map.spatial_map.entry((pos.x, pos.y)).or_default().push(dropped_item_entity);
                 }
+                // Remove the dead entity from the world
                 world.remove_entity(entity);
             }
         }
