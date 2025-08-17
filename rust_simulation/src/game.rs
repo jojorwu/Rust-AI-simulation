@@ -3,7 +3,6 @@ use super::player::Player;
 use super::brain::{Brain, HighLevelState};
 use super::recipes::RecipeManager;
 use super::errors::SimulationError;
-use super::actions::{get_all_actions};
 use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
 use super::components::Position;
@@ -24,7 +23,6 @@ pub struct Game {
     pub brains: Vec<Arc<Mutex<Brain>>>,
     pub item_registry: ItemRegistry,
     pub recipe_manager: Arc<RecipeManager>,
-    next_instance_id: u32,
 }
 
 
@@ -36,14 +34,13 @@ impl Game {
 
         let mut world = World::new();
         let mut brains = Vec::new();
-        let actions = get_all_actions();
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
             world.add_component(player, Player::new(i as u32));
             world.add_component(player, Position { x: 0, y: 0 });
             world.add_component(player, crate::components::Health { current: 100, max: 100 });
-            brains.push(Arc::new(Mutex::new(Brain::new(actions.clone(), Arc::clone(&recipe_manager), 0.1, 0.9, 1.0))));
+            brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&recipe_manager), 1.0))));
         }
 
         Game {
@@ -52,7 +49,6 @@ impl Game {
             brains,
             item_registry,
             recipe_manager,
-            next_instance_id: 0,
         }
     }
 

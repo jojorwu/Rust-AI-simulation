@@ -1,4 +1,3 @@
-mod actions;
 mod map;
 mod pathfinding;
 mod player;

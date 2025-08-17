@@ -42,7 +42,6 @@ pub struct Biome {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Resource {
     pub name: String,
-    pub tile_type: char,
     pub biomes: Vec<String>,
     pub density: f64,
 }

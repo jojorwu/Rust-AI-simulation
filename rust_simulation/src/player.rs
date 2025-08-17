@@ -13,7 +13,6 @@ pub struct Slot {
 
 #[derive(Debug, Clone)]
 pub struct Player {
-    pub id: u32,
     pub _held_item: Option<String>,
     pub inventory: Vec<Option<Slot>>,
 }
@@ -21,9 +20,8 @@ pub struct Player {
 use std::collections::HashMap;
 
 impl Player {
-    pub fn new(id: u32) -> Self {
+    pub fn new(_id: u32) -> Self {
         Player {
-            id,
             _held_item: None,
             inventory: vec![None; INVENTORY_SLOTS],
         }

@@ -2,7 +2,6 @@ use rand::Rng;
 use super::errors::SimulationError;
 use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
-use super::actions::{Action};
 use super::map::Tile;
 use super::pathfinding;
 use crate::components::{WantsToGather, WantsToCraft, WantsToBuild};
@@ -36,30 +35,23 @@ pub struct HighLevelState {
 #[derive(Debug, Clone)]
 pub struct MemoryTile {
     pub tile: Tile,
-    pub last_seen_episode: u32,
-    pub resource_richness: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelationshipStatus {
-    Neutral,
     Hostile,
 }
 
 #[derive(Debug, Clone)]
 pub struct PlayerMemory {
-    pub last_seen_location: Option<(u32, u32)>,
     pub relationship: RelationshipStatus,
 }
 
 /// The Brain struct represents the AI for an agent in the simulation.
 /// It uses a goal-oriented architecture to make decisions.
 pub struct Brain {
-    pub actions: Vec<Action>,
     pub goals: Vec<Goal>,
     pub recipe_manager: Arc<RecipeManager>,
-    pub learning_rate: f64,
-    pub discount_factor: f64,
     pub epsilon: f64,
     pub goal_q_table: HashMap<String, HashMap<Goal, f64>>,
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
@@ -71,7 +63,7 @@ pub struct Brain {
 }
 
 impl Brain {
-    pub fn new(actions: Vec<Action>, recipe_manager: Arc<RecipeManager>, learning_rate: f64, discount_factor: f64, epsilon: f64) -> Self {
+    pub fn new(recipe_manager: Arc<RecipeManager>, epsilon: f64) -> Self {
         let goals = vec![
             Goal::GatherResource("wood".to_string()),
             Goal::GatherResource("stone".to_string()),
@@ -79,11 +71,8 @@ impl Brain {
             Goal::Build("foundation".to_string()),
         ];
         Brain {
-            actions,
             goals,
             recipe_manager,
-            learning_rate,
-            discount_factor,
             epsilon,
             goal_q_table: HashMap::new(),
             mental_map: vec![vec![None; WIDTH as usize]; HEIGHT as usize],
@@ -402,9 +391,8 @@ mod tests {
     use std::sync::Arc;
 
     fn create_test_brain() -> Brain {
-        let actions = Vec::new();
         let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
-        Brain::new(actions, recipe_manager, 0.1, 0.9, 0.1)
+        Brain::new(recipe_manager, 0.1)
     }
 
     #[test]
