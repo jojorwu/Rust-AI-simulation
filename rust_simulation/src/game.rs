@@ -6,7 +6,8 @@ use super::errors::SimulationError;
 use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
 use super::components::Position;
-use super::systems::{movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system};
+use super::events::EventBus;
+use super::systems::{movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system};
 use std::sync::{Arc, Mutex};
 use tokio::task;
 
@@ -23,6 +24,7 @@ pub struct Game {
     pub brains: Vec<Arc<Mutex<Brain>>>,
     pub item_registry: ItemRegistry,
     pub recipe_manager: Arc<RecipeManager>,
+    pub event_bus: Arc<Mutex<EventBus>>,
 }
 
 
@@ -31,6 +33,7 @@ impl Game {
         let map = Map::new(WIDTH, HEIGHT).expect("Failed to create map");
         let item_registry = ItemRegistry::new("items.json");
         let recipe_manager = Arc::new(RecipeManager::new("recipes.json"));
+        let event_bus = Arc::new(Mutex::new(EventBus::new()));
 
         let mut world = World::new();
         let mut brains = Vec::new();
@@ -49,6 +52,7 @@ impl Game {
             brains,
             item_registry,
             recipe_manager,
+            event_bus,
         }
     }
 
@@ -204,8 +208,9 @@ impl Game {
         gathering_system(&mut world, &self.item_registry);
         crafting_system(&mut world, &self.recipe_manager, &self.item_registry);
         building_system(&mut world, &mut self.map);
-        combat_system(&mut world);
+        combat_system(&mut world, &self.event_bus);
         pickup_system(&mut world, &self.item_registry);
+        death_system(&mut world, &self.event_bus);
     }
 
     fn respawn_resources(&mut self, current_episode: u32) {

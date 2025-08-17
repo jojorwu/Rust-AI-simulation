@@ -11,6 +11,7 @@ mod item;
 mod config;
 mod recipes;
 mod errors;
+mod events;
 
 use game::Game;
 use std::error::Error;

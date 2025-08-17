@@ -4,6 +4,8 @@ use crate::player::Player;
 use crate::recipes::RecipeManager;
 use crate::item::ItemRegistry;
 use crate::map::Map;
+use crate::events::{EventBus, Event};
+use std::sync::{Arc, Mutex};
 
 pub fn movement_system(world: &mut World) {
     for entity in 0..world.entities.len() {
@@ -132,7 +134,7 @@ pub fn building_system(world: &mut World, map: &mut Map) {
     }
 }
 
-pub fn combat_system(world: &mut World) {
+pub fn combat_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
     let mut to_attack = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_attack) = world.get_component::<WantsToAttack>(entity) {
@@ -151,13 +153,7 @@ pub fn combat_system(world: &mut World) {
         }
 
         if target_dead {
-            let _target_pos = *world.get_component::<Position>(target).unwrap();
-            world.add_component(target, DroppedItem {
-                item_name: "meat".to_string(),
-                quantity: 1,
-            });
-            // This is a placeholder for removing the entity
-            println!("Entity {} died", target);
+            event_bus.lock().unwrap().publish(Event::EntityDied(target));
         }
     }
 
@@ -209,13 +205,33 @@ pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry) {
     }
 }
 
+pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
+    let events = event_bus.lock().unwrap().take_events();
+    for event in events {
+        match event {
+            Event::EntityDied(entity) => {
+                // Turn the dead entity into a dropped item (meat)
+                if world.get_component::<Position>(entity).is_some() {
+                    world.add_component(entity, DroppedItem {
+                        item_name: "meat".to_string(),
+                        quantity: 1,
+                    });
+                    // Note: The entity is not removed here. A separate system should handle that.
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ecs::World;
-    use crate::components::{Position, Velocity, WantsToGather, Resource};
+    use crate::components::{Position, Velocity, WantsToGather, Resource, Health, DroppedItem};
     use crate::player::Player;
     use crate::item::ItemRegistry;
+    use crate::events::{Event, EventBus};
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn test_movement_system() {
@@ -268,5 +284,23 @@ mod tests {
 
         let resource = world.get_component::<Resource>(resource_entity).unwrap();
         assert_eq!(resource.quantity, 4);
+    }
+
+    #[test]
+    fn test_death_system() {
+        let mut world = World::new();
+        let event_bus = Arc::new(Mutex::new(EventBus::new()));
+
+        let entity = world.create_entity();
+        world.add_component(entity, Position { x: 1, y: 1 });
+        world.add_component(entity, Health { current: 0, max: 100 });
+
+        event_bus.lock().unwrap().publish(Event::EntityDied(entity));
+
+        death_system(&mut world, &event_bus);
+
+        let dropped_item = world.get_component::<DroppedItem>(entity).unwrap();
+        assert_eq!(dropped_item.item_name, "meat");
+        assert_eq!(dropped_item.quantity, 1);
     }
 }
