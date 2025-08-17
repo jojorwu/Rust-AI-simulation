@@ -4,6 +4,8 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::error::Error;
 use super::player::Player;
+use std::collections::HashMap;
+use super::ecs::Entity;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Tile {
@@ -51,6 +53,7 @@ pub struct Map {
     pub grid: Vec<Vec<Tile>>,
     pub biomes: Vec<Biome>,
     pub resources: Vec<Resource>,
+    pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
 }
 
 impl Map {
@@ -69,6 +72,7 @@ impl Map {
             grid,
             biomes,
             resources,
+            spatial_map: HashMap::new(),
         })
     }
 

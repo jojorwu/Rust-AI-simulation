@@ -129,6 +129,7 @@ pub fn building_system(world: &mut World, map: &mut Map) {
     }
 }
 
+// The combat system handles all attacks between entities.
 pub fn combat_system(world: &mut World) {
     let mut to_attack = Vec::new();
     for entity in 0..world.entities.len() {
@@ -148,13 +149,14 @@ pub fn combat_system(world: &mut World) {
         }
 
         if target_dead {
-            let _target_pos = *world.get_component::<Position>(target).unwrap();
-            world.add_component(target, DroppedItem {
-                item_name: "meat".to_string(),
-                quantity: 1,
-            });
-            // This is a placeholder for removing the entity
-            println!("Entity {} died", target);
+            // Turn the dead entity into a dropped item (meat)
+            if let Some(_target_pos) = world.get_component::<Position>(target) {
+                world.add_component(target, DroppedItem {
+                    item_name: "meat".to_string(),
+                    quantity: 1,
+                });
+                // Note: The entity is not removed here. A separate system should handle that.
+            }
         }
     }
 

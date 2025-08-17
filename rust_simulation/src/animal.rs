@@ -45,7 +45,7 @@ impl Entity for Animal {
 
         // In the future, this would return a Move action.
         // For now, we will just print the direction.
-        println!("Animal {} wants to move {}", self.id, direction);
+// println!("Animal {} wants to move {}", self.id, direction);
 
         Ok(None)
     }

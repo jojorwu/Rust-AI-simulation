@@ -16,13 +16,15 @@ use rand::Rng;
 use super::config::*;
 
 
+/// The main struct for the simulation.
+/// It holds the game state, including the map, the ECS world, and the brains for the agents.
 pub struct Game {
     pub map: Map,
     pub world: Arc<Mutex<World>>,
     pub brains: Vec<Arc<Mutex<Brain>>>,
     pub item_registry: ItemRegistry,
     pub recipe_manager: Arc<RecipeManager>,
-    _next_instance_id: u32,
+    next_instance_id: u32,
 }
 
 
@@ -50,18 +52,18 @@ impl Game {
             brains,
             item_registry,
             recipe_manager,
-            _next_instance_id: 0,
+            next_instance_id: 0,
         }
     }
 
-    fn _find_and_set_valid_start_positions(&mut self) {
+    fn find_and_set_valid_start_positions(&mut self) {
         let mut rng = rand::thread_rng();
         let mut occupied_positions = std::collections::HashSet::new();
 
         let plains_biome = self.map.biomes.iter().find(|b| b.name == "plains");
         let plains_tile_type = plains_biome.map_or('.', |b| b.tile_type);
 
-        let mut world = self.world.lock().unwrap();
+        let mut world = self.world.lock().expect("Failed to lock world");
         for entity in 0..world.entities.len() {
             loop {
                 let x = rng.gen_range(0..self.map.width);
@@ -80,12 +82,13 @@ impl Game {
 
     fn setup_new_map(&mut self) {
         self.map.generate_island_map(25.0, 5, 0.5, 2.0);
-        self._place_resources();
+        self.place_resources();
     }
 
-    fn _place_resources(&mut self) {
+    fn place_resources(&mut self) {
         let mut rng = rand::thread_rng();
-        let mut world = self.world.lock().unwrap();
+        let mut world = self.world.lock().expect("Failed to lock world");
+        self.map.spatial_map.clear();
 
         for y in 0..self.map.height {
             for x in 0..self.map.width {
@@ -99,6 +102,7 @@ impl Game {
                                 name: resource_def.name.clone(),
                                 quantity: 5, // Placeholder quantity
                             });
+                            self.map.spatial_map.entry((x, y)).or_default().push(resource_entity);
                             break;
                         }
                     }
@@ -107,90 +111,36 @@ impl Game {
         }
     }
 
-    fn get_high_level_state(&self, entity: Entity) -> HighLevelState {
-        let world = self.world.lock().unwrap();
-        let player = world.get_component::<Player>(entity).unwrap();
-        let health = world.get_component::<crate::components::Health>(entity).unwrap();
-        let brain_lock = self.brains[entity].lock().unwrap();
+    fn get_high_level_state(&self, entity: Entity) -> Result<HighLevelState, SimulationError> {
+        let world = self.world.lock().expect("Failed to lock world");
+        let player = world.get_component::<Player>(entity)
+            .ok_or_else(|| SimulationError::ComponentNotFound("Player".to_string()))?;
+        let health = world.get_component::<crate::components::Health>(entity)
+            .ok_or_else(|| SimulationError::ComponentNotFound("Health".to_string()))?;
+        let brain_lock = self.brains[entity].lock().expect("Failed to lock brain");
 
         let num_hostile_players = brain_lock.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
 
-        HighLevelState {
+        Ok(HighLevelState {
             has_wood: player.get_total_quantity("wood") > 0,
             has_stone: player.get_total_quantity("stone") > 0,
             has_iron_ore: player.get_total_quantity("iron_ore") > 0,
             has_stone_axe: player.get_total_quantity("stone_axe") > 0,
             num_hostile_players,
             health_level: health.current as u32,
-        }
+        })
     }
 
     pub async fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
         self.setup_new_map();
-        self._find_and_set_valid_start_positions();
-
+        self.find_and_set_valid_start_positions();
 
         println!("Initial Map:");
-        self.map.display(&self.world.lock().unwrap());
+        self.map.display(&self.world.lock().expect("Failed to lock world"));
 
         for episode in 0..EPISODES {
-            self._respawn_resources(episode);
-            {
-                let mut world = self.world.lock().unwrap();
-                for i in 0..world.entities.len() {
-                    if let Some(player) = world.get_component_mut::<Player>(i) {
-                        player.reset();
-                    }
-                }
-            }
-            self._find_and_set_valid_start_positions();
-
-            for _step in 0..MAX_STEPS_PER_EPISODE {
-                let mut action_handles = Vec::new();
-
-                {
-                    let world = self.world.lock().unwrap();
-                    for i in 0..world.entities.len() {
-                        if world.get_component::<Player>(i).is_some() {
-                            let high_level_state = self.get_high_level_state(i);
-                            let brain = Arc::clone(&self.brains[i]);
-                            let world_clone = Arc::clone(&self.world);
-                            let handle = task::spawn(async move {
-                                let mut brain_lock = brain.lock().unwrap();
-                                let mut world_lock = world_clone.lock().unwrap();
-                                brain_lock.tick(&mut world_lock, i, &high_level_state, episode)
-                            });
-                            action_handles.push(handle);
-                        }
-                    }
-                }
-
-                let results = futures::future::join_all(action_handles).await;
-                for result in results {
-                    match result {
-                        Ok(Ok(())) => {
-                            // Brain tick succeeded, do nothing.
-                        },
-                        Ok(Err(e)) => {
-                            // Brain tick returned an error.
-                            return Err(e);
-                        },
-                        Err(e) => {
-                            // The tokio task failed to execute (e.g., panicked).
-                            return Err(SimulationError::Other(format!("Task failed: {}", e)));
-                        }
-                    }
-                }
-
-                movement_system(&mut self.world.lock().unwrap());
-                gathering_system(&mut self.world.lock().unwrap(), &self.item_registry);
-                crafting_system(&mut self.world.lock().unwrap(), &self.recipe_manager, &self.item_registry);
-                building_system(&mut self.world.lock().unwrap(), &mut self.map);
-                combat_system(&mut self.world.lock().unwrap());
-                pickup_system(&mut self.world.lock().unwrap(), &self.item_registry);
-            }
-
+            self.run_episode(episode).await?;
             if (episode + 1) % 200 == 0 {
                 println!("Episode {}/{}", episode + 1, EPISODES);
             }
@@ -200,7 +150,69 @@ impl Game {
         Ok(())
     }
 
-    fn _respawn_resources(&mut self, current_episode: u32) {
+    async fn run_episode(&mut self, episode: u32) -> Result<(), SimulationError> {
+        self.respawn_resources(episode);
+        self.reset_players();
+        self.find_and_set_valid_start_positions();
+
+        for _step in 0..MAX_STEPS_PER_EPISODE {
+            self.spawn_brain_tasks(episode).await?;
+            self.run_systems();
+        }
+        Ok(())
+    }
+
+    fn reset_players(&mut self) {
+        let mut world = self.world.lock().expect("Failed to lock world");
+        for i in 0..world.entities.len() {
+            if let Some(player) = world.get_component_mut::<Player>(i) {
+                player.reset();
+            }
+        }
+    }
+
+    async fn spawn_brain_tasks(&mut self, episode: u32) -> Result<(), SimulationError> {
+        let mut action_handles = Vec::new();
+        {
+            let world = self.world.lock().expect("Failed to lock world");
+            for i in 0..world.entities.len() {
+                if world.get_component::<Player>(i).is_some() {
+                    let high_level_state = self.get_high_level_state(i)?;
+                    let brain = Arc::clone(&self.brains[i]);
+                    let world_clone = Arc::clone(&self.world);
+                    let spatial_map_clone = self.map.spatial_map.clone();
+                    let handle = task::spawn(async move {
+                        let mut brain_lock = brain.lock().expect("Failed to lock brain");
+                        let mut world_lock = world_clone.lock().expect("Failed to lock world");
+                        brain_lock.tick(&mut world_lock, &spatial_map_clone, i, &high_level_state, episode)
+                    });
+                    action_handles.push(handle);
+                }
+            }
+        }
+
+        let results = futures::future::join_all(action_handles).await;
+        for result in results {
+            match result {
+                Ok(Ok(())) => {} // Brain tick succeeded, do nothing.
+                Ok(Err(e)) => return Err(e), // Brain tick returned an error.
+                Err(e) => return Err(SimulationError::Other(format!("Task failed: {}", e))),
+            }
+        }
+        Ok(())
+    }
+
+    fn run_systems(&mut self) {
+        let mut world = self.world.lock().expect("Failed to lock world");
+        movement_system(&mut world);
+        gathering_system(&mut world, &self.item_registry);
+        crafting_system(&mut world, &self.recipe_manager, &self.item_registry);
+        building_system(&mut world, &mut self.map);
+        combat_system(&mut world);
+        pickup_system(&mut world, &self.item_registry);
+    }
+
+    fn respawn_resources(&mut self, current_episode: u32) {
         for y in 0..self.map.height {
             for x in 0..self.map.width {
                 let tile = &mut self.map.grid[y as usize][x as usize];
