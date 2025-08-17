@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use super::map::Tile;
 use super::pathfinding;
 use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
 use super::player::Player;
@@ -57,6 +57,7 @@ pub struct Brain {
     pub epsilon: f64,
     pub goal_q_table: HashMap<String, HashMap<Goal, f64>>,
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
+    pub known_resources: HashMap<String, HashSet<Position>>,
     pub player_memories: HashMap<u32, PlayerMemory>,
     pub current_goal: Option<Goal>,
     pub goal_stack: Vec<Goal>,
@@ -89,6 +90,7 @@ impl Brain {
             epsilon,
             goal_q_table,
             mental_map: vec![vec![None; WIDTH as usize]; HEIGHT as usize],
+            known_resources: HashMap::new(),
             player_memories: HashMap::new(),
             current_goal: None,
             goal_stack: Vec::new(),
@@ -166,7 +168,7 @@ impl Brain {
             self.update_q_table(&prev_state, &prev_goal, reward, high_level_state)?;
         }
 
-        self.update_mental_map(visible_tiles);
+        self.update_mental_map(visible_tiles, world, spatial_map);
         self.update_current_goal(world, entity, high_level_state)?;
         self.choose_action_for_goal(world, spatial_map, entity, 0)?; // episode is not used anymore
 
@@ -177,11 +179,23 @@ impl Brain {
         Ok(())
     }
 
-    fn update_mental_map(&mut self, visible_tiles: &Vec<(Position, Tile)>) {
+    fn update_mental_map(&mut self, visible_tiles: &Vec<(Position, Tile)>, world: &World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>) {
         for (pos, tile) in visible_tiles {
             self.mental_map[pos.y as usize][pos.x as usize] = Some(MemoryTile {
                 tile: tile.clone(),
             });
+
+            // Optimization: Update known resource locations
+            if let Some(entities_at_pos) = spatial_map.get(&(pos.x, pos.y)) {
+                for &entity_id in entities_at_pos {
+                    if let Some(resource) = world.get_component::<Resource>(entity_id) {
+                        self.known_resources
+                            .entry(resource.name.clone())
+                            .or_default()
+                            .insert(*pos);
+                    }
+                }
+            }
         }
     }
 
@@ -210,28 +224,11 @@ impl Brain {
         Ok(())
     }
 
-    fn is_goal_valid(&self, world: &World, goal: &Goal) -> bool {
+    fn is_goal_valid(&self, _world: &World, goal: &Goal) -> bool {
         match goal {
             Goal::GatherResource(resource_name) => {
-                for y in 0..self.mental_map.len() {
-                    for x in 0..self.mental_map[y].len() {
-                        if self.mental_map[y][x].is_some() {
-                            // This is not efficient, but it's a start.
-                            // A better approach would be to store resource locations in the mental map.
-                            for entity in 0..world.entities.len() {
-                                if let (Some(pos), Some(res)) = (
-                                    world.get_component::<Position>(entity),
-                                    world.get_component::<Resource>(entity),
-                                ) {
-                                    if pos.x == x as u32 && pos.y == y as u32 && res.name == *resource_name {
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                false
+                // Optimization: Check the known_resources map instead of scanning the world.
+                self.known_resources.get(resource_name).map_or(false, |positions| !positions.is_empty())
             },
             _ => true,
         }
@@ -513,9 +510,8 @@ mod tests {
         let resource_entity = world.create_entity();
         world.add_component(resource_entity, Resource { name: "stone".to_string(), quantity: 5 });
         world.add_component(resource_entity, Position { x: 1, y: 1 });
-        brain.mental_map[1][1] = Some(MemoryTile {
-            tile: Tile::new('s', "mountains".to_string()),
-        });
+        brain.known_resources.entry("stone".to_string()).or_default().insert(Position { x: 1, y: 1 });
+
 
         let state = HighLevelState {
             has_wood: true,
@@ -558,6 +554,8 @@ mod tests {
     fn test_mental_map() {
         let mut brain = create_test_brain();
         let mut world = World::new();
+        let mut spatial_map = HashMap::new();
+
         let player_entity = world.create_entity();
         world.add_component(player_entity, Position { x: 5, y: 5 });
 
@@ -569,8 +567,9 @@ mod tests {
         let resource_entity = world.create_entity();
         world.add_component(resource_entity, Resource { name: "wood".to_string(), quantity: 5 });
         world.add_component(resource_entity, Position { x: 5, y: 6 });
+        spatial_map.insert((5, 6), vec![resource_entity]);
 
-        brain.update_mental_map(&visible_tiles);
+        brain.update_mental_map(&visible_tiles, &world, &spatial_map);
 
         assert!(brain.mental_map[5][5].is_some());
         assert_eq!(brain.mental_map[5][5].as_ref().unwrap().tile.tile_type, '.');

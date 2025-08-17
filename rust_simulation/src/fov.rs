@@ -20,25 +20,20 @@ pub fn field_of_view(
 
 fn scan(
     row: i32,
-    mut start_slope: f32,
-    end_slope: f32,
+    start: f32,
+    end: f32,
     player_pos: &Position,
     radius: i32,
     octant: u8,
     map: &Map,
     visible_tiles: &mut HashSet<Position>,
 ) {
-    if start_slope < end_slope {
-        return;
-    }
-    if row > radius {
-        return;
-    }
+    if row > radius { return; }
 
-    let mut prev_was_wall = false;
-    let last_col = (row as f32 * start_slope).round() as i32;
+    let mut new_start = 0.0;
+    let mut prev_tile_was_wall = false;
 
-    for col in ((row as f32 * end_slope).round() as i32)..=last_col {
+    for col in 0..=row {
         let (dx, dy) = transform_octant(col, row, octant);
         let x = player_pos.x as i32 + dx;
         let y = player_pos.y as i32 + dy;
@@ -48,29 +43,38 @@ fn scan(
         }
 
         let pos = Position { x: x as u32, y: y as u32 };
+        let in_radius = (dx*dx + dy*dy) <= radius*radius;
 
-        let in_radius = (dx * dx + dy * dy) <= (radius * radius);
-        if in_radius {
-            visible_tiles.insert(pos);
+        let top_slope = if col == 0 { 1.0 } else { (col as f32 - 0.5) / (row as f32 - 0.5) };
+        let bottom_slope = (col as f32 + 0.5) / (row as f32 + 0.5);
+
+        let mut in_view = top_slope >= end && bottom_slope <= start;
+        if !in_view && (top_slope > end || bottom_slope < start) {
+            in_view = (top_slope <= start && top_slope >= end) || (bottom_slope <= start && bottom_slope >= end) || (top_slope >= start && bottom_slope <= end);
         }
 
-        let current_is_wall = is_opaque(pos, map);
+        if in_view {
+            if in_radius {
+                visible_tiles.insert(pos);
+            }
 
-        if prev_was_wall && !current_is_wall {
-            start_slope = (col as f32 - 0.5) / (row as f32 + 0.5);
-        }
-
-        if !prev_was_wall && current_is_wall {
-            let next_end_slope = (col as f32 - 0.5) / (row as f32 - 0.5);
-            if row < radius {
-                scan(row + 1, start_slope, next_end_slope, player_pos, radius, octant, map, visible_tiles);
+            let current_tile_is_wall = is_opaque(pos, map);
+            if current_tile_is_wall {
+                if !prev_tile_was_wall {
+                    new_start = top_slope;
+                }
+                prev_tile_was_wall = true;
+            } else {
+                if prev_tile_was_wall {
+                    scan(row + 1, new_start, top_slope, player_pos, radius, octant, map, visible_tiles);
+                }
+                prev_tile_was_wall = false;
             }
         }
-        prev_was_wall = current_is_wall;
     }
 
-    if !prev_was_wall && row < radius {
-        scan(row + 1, start_slope, end_slope, player_pos, radius, octant, map, visible_tiles);
+    if !prev_tile_was_wall {
+        scan(row + 1, start, end, player_pos, radius, octant, map, visible_tiles);
     }
 }
 

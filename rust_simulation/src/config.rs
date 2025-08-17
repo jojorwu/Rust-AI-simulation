@@ -3,7 +3,7 @@ pub const WIDTH: u32 = 100;
 pub const HEIGHT: u32 = 100;
 
 // PLAYER/AI SETTINGS
-pub const NUM_PLAYERS: u32 = 5;
+pub const NUM_PLAYERS: u32 = 50;
 
 // TRAINING LOOP SETTINGS
 pub const EPISODES: u32 = 2000;
