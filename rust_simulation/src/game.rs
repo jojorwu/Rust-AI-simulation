@@ -1,4 +1,4 @@
-use super::map::Map;
+use super::map::{Map, Tile};
 use super::player::Player;
 use super::brain::{Brain, HighLevelState};
 use super::recipes::RecipeManager;
@@ -171,22 +171,25 @@ impl Game {
         }
     }
 
-    async fn spawn_brain_tasks(&mut self, episode: u32) -> Result<(), SimulationError> {
+    async fn spawn_brain_tasks(&mut self, _episode: u32) -> Result<(), SimulationError> {
         let mut action_handles = Vec::new();
         {
             let world = self.world.lock().expect("Failed to lock world");
             for i in 0..world.entities.len() {
-                if world.get_component::<Player>(i).is_some() {
-                    let high_level_state = self.get_high_level_state(i)?;
-                    let brain = Arc::clone(&self.brains[i]);
-                    let world_clone = Arc::clone(&self.world);
-                    let spatial_map_clone = self.map.spatial_map.clone();
-                    let handle = task::spawn(async move {
-                        let mut brain_lock = brain.lock().expect("Failed to lock brain");
-                        let mut world_lock = world_clone.lock().expect("Failed to lock world");
-                        brain_lock.tick(&mut world_lock, &spatial_map_clone, i, &high_level_state, episode)
-                    });
-                    action_handles.push(handle);
+                if let Some(pos) = world.get_component::<Position>(i).map(|p| *p) {
+                    if world.get_component::<Player>(i).is_some() {
+                        let high_level_state = self.get_high_level_state(i)?;
+                        let brain = Arc::clone(&self.brains[i]);
+                        let world_clone = Arc::clone(&self.world);
+                        let spatial_map_clone = self.map.spatial_map.clone();
+                        let visible_tiles = self.get_visible_tiles(&pos);
+                        let handle = task::spawn(async move {
+                            let mut brain_lock = brain.lock().expect("Failed to lock brain");
+                            let mut world_lock = world_clone.lock().expect("Failed to lock world");
+                            brain_lock.tick(&mut world_lock, &spatial_map_clone, i, &high_level_state, &visible_tiles)
+                        });
+                        action_handles.push(handle);
+                    }
                 }
             }
         }
@@ -200,6 +203,21 @@ impl Game {
             }
         }
         Ok(())
+    }
+
+    fn get_visible_tiles(&self, pos: &Position) -> Vec<(Position, Tile)> {
+        let mut visible_tiles = Vec::new();
+        let radius = 2; // 5x5 area
+        for y in (pos.y as i32 - radius)..=(pos.y as i32 + radius) {
+            for x in (pos.x as i32 - radius)..=(pos.x as i32 + radius) {
+                if x >= 0 && y >= 0 && x < self.map.width as i32 && y < self.map.height as i32 {
+                    let position = Position { x: x as u32, y: y as u32 };
+                    let tile = self.map.grid[y as usize][x as usize].clone();
+                    visible_tiles.push((position, tile));
+                }
+            }
+        }
+        visible_tiles
     }
 
     fn run_systems(&mut self) {
@@ -233,10 +251,4 @@ impl Game {
             }
         }
     }
-
-
-
-
-
 }
-

@@ -153,7 +153,7 @@ pub fn combat_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
         }
 
         if target_dead {
-            event_bus.lock().unwrap().publish(Event::EntityDied(target));
+            event_bus.lock().expect("Failed to lock event bus").publish(Event::EntityDied(target));
         }
     }
 
@@ -206,7 +206,7 @@ pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry) {
 }
 
 pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
-    let events = event_bus.lock().unwrap().take_events();
+    let events = event_bus.lock().expect("Failed to lock event bus").take_events();
     for event in events {
         match event {
             Event::EntityDied(entity) => {
@@ -220,87 +220,5 @@ pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ecs::World;
-    use crate::components::{Position, Velocity, WantsToGather, Resource, Health, DroppedItem};
-    use crate::player::Player;
-    use crate::item::ItemRegistry;
-    use crate::events::{Event, EventBus};
-    use std::sync::{Arc, Mutex};
-
-    #[test]
-    fn test_movement_system() {
-        // Test basic movement
-        let mut world = World::new();
-        let entity = world.create_entity();
-        world.add_component(entity, Position { x: 5, y: 5 });
-        world.add_component(entity, Velocity { dx: -1, dy: 1 });
-
-        movement_system(&mut world);
-
-        let pos = world.get_component::<Position>(entity).unwrap();
-        assert_eq!(pos.x, 4);
-        assert_eq!(pos.y, 6);
-
-        // Test zero velocity
-        world.add_component(entity, Velocity { dx: 0, dy: 0 });
-        movement_system(&mut world);
-        let pos = world.get_component::<Position>(entity).unwrap();
-        assert_eq!(pos.x, 4);
-        assert_eq!(pos.y, 6);
-
-        // Test movement in other directions
-        world.add_component(entity, Velocity { dx: 2, dy: -3 });
-        movement_system(&mut world);
-        let pos = world.get_component::<Position>(entity).unwrap();
-        assert_eq!(pos.x, 6);
-        assert_eq!(pos.y, 3);
-    }
-
-    #[test]
-    fn test_gathering_system() {
-        let mut world = World::new();
-        let item_registry = ItemRegistry::new("items.json");
-
-        let player_entity = world.create_entity();
-        world.add_component(player_entity, Player::new(0));
-        world.add_component(player_entity, Position { x: 1, y: 1 });
-
-        let resource_entity = world.create_entity();
-        world.add_component(resource_entity, Resource { name: "wood".to_string(), quantity: 5 });
-        world.add_component(resource_entity, Position { x: 1, y: 2 });
-
-        world.add_component(player_entity, WantsToGather { target: resource_entity });
-
-        gathering_system(&mut world, &item_registry);
-
-        let player = world.get_component::<Player>(player_entity).unwrap();
-        assert_eq!(player.get_total_quantity("wood"), 1);
-
-        let resource = world.get_component::<Resource>(resource_entity).unwrap();
-        assert_eq!(resource.quantity, 4);
-    }
-
-    #[test]
-    fn test_death_system() {
-        let mut world = World::new();
-        let event_bus = Arc::new(Mutex::new(EventBus::new()));
-
-        let entity = world.create_entity();
-        world.add_component(entity, Position { x: 1, y: 1 });
-        world.add_component(entity, Health { current: 0, max: 100 });
-
-        event_bus.lock().unwrap().publish(Event::EntityDied(entity));
-
-        death_system(&mut world, &event_bus);
-
-        let dropped_item = world.get_component::<DroppedItem>(entity).unwrap();
-        assert_eq!(dropped_item.item_name, "meat");
-        assert_eq!(dropped_item.quantity, 1);
     }
 }

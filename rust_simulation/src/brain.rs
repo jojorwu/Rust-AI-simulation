@@ -4,11 +4,10 @@ use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
 use super::map::Tile;
 use super::pathfinding;
-use crate::components::{WantsToGather, WantsToCraft, WantsToBuild};
+use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource};
 use std::collections::HashMap;
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
-use super::components::Position;
 use super::player::Player;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
@@ -84,8 +83,8 @@ impl Brain {
         }
     }
 
-    pub fn choose_goal(&self, state: &HighLevelState) -> Result<Goal, SimulationError> {
-        let valid_goals: Vec<_> = self.goals.iter().filter(|g| self.is_goal_valid(g)).cloned().collect();
+    pub fn choose_goal(&self, world: &World, state: &HighLevelState) -> Result<Goal, SimulationError> {
+        let valid_goals: Vec<_> = self.goals.iter().filter(|g| self.is_goal_valid(world, g)).cloned().collect();
         if valid_goals.is_empty() {
             return Ok(Goal::Flee); // Fallback goal
         }
@@ -102,7 +101,7 @@ impl Brain {
         let state_key_str = serde_json::to_string(state)?;
         if let Some(q_values) = self.goal_q_table.get(&state_key_str) {
             q_values.iter()
-                .filter(|(g, _)| self.is_goal_valid(g))
+                .filter(|(g, _)| self.is_goal_valid(world, g))
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal))
                 .map(|(goal, _)| goal.clone())
                 .map(Ok) // wrap in Result
@@ -134,9 +133,18 @@ impl Brain {
         }
     }
 
-    pub fn tick(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, high_level_state: &HighLevelState, current_episode: u32) -> Result<(), SimulationError> {
+    pub fn tick(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, high_level_state: &HighLevelState, visible_tiles: &Vec<(Position, Tile)>) -> Result<(), SimulationError> {
+        self.update_mental_map(visible_tiles);
         self.update_current_goal(world, entity, high_level_state)?;
-        self.choose_action_for_goal(world, spatial_map, entity, current_episode)
+        self.choose_action_for_goal(world, spatial_map, entity, 0) // episode is not used anymore
+    }
+
+    fn update_mental_map(&mut self, visible_tiles: &Vec<(Position, Tile)>) {
+        for (pos, tile) in visible_tiles {
+            self.mental_map[pos.y as usize][pos.x as usize] = Some(MemoryTile {
+                tile: tile.clone(),
+            });
+        }
     }
 
     fn update_current_goal(&mut self, world: &World, entity: Entity, high_level_state: &HighLevelState) -> Result<(), SimulationError> {
@@ -150,7 +158,7 @@ impl Brain {
         }
 
         if let Some(goal) = &self.current_goal {
-            if self.is_goal_complete(world, entity, goal) || !self.is_goal_valid(goal) {
+            if self.is_goal_complete(world, entity, goal) || !self.is_goal_valid(world, goal) {
                 self.current_goal = None;
                 self.current_path = None;
                 self.goal_commitment_ticks = 0;
@@ -158,17 +166,34 @@ impl Brain {
         }
 
         if self.current_goal.is_none() && self.goal_commitment_ticks == 0 {
-            self.current_goal = Some(self.choose_goal(high_level_state)?);
+            self.current_goal = Some(self.choose_goal(world, high_level_state)?);
             self.goal_commitment_ticks = 10; // Commit to the new goal for 10 ticks
         }
         Ok(())
     }
 
-    fn is_goal_valid(&self, goal: &Goal) -> bool {
+    fn is_goal_valid(&self, world: &World, goal: &Goal) -> bool {
         match goal {
-            Goal::GatherResource(_) => {
-                // TODO: Check mental map for known resource locations
-                true
+            Goal::GatherResource(resource_name) => {
+                for y in 0..self.mental_map.len() {
+                    for x in 0..self.mental_map[y].len() {
+                        if self.mental_map[y][x].is_some() {
+                            // This is not efficient, but it's a start.
+                            // A better approach would be to store resource locations in the mental map.
+                            for entity in 0..world.entities.len() {
+                                if let (Some(pos), Some(res)) = (
+                                    world.get_component::<Position>(entity),
+                                    world.get_component::<Resource>(entity),
+                                ) {
+                                    if pos.x == x as u32 && pos.y == y as u32 && res.name == *resource_name {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                false
             },
             _ => true,
         }
@@ -388,6 +413,7 @@ mod tests {
     use crate::recipes::RecipeManager;
     use crate::item::{ItemRegistry, Item};
     use crate::player::Player;
+    use crate::components::Resource;
     use std::sync::Arc;
 
     fn create_test_brain() -> Brain {
@@ -398,6 +424,7 @@ mod tests {
     #[test]
     fn test_choose_goal_randomly() {
         let brain = create_test_brain();
+        let world = World::new();
         let state = HighLevelState {
             has_wood: false,
             has_stone: false,
@@ -406,14 +433,22 @@ mod tests {
             num_hostile_players: 0,
             health_level: 100,
         };
-        let goal = brain.choose_goal(&state).unwrap();
+        let goal = brain.choose_goal(&world, &state).unwrap();
         assert!(brain.goals.contains(&goal));
     }
 
     #[test]
     fn test_choose_goal_q_learning() {
         let mut brain = create_test_brain();
+        let mut world = World::new();
         brain.epsilon = 0.0; // Ensure Q-table is used
+
+        let resource_entity = world.create_entity();
+        world.add_component(resource_entity, Resource { name: "stone".to_string(), quantity: 5 });
+        world.add_component(resource_entity, Position { x: 1, y: 1 });
+        brain.mental_map[1][1] = Some(MemoryTile {
+            tile: Tile::new('s', "mountains".to_string()),
+        });
 
         let state = HighLevelState {
             has_wood: true,
@@ -429,7 +464,7 @@ mod tests {
         q_values.insert(Goal::CraftItem("stone_axe".to_string()), 5.0);
         brain.goal_q_table.insert(state_key, q_values);
 
-        let chosen_goal = brain.choose_goal(&state).unwrap();
+        let chosen_goal = brain.choose_goal(&world, &state).unwrap();
         assert_eq!(chosen_goal, Goal::GatherResource("stone".to_string()));
     }
 
@@ -450,5 +485,35 @@ mod tests {
 
         let goal = Goal::GatherResource("stone".to_string());
         assert!(!brain.is_goal_complete(&world, player_entity, &goal));
+    }
+
+    #[test]
+    fn test_mental_map() {
+        let mut brain = create_test_brain();
+        let mut world = World::new();
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, Position { x: 5, y: 5 });
+
+        let visible_tiles = vec![
+            (Position { x: 5, y: 5 }, Tile::new('.', "plains".to_string())),
+            (Position { x: 5, y: 6 }, Tile::new('T', "forest".to_string())),
+        ];
+
+        let resource_entity = world.create_entity();
+        world.add_component(resource_entity, Resource { name: "wood".to_string(), quantity: 5 });
+        world.add_component(resource_entity, Position { x: 5, y: 6 });
+
+        brain.update_mental_map(&visible_tiles);
+
+        assert!(brain.mental_map[5][5].is_some());
+        assert_eq!(brain.mental_map[5][5].as_ref().unwrap().tile.tile_type, '.');
+        assert!(brain.mental_map[6][5].is_some());
+        assert_eq!(brain.mental_map[6][5].as_ref().unwrap().tile.tile_type, 'T');
+
+        let goal = Goal::GatherResource("wood".to_string());
+        assert!(brain.is_goal_valid(&world, &goal));
+
+        let goal = Goal::GatherResource("stone".to_string());
+        assert!(!brain.is_goal_valid(&world, &goal));
     }
 }
