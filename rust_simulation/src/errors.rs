@@ -7,7 +7,6 @@ pub enum SimulationError {
     SerializationError(String),
     ComponentNotFound(String),
     IoError(String),
-    Other(String),
 }
 
 impl fmt::Display for SimulationError {
@@ -16,7 +15,6 @@ impl fmt::Display for SimulationError {
             SimulationError::SerializationError(e) => write!(f, "Serialization Error: {}", e),
             SimulationError::ComponentNotFound(e) => write!(f, "Component Not Found: {}", e),
             SimulationError::IoError(e) => write!(f, "IO Error: {}", e),
-            SimulationError::Other(e) => write!(f, "Other Error: {}", e),
         }
     }
 }
