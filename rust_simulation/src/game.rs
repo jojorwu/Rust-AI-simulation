@@ -192,6 +192,7 @@ impl Game {
             has_stone_axe: inventory.map_or(false, |inv| inv.has_item("stone_axe", 1)),
             num_hostile_players,
             health_level: health.current as u32,
+            is_night: !self.is_day(),
         })
     }
 

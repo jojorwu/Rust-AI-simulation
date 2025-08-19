@@ -32,6 +32,7 @@ pub struct HighLevelState {
     pub has_stone_axe: bool,
     pub num_hostile_players: u32,
     pub health_level: u32,
+    pub is_night: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -130,7 +131,16 @@ impl Brain {
 
         let state_key_str = serde_json::to_string(state)?;
         if let Some(q_values) = self.goal_q_table.get(&state_key_str) {
-            q_values.iter()
+            let mut modified_q_values = q_values.clone();
+            if state.is_night {
+                for (goal, q_value) in modified_q_values.iter_mut() {
+                    if let Goal::Build(_) = goal {
+                        *q_value += 10.0; // Add a large bonus for building at night
+                    }
+                }
+            }
+
+            modified_q_values.iter()
                 .filter(|(g, _)| self.is_goal_valid(world, g))
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal))
                 .map(|(goal, _)| goal.clone())
@@ -221,6 +231,7 @@ impl Brain {
         }
 
         self.update_mental_map(visible_tiles, world, spatial_map);
+        self.handle_opportunities(world, entity, spatial_map, visible_tiles);
         self.update_current_goal(world, entity, high_level_state)?;
         self.choose_action_for_goal(world, spatial_map, entity, 0)?; // episode is not used anymore
 
@@ -229,6 +240,36 @@ impl Brain {
         self.prev_goal = self.current_goal.clone();
 
         Ok(())
+    }
+
+    fn handle_opportunities(&mut self, world: &World, entity: Entity, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, visible_tiles: &Vec<(Position, Tile)>) {
+        if self.goal_commitment_ticks >= 5 { return; } // Too committed to be distracted
+
+        let valuable_resources = ["iron_ore"]; // Hardcoded for now
+
+        for (pos, _tile) in visible_tiles {
+            if let Some(entities_at_pos) = spatial_map.get(&(pos.x, pos.y)) {
+                for &entity_id in entities_at_pos {
+                    if let Some(resource) = world.get_component::<Resource>(entity_id) {
+                        if valuable_resources.contains(&resource.name.as_str()) {
+                            // Found a valuable resource!
+                            // Is it a new opportunity? Check inventory.
+                            let has_it_already = world.get_component::<Inventory>(entity)
+                                .map_or(false, |inv| inv.get_quantity(&resource.name) > 0);
+
+                            if !has_it_already {
+                                // This is a good opportunity. Interrupt current plan.
+                                self.goal_stack.clear();
+                                self.current_path = None;
+                                self.current_goal = Some(Goal::GatherResource(resource.name.clone()));
+                                self.goal_commitment_ticks = 10; // Commit to this new goal
+                                return; // Only take one opportunity per tick
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn update_mental_map(&mut self, visible_tiles: &Vec<(Position, Tile)>, world: &World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>) {
@@ -459,11 +500,13 @@ impl Brain {
             .collect();
 
         if !hostile_players.is_empty() {
-            if health.current < health.max / 2 {
+            // Flee if outnumbered or low on health
+            if hostile_players.len() > 1 || health.current < health.max / 2 {
                 self.current_goal = Some(Goal::Flee);
                 self.current_path = None; // Clear any existing path
                 return true;
             } else {
+                // Fight if conditions are favorable
                 let mut closest_threat = None;
                 let mut min_dist = u32::MAX;
 
@@ -582,6 +625,7 @@ mod tests {
             has_stone_axe: false,
             num_hostile_players: 0,
             health_level: 100,
+            is_night: false,
         };
         let goal = brain.choose_goal(&world, &state).unwrap();
         assert!(brain.goals.contains(&goal));
@@ -606,6 +650,7 @@ mod tests {
             has_stone_axe: false,
             num_hostile_players: 0,
             health_level: 100,
+            is_night: false,
         };
         let state_key = serde_json::to_string(&state).unwrap();
         let mut q_values = HashMap::new();
@@ -683,6 +728,7 @@ mod tests {
             has_stone_axe: false,
             num_hostile_players: 0,
             health_level: 100,
+            is_night: false,
         };
         let goal = Goal::GatherResource("wood".to_string());
         let reward = 10.0;
@@ -693,6 +739,7 @@ mod tests {
             has_stone_axe: false,
             num_hostile_players: 0,
             health_level: 100,
+            is_night: false,
         };
 
         brain.update_q_table(&prev_state, &goal, reward, &new_state).unwrap();
@@ -798,5 +845,83 @@ mod tests {
             Goal::CraftItem("stone_axe".to_string()),
         ];
         assert_eq!(plan, expected_plan);
+    }
+
+    #[test]
+    fn test_threat_assessment_outnumbered() {
+        let mut brain = create_test_brain();
+        let mut world = World::new();
+
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, crate::components::Health { current: 100, max: 100 });
+        world.add_component(player_entity, Position { x: 5, y: 5 });
+
+        // Two hostile players
+        brain.player_memories.insert(1, PlayerMemory { relationship: RelationshipStatus::Hostile });
+        brain.player_memories.insert(2, PlayerMemory { relationship: RelationshipStatus::Hostile });
+
+        let handled = brain.handle_threats(&world, player_entity);
+
+        assert!(handled);
+        assert_eq!(brain.current_goal, Some(Goal::Flee));
+    }
+
+    #[test]
+    fn test_opportunistic_gathering() {
+        let mut brain = create_test_brain();
+        let mut world = World::new();
+        let mut spatial_map = HashMap::new();
+
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, Inventory::new());
+        world.add_component(player_entity, Position { x: 5, y: 5 });
+
+        // Give the AI a low-commitment goal
+        brain.current_goal = Some(Goal::GatherResource("wood".to_string()));
+        brain.goal_commitment_ticks = 2;
+
+        // A valuable resource appears in visible tiles
+        let iron_ore_entity = world.create_entity();
+        world.add_component(iron_ore_entity, Resource { name: "iron_ore".to_string(), quantity: 1 });
+        world.add_component(iron_ore_entity, Position { x: 5, y: 6 });
+        spatial_map.insert((5, 6), vec![iron_ore_entity]);
+        let visible_tiles = vec![(Position { x: 5, y: 6 }, Tile::new('.', "plains".to_string()))];
+
+        brain.handle_opportunities(&world, player_entity, &spatial_map, &visible_tiles);
+
+        assert_eq!(brain.current_goal, Some(Goal::GatherResource("iron_ore".to_string())));
+    }
+
+    #[test]
+    fn test_night_behavior_prefers_building() {
+        let mut brain = create_test_brain();
+        let world = World::new();
+
+        // State where it's night
+        let night_state = HighLevelState {
+            has_wood: true, // Has resources to build
+            has_stone: true,
+            has_iron_ore: false,
+            has_stone_axe: false,
+            num_hostile_players: 0,
+            health_level: 100,
+            is_night: true,
+        };
+
+        // Make sure building is a valid goal
+        brain.goals.push(Goal::Build("foundation".to_string()));
+
+        // Set Q-values to make other goals seem better
+        let state_key = serde_json::to_string(&night_state).unwrap();
+        let mut q_values = HashMap::new();
+        q_values.insert(Goal::GatherResource("wood".to_string()), 20.0); // High value for another goal
+        q_values.insert(Goal::Build("foundation".to_string()), 5.0); // Lower value for building
+        brain.goal_q_table.insert(state_key, q_values);
+        brain.epsilon = 0.0; // Ensure we use Q-values
+
+        let chosen_goal = brain.choose_goal(&world, &night_state).unwrap();
+
+        // Assert that building was chosen despite the lower Q-value, due to the night bonus
+        assert_eq!(chosen_goal, Goal::Build("foundation".to_string()));
     }
 }
