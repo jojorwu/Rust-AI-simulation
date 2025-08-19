@@ -5,7 +5,7 @@ use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
-use super::components::Position;
+use super::components::{Position, Inventory};
 use super::events::EventBus;
 use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system};
 use std::sync::{Arc, Mutex};
@@ -54,6 +54,7 @@ impl Game {
             world.add_component(player, Player::new(i as u32, map.width, map.height));
             world.add_component(player, Position { x: 0, y: 0 });
             world.add_component(player, crate::components::Health { current: 100, max: 100 });
+            world.add_component(player, Inventory::new());
             brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0))));
         }
 
@@ -177,19 +178,18 @@ impl Game {
 
     fn get_high_level_state(&self, entity: Entity) -> Result<HighLevelState, SimulationError> {
         let world = self.world.lock().expect("Failed to lock world");
-        let player = world.get_component::<Player>(entity)
-            .ok_or_else(|| SimulationError::ComponentNotFound("Player".to_string()))?;
         let health = world.get_component::<crate::components::Health>(entity)
             .ok_or_else(|| SimulationError::ComponentNotFound("Health".to_string()))?;
-        let brain_lock = self.brains[entity].lock().expect("Failed to lock brain");
+        let inventory = world.get_component::<Inventory>(entity);
 
+        let brain_lock = self.brains[entity].lock().expect("Failed to lock brain");
         let num_hostile_players = brain_lock.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
 
         Ok(HighLevelState {
-            has_wood: player.get_total_quantity("wood") > 0,
-            has_stone: player.get_total_quantity("stone") > 0,
-            has_iron_ore: player.get_total_quantity("iron_ore") > 0,
-            has_stone_axe: player.get_total_quantity("stone_axe") > 0,
+            has_wood: inventory.map_or(false, |inv| inv.has_item("wood", 1)),
+            has_stone: inventory.map_or(false, |inv| inv.has_item("stone", 1)),
+            has_iron_ore: inventory.map_or(false, |inv| inv.has_item("iron_ore", 1)),
+            has_stone_axe: inventory.map_or(false, |inv| inv.has_item("stone_axe", 1)),
             num_hostile_players,
             health_level: health.current as u32,
         })
@@ -236,6 +236,16 @@ impl Game {
 
             self.map.display(&self.world.lock().expect("Failed to lock world"));
             self.map.display_observer_map(&self.world.lock().expect("Failed to lock world"));
+
+            // DEBUG: Print agent 0's status
+            if self.brains.len() > 0 {
+                let brain = self.brains[0].lock().unwrap();
+                let world = self.world.lock().unwrap();
+                if let Some(inventory) = world.get_component::<Inventory>(0) {
+                    println!("Agent 0 Goal: {:?}", brain.current_goal);
+                    println!("Agent 0 Inventory: {:?}", inventory.items);
+                }
+            }
 
             // Add a small delay to make the animation viewable
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -346,6 +356,7 @@ impl Game {
             world.add_component(player, Player::new(i as u32, self.map.width, self.map.height));
             world.add_component(player, Position { x: 0, y: 0 });
             world.add_component(player, crate::components::Health { current: 100, max: 100 });
+            world.add_component(player, Inventory::new());
             // This will create a new brain, which will either load a q-table or start fresh
             brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&self.recipe_manager), 0.1, 0.9, 1.0))));
         }

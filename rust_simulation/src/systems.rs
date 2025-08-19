@@ -1,5 +1,5 @@
 use crate::ecs::World;
-use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild, WantsToAttack, Health, DroppedItem, WantsToPickup};
+use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild, WantsToAttack, Health, DroppedItem, WantsToPickup, Inventory};
 use crate::player::Player;
 use crate::recipes::RecipeManager;
 use crate::item::ItemRegistry;
@@ -40,6 +40,62 @@ pub fn visibility_system(world: &mut World, map: &Map, is_day: bool) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ecs::World;
+    use crate::map::Map;
+    use crate::components::{Position, Velocity, Inventory, Resource, WantsToGather};
+    use crate::item::ItemRegistry;
+
+    #[test]
+    fn test_movement_system() {
+        let mut world = World::new();
+        let mut map = Map::new(10, 10, "biomes.json", "resources.json").unwrap();
+
+        let entity = world.create_entity();
+        world.add_component(entity, Position { x: 5, y: 5 });
+        world.add_component(entity, Velocity { dx: 1, dy: -1 });
+
+        movement_system(&mut world, &mut map);
+
+        let position = world.get_component::<Position>(entity).unwrap();
+        assert_eq!(position.x, 6);
+        assert_eq!(position.y, 4);
+
+        assert!(world.get_component::<Velocity>(entity).is_none());
+    }
+
+    #[test]
+    fn test_gathering_system() {
+        let mut world = World::new();
+        let item_registry = ItemRegistry::new("items.json");
+
+        // Create gatherer
+        let gatherer = world.create_entity();
+        world.add_component(gatherer, Position { x: 5, y: 5 });
+        world.add_component(gatherer, Inventory::new());
+
+        // Create resource
+        let resource_entity = world.create_entity();
+        world.add_component(resource_entity, Position { x: 5, y: 6 });
+        world.add_component(resource_entity, Resource { name: "wood".to_string(), quantity: 5 });
+
+        // Set intention to gather
+        world.add_component(gatherer, WantsToGather { target: resource_entity });
+
+        gathering_system(&mut world, &item_registry);
+
+        let inventory = world.get_component::<Inventory>(gatherer).unwrap();
+        assert_eq!(inventory.get_quantity("wood"), 1);
+
+        let resource = world.get_component::<Resource>(resource_entity).unwrap();
+        assert_eq!(resource.quantity, 4);
+
+        assert!(world.get_component::<WantsToGather>(gatherer).is_none());
+    }
+}
+
 pub fn movement_system(world: &mut World, map: &mut Map) {
     let entities_with_velocity: Vec<_> = world.entities.iter().filter_map(|&entity| {
         world.get_component::<Velocity>(entity).map(|vel| (entity, *vel))
@@ -65,7 +121,7 @@ pub fn movement_system(world: &mut World, map: &mut Map) {
     }
 }
 
-pub fn gathering_system(world: &mut World, item_registry: &ItemRegistry) {
+pub fn gathering_system(world: &mut World, _item_registry: &ItemRegistry) {
     let mut to_gather = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_gather) = world.get_component::<WantsToGather>(entity) {
@@ -94,8 +150,8 @@ pub fn gathering_system(world: &mut World, item_registry: &ItemRegistry) {
                 };
 
                 if let Some(name) = resource_name {
-                    if let Some(player) = world.get_component_mut::<Player>(gatherer) {
-                        player.add_item(&name, 1, None, item_registry);
+                    if let Some(inventory) = world.get_component_mut::<Inventory>(gatherer) {
+                        inventory.add_item(&name, 1);
                     }
                 }
             }
@@ -108,7 +164,7 @@ pub fn gathering_system(world: &mut World, item_registry: &ItemRegistry) {
     }
 }
 
-pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, item_registry: &ItemRegistry) {
+pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, _item_registry: &ItemRegistry) {
     let mut to_craft = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_craft) = world.get_component::<WantsToCraft>(entity) {
@@ -118,10 +174,10 @@ pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, item_r
 
     for (crafter, wants_to_craft) in to_craft {
         let required_resources = recipe_manager.get_required_resources(&wants_to_craft.item_name, 1);
-        if let Some(player) = world.get_component_mut::<Player>(crafter) {
-            if player.has_resources(&required_resources) {
-                if player.remove_resources(&required_resources) {
-                    player.add_item(&wants_to_craft.item_name, 1, None, item_registry);
+        if let Some(inventory) = world.get_component_mut::<Inventory>(crafter) {
+            if inventory.has_resources(&required_resources) {
+                if inventory.remove_resources(&required_resources) {
+                    inventory.add_item(&wants_to_craft.item_name, 1);
                 }
             }
         }
@@ -146,11 +202,11 @@ pub fn building_system(world: &mut World, map: &mut Map) {
             let tile = &mut map.grid[builder_pos.y as usize][builder_pos.x as usize];
 
             if tile.tile_type == '.' {
-                if let Some(player) = world.get_component_mut::<Player>(builder) {
-                    if player.get_total_quantity(&wants_to_build.structure_name) > 0 {
+                if let Some(inventory) = world.get_component_mut::<Inventory>(builder) {
+                    if inventory.has_item(&wants_to_build.structure_name, 1) {
                         let mut recipe = std::collections::HashMap::new();
                         recipe.insert(wants_to_build.structure_name.clone(), 1);
-                        player.remove_resources(&recipe);
+                        inventory.remove_resources(&recipe);
 
                         tile.tile_type = match wants_to_build.structure_name.as_str() {
                             "foundation" => 'B',
@@ -199,7 +255,7 @@ pub fn combat_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
     }
 }
 
-pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry, map: &mut Map) {
+pub fn pickup_system(world: &mut World, _item_registry: &ItemRegistry, map: &mut Map) {
     let mut to_pickup = Vec::new();
     for entity in world.entities.clone() {
         if world.get_component::<WantsToPickup>(entity).is_some() {
@@ -223,8 +279,8 @@ pub fn pickup_system(world: &mut World, item_registry: &ItemRegistry, map: &mut 
 
 
             for (picker_upper, item) in items_to_add {
-                if let Some(player) = world.get_component_mut::<Player>(picker_upper) {
-                    player.add_item(&item.item_name, item.quantity, None, item_registry);
+                if let Some(inventory) = world.get_component_mut::<Inventory>(picker_upper) {
+                    inventory.add_item(&item.item_name, item.quantity);
                 }
             }
 

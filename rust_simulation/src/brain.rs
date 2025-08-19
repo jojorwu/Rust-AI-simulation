@@ -4,7 +4,7 @@ use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
 use super::map::Tile;
 use super::pathfinding;
-use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource};
+use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource, Inventory};
 use std::collections::{HashMap, HashSet};
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
@@ -141,20 +141,20 @@ impl Brain {
     }
 
     pub fn is_goal_complete(&self, world: &World, entity: Entity, goal: &Goal) -> bool {
-        if let Some(player) = world.get_component::<Player>(entity) {
+        if let Some(inventory) = world.get_component::<Inventory>(entity) {
             match goal {
                 Goal::GatherResource(resource) => {
                     if let Some(parent_goal) = self.goal_stack.last() {
                         if let Goal::CraftItem(item_name) = parent_goal {
                             let recipe = self.recipe_manager.get_required_resources(item_name, 1);
                             if let Some(&required_amount) = recipe.get(resource) {
-                                return player.get_total_quantity(resource) >= required_amount;
+                                return inventory.get_quantity(resource) >= required_amount;
                             }
                         }
                     }
-                    player.get_total_quantity(resource) > 10 // Default
+                    inventory.get_quantity(resource) > 10 // Default
                 },
-                Goal::CraftItem(item) => player.get_total_quantity(item) > 0,
+                Goal::CraftItem(item) => inventory.has_item(item, 1),
                 _ => false,
             }
         } else {
@@ -365,16 +365,22 @@ impl Brain {
     fn execute_craft_item_goal(&mut self, world: &mut World, entity: Entity, item_name: &str, _current_episode: u32) -> Result<(), SimulationError> {
         let recipe = self.recipe_manager.get_required_resources(item_name, 1);
         let mut missing_resource = None;
-        let Some(player) = world.get_component::<Player>(entity) else {
-            return Ok(());
-        };
 
-        for (resource, &required_amount) in &recipe {
-            if player.get_total_quantity(resource) < required_amount {
+        if let Some(inventory) = world.get_component::<Inventory>(entity) {
+            for (resource, &required_amount) in &recipe {
+                if inventory.get_quantity(resource) < required_amount {
+                    missing_resource = Some(resource.clone());
+                    break;
+                }
+            }
+        } else {
+            // No inventory, can't check for resources. Maybe we should just return?
+            // For now, let's assume we are missing everything.
+            if let Some(resource) = recipe.keys().next() {
                 missing_resource = Some(resource.clone());
-                break;
             }
         }
+
 
         if let Some(resource) = missing_resource {
             // We are missing a resource, so we need to gather it.
@@ -540,13 +546,17 @@ mod tests {
     fn test_is_goal_complete() {
         let brain = create_test_brain();
         let mut world = World::new();
-        let mut item_registry = ItemRegistry::new("items.json");
-        item_registry.items.insert("wood".to_string(), Item { name: "wood".to_string(), stackable: true, tool: false, properties: None });
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let item_registry = ItemRegistry::new(&format!("{}/items.json", manifest_dir));
+
 
         let player_entity = world.create_entity();
-        let mut player = Player::new(0, 100, 100);
-        player.add_item("wood", 11, None, &item_registry);
+        let player = Player::new(0, 100, 100);
         world.add_component(player_entity, player);
+
+        let mut inventory = Inventory::new();
+        inventory.add_item("wood", 11);
+        world.add_component(player_entity, inventory);
 
         let goal = Goal::GatherResource("wood".to_string());
         assert!(brain.is_goal_complete(&world, player_entity, &goal));

@@ -4,7 +4,6 @@ mod player;
 mod ecs;
 mod components;
 mod systems;
-mod state;
 mod brain;
 mod game;
 mod item;

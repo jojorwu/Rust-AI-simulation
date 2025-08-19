@@ -1,4 +1,5 @@
 use crate::ecs::{Component, Entity};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, Eq)]
@@ -86,3 +87,62 @@ pub struct DroppedItem {
 }
 
 impl Component for DroppedItem {}
+
+#[derive(Debug, Clone)]
+pub struct Inventory {
+    pub items: HashMap<String, u32>,
+}
+
+impl Inventory {
+    pub fn new() -> Self {
+        Inventory {
+            items: HashMap::new(),
+        }
+    }
+
+    pub fn add_item(&mut self, item_name: &str, quantity: u32) {
+        *self.items.entry(item_name.to_string()).or_insert(0) += quantity;
+    }
+
+    pub fn remove_item(&mut self, item_name: &str, quantity: u32) -> bool {
+        if let Some(count) = self.items.get_mut(item_name) {
+            if *count >= quantity {
+                *count -= quantity;
+                if *count == 0 {
+                    self.items.remove(item_name);
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn has_item(&self, item_name: &str, quantity: u32) -> bool {
+        self.items.get(item_name).map_or(false, |&count| count >= quantity)
+    }
+
+    pub fn get_quantity(&self, item_name: &str) -> u32 {
+        *self.items.get(item_name).unwrap_or(&0)
+    }
+
+    pub fn has_resources(&self, recipe: &HashMap<String, u32>) -> bool {
+        for (resource, &required_amount) in recipe {
+            if self.get_quantity(resource) < required_amount {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn remove_resources(&mut self, recipe: &HashMap<String, u32>) -> bool {
+        if !self.has_resources(recipe) {
+            return false;
+        }
+        for (resource, &amount_to_remove) in recipe {
+            self.remove_item(resource, amount_to_remove);
+        }
+        true
+    }
+}
+
+impl Component for Inventory {}
