@@ -21,6 +21,7 @@ pub enum Goal {
     Build(String),
     Attack(u32),
     Flee,
+    Explore,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,6 +156,12 @@ impl Brain {
                     inventory.get_quantity(resource) > 10 // Default
                 },
                 Goal::CraftItem(item) => inventory.has_item(item, 1),
+                Goal::Explore => {
+                    // Considered complete if we have arrived at our random destination.
+                    // The planner will then try the next step (gathering), which might trigger another explore goal
+                    // if the resource wasn't found on the way.
+                    return self.current_path.as_ref().map_or(true, |p| p.is_empty());
+                }
                 _ => false,
             }
         } else {
@@ -172,6 +179,9 @@ impl Brain {
                 for (resource, &required_amount) in &required {
                     let has_enough = inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
                     if !has_enough {
+                        if !self.known_resources.contains_key(resource) {
+                            plan.push(Goal::Explore);
+                        }
                         plan.push(Goal::GatherResource(resource.clone()));
                     }
                 }
@@ -184,6 +194,9 @@ impl Brain {
                 for (resource, &required_amount) in &required {
                      let has_enough = inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
                     if !has_enough {
+                        if !self.known_resources.contains_key(resource) {
+                            plan.push(Goal::Explore);
+                        }
                         plan.push(Goal::GatherResource(resource.clone()));
                     }
                 }
@@ -299,6 +312,7 @@ impl Brain {
                 Goal::Build(structure_name) => self.execute_build_goal(world, entity, &structure_name, current_episode)?,
                 Goal::Attack(target_id) => self.execute_attack_goal(world, entity, target_id, current_episode)?,
                 Goal::Flee => self.execute_flee_goal(world, entity, current_episode)?,
+                Goal::Explore => self.execute_explore_goal(world, entity, current_episode)?,
             }
         }
 
@@ -354,16 +368,41 @@ impl Brain {
             return Ok(());
         };
 
-        // Find the closest resource using the spatial map
-        let mut closest_target = None;
-        let mut min_dist = u32::MAX;
+        // 1. Prioritize known locations from memory
+        if let Some(known_positions) = self.known_resources.get(resource_name) {
+            let mut sorted_positions: Vec<_> = known_positions.iter().collect();
+            sorted_positions.sort_by_key(|pos| pos.x.abs_diff(player_pos.x) + pos.y.abs_diff(player_pos.y));
 
-        // Search in a spiral pattern around the player
-        for radius in 0..10 { // search radius
+            for target_pos in sorted_positions {
+                if let Some(entities_at_pos) = spatial_map.get(&(target_pos.x, target_pos.y)) {
+                    for &target_entity in entities_at_pos {
+                        if let Some(resource) = world.get_component::<super::components::Resource>(target_entity) {
+                            if resource.name == resource_name {
+                                let dx = (player_pos.x as i32 - target_pos.x as i32).abs();
+                                let dy = (player_pos.y as i32 - target_pos.y as i32).abs();
+
+                                if dx <= 1 && dy <= 1 {
+                                    world.add_component(entity, WantsToGather { target: target_entity });
+                                    return Ok(());
+                                } else if self.current_path.is_none() {
+                                    if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (target_pos.x, target_pos.y), &self.mental_map) {
+                                        self.current_path = Some(path);
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback to spiral search if no known resources are reachable or none are known
+        for radius in 0..5 { // Limit search radius
             for i in -(radius as i32)..=(radius as i32) {
                 for j in -(radius as i32)..=(radius as i32) {
                     if i.abs() != radius as i32 && j.abs() != radius as i32 {
-                        continue; // only check the perimeter of the search box
+                        continue;
                     }
                     let search_x = (player_pos.x as i32 + i) as u32;
                     let search_y = (player_pos.y as i32 + j) as u32;
@@ -372,10 +411,19 @@ impl Brain {
                         for &target_entity in entities_at_pos {
                             if let Some(resource) = world.get_component::<super::components::Resource>(target_entity) {
                                 if resource.name == resource_name {
-                                    let dist = radius as u32;
-                                    if dist < min_dist {
-                                        min_dist = dist;
-                                        closest_target = Some(target_entity);
+                                    if let Some(target_pos) = world.get_component::<Position>(target_entity).map(|p| *p) {
+                                        let dx = (player_pos.x as i32 - target_pos.x as i32).abs();
+                                        let dy = (player_pos.y as i32 - target_pos.y as i32).abs();
+
+                                        if dx <= 1 && dy <= 1 {
+                                            world.add_component(entity, WantsToGather { target: target_entity });
+                                            return Ok(());
+                                        } else if self.current_path.is_none() {
+                                            if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (target_pos.x, target_pos.y), &self.mental_map) {
+                                                self.current_path = Some(path);
+                                                return Ok(());
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -383,30 +431,10 @@ impl Brain {
                     }
                 }
             }
-            if closest_target.is_some() {
-                break; // Found a target in this radius, no need to search further
-            }
         }
 
-        if let Some(target) = closest_target {
-            if let Some(target_pos) = world.get_component::<Position>(target).map(|p| *p) {
-                let dx = (player_pos.x as i32 - target_pos.x as i32).abs();
-                let dy = (player_pos.y as i32 - target_pos.y as i32).abs();
-
-                if dx <= 1 && dy <= 1 {
-                    world.add_component(entity, WantsToGather { target });
-                } else if self.current_path.is_none() {
-                    if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (target_pos.x, target_pos.y), &self.mental_map) {
-                        self.current_path = Some(path);
-                    }
-                }
-            }
-        } else {
-            // If we reach here, it means we couldn't find a path or the resource doesn't exist.
-            // Clear the goal to avoid getting stuck.
-            self.current_goal = None;
-        }
-
+        // 3. If still no target, the goal is currently impossible
+        self.current_goal = None; // Let the planner decide what to do next (e.g., explore)
         Ok(())
     }
 
@@ -492,6 +520,35 @@ impl Brain {
         let flee_dy = if norm > 0.0 { (flee_vec_y / norm).round() as i32 } else { 0 };
 
         world.add_component(entity, crate::components::Velocity { dx: flee_dx, dy: flee_dy });
+
+        Ok(())
+    }
+
+    fn execute_explore_goal(&mut self, world: &mut World, entity: Entity, _current_episode: u32) -> Result<(), SimulationError> {
+        if self.current_path.is_some() {
+            // Already exploring, let follow_path do its thing
+            return Ok(());
+        }
+
+        let mut unvisited = Vec::new();
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                if self.mental_map[y as usize][x as usize].is_none() {
+                    unvisited.push((x, y));
+                }
+            }
+        }
+
+        if !unvisited.is_empty() {
+            let target_idx = rand::thread_rng().gen_range(0..unvisited.len());
+            let target_pos = unvisited[target_idx];
+
+            if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
+                if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), target_pos, &self.mental_map) {
+                    self.current_path = Some(path);
+                }
+            }
+        }
 
         Ok(())
     }
@@ -672,6 +729,7 @@ mod tests {
 
         // 3. Assert
         let expected_plan = vec![
+            Goal::Explore,
             Goal::GatherResource("wood".to_string()),
             Goal::CraftItem("wooden_box".to_string()),
         ];
@@ -680,5 +738,65 @@ mod tests {
         let expected_set: std::collections::HashSet<_> = expected_plan.into_iter().collect();
 
         assert_eq!(plan_set, expected_set);
+    }
+
+    #[test]
+    fn test_planning_with_unknown_resource_triggers_explore() {
+        // 1. Setup
+        let mut recipes = HashMap::new();
+        recipes.insert("iron_pickaxe".to_string(), {
+            let mut ingredients = HashMap::new();
+            ingredients.insert("iron_ore".to_string(), 3);
+            ingredients
+        });
+        let recipe_manager = Arc::new(RecipeManager::with_recipes(recipes));
+        let mut brain = Brain::new(recipe_manager, 0.1, 0.9, 0.1);
+        brain.known_resources.remove("iron_ore"); // Ensure it's unknown
+
+        let mut world = World::new();
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, Inventory::new());
+
+        // 2. Plan
+        let goal = Goal::CraftItem("iron_pickaxe".to_string());
+        let plan = brain.plan_goal(&world, player_entity, &goal).unwrap();
+
+        // 3. Assert
+        let expected_plan = vec![
+            Goal::Explore,
+            Goal::GatherResource("iron_ore".to_string()),
+            Goal::CraftItem("iron_pickaxe".to_string()),
+        ];
+        assert_eq!(plan, expected_plan);
+    }
+
+    #[test]
+    fn test_planning_with_known_resource() {
+        // 1. Setup
+        let mut recipes = HashMap::new();
+        recipes.insert("stone_axe".to_string(), {
+            let mut ingredients = HashMap::new();
+            ingredients.insert("stone".to_string(), 2);
+            ingredients
+        });
+        let recipe_manager = Arc::new(RecipeManager::with_recipes(recipes));
+        let mut brain = Brain::new(recipe_manager, 0.1, 0.9, 0.1);
+        // Ensure the brain DOES know where stone is
+        brain.known_resources.entry("stone".to_string()).or_default().insert(Position { x: 10, y: 10 });
+
+        let mut world = World::new();
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, Inventory::new());
+
+        // 2. Plan
+        let goal = Goal::CraftItem("stone_axe".to_string());
+        let plan = brain.plan_goal(&world, player_entity, &goal).unwrap();
+
+        // 3. Assert
+        let expected_plan = vec![
+            Goal::GatherResource("stone".to_string()),
+            Goal::CraftItem("stone_axe".to_string()),
+        ];
+        assert_eq!(plan, expected_plan);
     }
 }
