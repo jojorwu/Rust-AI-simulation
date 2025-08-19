@@ -1,4 +1,4 @@
-use noise::{NoiseFn, Fbm, Perlin};
+use noise::{NoiseFn, Fbm, OpenSimplex, RidgedMulti};
 use rand::Rng;
 use serde::{Serialize, Deserialize};
 use std::fs;
@@ -131,18 +131,43 @@ impl Map {
 
     pub fn generate_island_map(&mut self, scale: f64, octaves: i32, persistence: f64, lacunarity: f64) {
         let seed = rand::thread_rng().r#gen::<u32>();
-        let mut fbm: Fbm<Perlin> = Fbm::new(seed);
-        fbm.octaves = octaves as usize;
-        fbm.persistence = persistence;
-        fbm.lacunarity = lacunarity;
+
+        // Base terrain using OpenSimplex
+        let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
+        base_fbm.octaves = octaves as usize;
+        base_fbm.persistence = persistence;
+        base_fbm.lacunarity = lacunarity;
+
+        // Mountainous terrain using RidgedMulti
+        let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed.wrapping_add(1));
+        // We can tune RidgedMulti properties here if needed, e.g., frequency, octaves.
+        // For now, we'll use defaults and a different scale.
 
         for y in 0..self.height {
             for x in 0..self.width {
+                // Island mask calculations
                 let nx = 2.0 * x as f64 / self.width as f64 - 1.0;
                 let ny = 2.0 * y as f64 / self.height as f64 - 1.0;
                 let dist = 1.0 - (1.0 - nx.powi(2)) * (1.0 - ny.powi(2));
-                let noise_val = fbm.get([x as f64 / scale, y as f64 / scale]);
-                let island_val = (noise_val + 1.0) / 2.0;
+
+                // Noise coordinates
+                let pos = [x as f64 / scale, y as f64 / scale];
+
+                // Calculate base noise
+                let base_noise = base_fbm.get(pos);
+
+                // Calculate mountain noise at a different scale (larger features)
+                let mountain_pos = [x as f64 / (scale * 2.5), y as f64 / (scale * 2.5)];
+                let mountain_noise = ridged_multi.get(mountain_pos);
+
+                // Combine the noise values.
+                // The base noise provides the general elevation.
+                // The mountain_noise is weighted and added to create peaks and valleys.
+                // We square the mountain_noise to make the ridges sharper.
+                let combined_noise = base_noise + (mountain_noise.powi(2) * 0.6);
+
+                // Normalize and apply island mask
+                let island_val = (combined_noise.clamp(-1.0, 1.5) + 1.0) / 2.5; // Adjust clamping and normalization for the new range
                 let height = island_val * (1.0 - dist);
 
                 let mut tile_char = ' ';
@@ -156,6 +181,7 @@ impl Map {
                     }
                 }
 
+                // Keep the random flower generation
                 if biome_name == "plains" && tile_char == '.' && rand::thread_rng().gen_range(0..100) < 5 {
                     tile_char = 'f';
                 }
