@@ -1,5 +1,5 @@
 use crate::ecs::World;
-use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild, WantsToAttack, Health, DroppedItem, WantsToPickup, Inventory};
+use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild, WantsToAttack, Health, DroppedItem, WantsToPickup, Inventory, Chest, WantsToStoreItem};
 use crate::player::Player;
 use crate::recipes::RecipeManager;
 use crate::item::ItemRegistry;
@@ -37,6 +37,39 @@ pub fn visibility_system(world: &mut World, map: &Map, is_day: bool) {
                 player.mental_map.grid[pos.y as usize][pos.x as usize] = TileState::Visible;
             }
         }
+    }
+}
+
+pub fn storage_system(world: &mut World) {
+    let mut to_store = Vec::new();
+    for entity in 0..world.entities.len() {
+        if let Some(wants_to_store) = world.get_component::<WantsToStoreItem>(entity) {
+            to_store.push((entity, wants_to_store.clone()));
+        }
+    }
+
+    let mut successful_transfers = Vec::new();
+
+    // Step 1: Check for validity and remove from storer
+    for (storer, wants_to_store) in &to_store {
+        if let Some(storer_inventory) = world.get_component_mut::<Inventory>(*storer) {
+            if storer_inventory.remove_item(&wants_to_store.item_name, wants_to_store.quantity) {
+                // If removal was successful, queue the item for addition to the chest
+                successful_transfers.push(wants_to_store.clone());
+            }
+        }
+    }
+
+    // Step 2: Add to chest
+    for transfer in successful_transfers {
+        if let Some(chest_component) = world.get_component_mut::<Chest>(transfer.target_chest) {
+            chest_component.inventory.add_item(&transfer.item_name, transfer.quantity);
+        }
+    }
+
+    // Reset wants to store
+    for (storer, _) in to_store {
+        world.remove_component::<WantsToStoreItem>(storer);
     }
 }
 
@@ -93,6 +126,13 @@ mod tests {
         assert_eq!(resource.quantity, 4);
 
         assert!(world.get_component::<WantsToGather>(gatherer).is_none());
+    }
+
+    // This test needs a way to create a test brain, moving it here from brain.rs
+    fn create_test_brain() -> Brain {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let recipe_manager = Arc::new(crate::recipes::RecipeManager::new(&format!("{}/recipes.json", manifest_dir)));
+        Brain::new(recipe_manager, 0.1, 0.9, 0.1)
     }
 }
 
@@ -189,7 +229,9 @@ pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, _item_
     }
 }
 
-pub fn building_system(world: &mut World, map: &mut Map) {
+use crate::brain::Brain;
+
+pub fn building_system(world: &mut World, map: &mut Map, brains: &Vec<Arc<Mutex<Brain>>>) {
     let mut to_build = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_build) = world.get_component::<WantsToBuild>(entity) {
@@ -203,17 +245,33 @@ pub fn building_system(world: &mut World, map: &mut Map) {
 
             if tile.tile_type == '.' {
                 if let Some(inventory) = world.get_component_mut::<Inventory>(builder) {
-                    if inventory.has_item(&wants_to_build.structure_name, 1) {
-                        let mut recipe = std::collections::HashMap::new();
-                        recipe.insert(wants_to_build.structure_name.clone(), 1);
-                        inventory.remove_resources(&recipe);
+                    if inventory.remove_item(&wants_to_build.structure_name, 1) {
+                        let built_structure = wants_to_build.structure_name.clone();
 
-                        tile.tile_type = match wants_to_build.structure_name.as_str() {
-                            "foundation" => 'B',
-                            "wall" => '#',
-                            "doorway" => 'O',
-                            _ => 'X',
-                        };
+                        if built_structure == "chest" {
+                            let chest_entity = world.create_entity();
+                            world.add_component(chest_entity, builder_pos);
+                            world.add_component(chest_entity, Chest { inventory: Inventory::new() });
+                            tile.tile_type = 'C';
+                        } else {
+                            tile.tile_type = match built_structure.as_str() {
+                                "foundation" => 'B',
+                                "wall" => '#',
+                                "doorway" => 'O',
+                                _ => 'X',
+                            };
+
+                            // If a foundation was built, set the home base for the AI
+                            if built_structure == "foundation" {
+                                if builder < brains.len() {
+                                    let brain = Arc::clone(&brains[builder]);
+                                    let mut brain_lock = brain.lock().unwrap();
+                                    if brain_lock.home_base.is_none() {
+                                        brain_lock.home_base = Some(builder_pos);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

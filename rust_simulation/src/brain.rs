@@ -4,7 +4,7 @@ use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
 use super::map::Tile;
 use super::pathfinding;
-use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource, Inventory};
+use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource, Inventory, Chest, WantsToStoreItem};
 use std::collections::{HashMap, HashSet};
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
@@ -22,6 +22,7 @@ pub enum Goal {
     Attack(u32),
     Flee,
     Explore,
+    Stockpile(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +69,7 @@ pub struct Brain {
     pub goal_commitment_ticks: u32,
     pub prev_state: Option<HighLevelState>,
     pub prev_goal: Option<Goal>,
+    pub home_base: Option<Position>,
 }
 
 impl Brain {
@@ -77,6 +79,7 @@ impl Brain {
             Goal::GatherResource("stone".to_string()),
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
+            Goal::Stockpile("wood".to_string()),
         ];
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -103,6 +106,7 @@ impl Brain {
             goal_commitment_ticks: 0,
             prev_state: None,
             prev_goal: None,
+            home_base: None,
         }
     }
 
@@ -172,6 +176,9 @@ impl Brain {
                     // if the resource wasn't found on the way.
                     return self.current_path.as_ref().map_or(true, |p| p.is_empty());
                 }
+                Goal::Stockpile(resource) => {
+                    return !inventory.has_item(resource, 1);
+                }
                 _ => false,
             }
         } else {
@@ -209,6 +216,14 @@ impl Brain {
                         }
                         plan.push(Goal::GatherResource(resource.clone()));
                     }
+                }
+                plan.push(goal.clone());
+            }
+            Goal::Stockpile(resource) => {
+                let inventory = world.get_component::<Inventory>(entity);
+                let has_enough = inventory.map_or(false, |inv| inv.has_item(resource, 1));
+                if !has_enough {
+                    plan.push(Goal::GatherResource(resource.clone()));
                 }
                 plan.push(goal.clone());
             }
@@ -354,6 +369,7 @@ impl Brain {
                 Goal::Attack(target_id) => self.execute_attack_goal(world, entity, target_id, current_episode)?,
                 Goal::Flee => self.execute_flee_goal(world, entity, current_episode)?,
                 Goal::Explore => self.execute_explore_goal(world, entity, current_episode)?,
+                Goal::Stockpile(resource) => self.execute_stockpile_goal(world, entity, &resource, current_episode)?,
             }
         }
 
@@ -497,28 +513,54 @@ impl Brain {
 
         let hostile_players: Vec<_> = self.player_memories.iter()
             .filter(|(_, mem)| mem.relationship == RelationshipStatus::Hostile)
+            .map(|(&id, _)| id)
             .collect();
 
-        if !hostile_players.is_empty() {
-            // Flee if outnumbered or low on health
-            if hostile_players.len() > 1 || health.current < health.max / 2 {
-                self.current_goal = Some(Goal::Flee);
-                self.current_path = None; // Clear any existing path
-                return true;
-            } else {
-                // Fight if conditions are favorable
-                let mut closest_threat = None;
-                let mut min_dist = u32::MAX;
+        if hostile_players.is_empty() {
+            return false;
+        }
 
-                for (&id, _) in hostile_players {
-                    if let Some(threat_pos) = world.get_component::<Position>(id as usize) {
-                        let dist = player_pos.x.abs_diff(threat_pos.x) + player_pos.y.abs_diff(threat_pos.y);
-                        if dist < min_dist {
-                            min_dist = dist;
-                            closest_threat = Some(id);
-                        }
+        let defense_radius = 10;
+        let mut territorial_threats = Vec::new();
+        if let Some(home_base_pos) = self.home_base {
+            for &id in &hostile_players {
+                if let Some(threat_pos) = world.get_component::<Position>(id as usize) {
+                    if threat_pos.x.abs_diff(home_base_pos.x) <= defense_radius &&
+                       threat_pos.y.abs_diff(home_base_pos.y) <= defense_radius {
+                        territorial_threats.push(id);
                     }
                 }
+            }
+        }
+
+        if !territorial_threats.is_empty() {
+            // Highly aggressive when defending territory
+            if health.current < health.max / 4 { // Flee only if health is critical
+                self.current_goal = Some(Goal::Flee);
+                self.current_path = None;
+                return true;
+            } else {
+                // Attack the closest territorial threat
+                let closest_threat = territorial_threats.iter()
+                    .min_by_key(|&&id| world.get_component::<Position>(id as usize).map_or(u32::MAX, |p| p.x.abs_diff(player_pos.x) + p.y.abs_diff(player_pos.y)))
+                    .map(|&id| id);
+
+                if let Some(id) = closest_threat {
+                    self.current_goal = Some(Goal::Attack(id));
+                    self.current_path = None;
+                    return true;
+                }
+            }
+        } else {
+            // Standard threat response when not defending territory
+            if hostile_players.len() > 1 || health.current < health.max / 2 {
+                self.current_goal = Some(Goal::Flee);
+                self.current_path = None;
+                return true;
+            } else {
+                let closest_threat = hostile_players.iter()
+                    .min_by_key(|&&id| world.get_component::<Position>(id as usize).map_or(u32::MAX, |p| p.x.abs_diff(player_pos.x) + p.y.abs_diff(player_pos.y)))
+                    .map(|&id| id);
 
                 if let Some(id) = closest_threat {
                     self.current_goal = Some(Goal::Attack(id));
@@ -527,6 +569,7 @@ impl Brain {
                 }
             }
         }
+
         false
     }
 
@@ -595,6 +638,58 @@ impl Brain {
 
         Ok(())
     }
+
+    fn execute_stockpile_goal(&mut self, world: &mut World, entity: Entity, resource: &str, _current_episode: u32) -> Result<(), SimulationError> {
+        if self.home_base.is_none() {
+            // Cannot stockpile without a home base.
+            self.current_goal = None; // Abort goal
+            return Ok(());
+        }
+        let home_base_pos = self.home_base.unwrap();
+
+        // Find the closest chest to home base
+        let mut closest_chest: Option<(Entity, Position)> = None;
+        let mut min_dist = u32::MAX;
+
+        for chest_entity in 0..world.entities.len() {
+            if world.get_component::<Chest>(chest_entity).is_some() {
+                if let Some(chest_pos) = world.get_component::<Position>(chest_entity) {
+                    let dist = chest_pos.x.abs_diff(home_base_pos.x) + chest_pos.y.abs_diff(home_base_pos.y);
+                    if dist < min_dist {
+                        min_dist = dist;
+                        closest_chest = Some((chest_entity, *chest_pos));
+                    }
+                }
+            }
+        }
+
+        if let Some((chest_entity, chest_pos)) = closest_chest {
+            if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
+                let dx = (player_pos.x as i32 - chest_pos.x as i32).abs();
+                let dy = (player_pos.y as i32 - chest_pos.y as i32).abs();
+
+                if dx <= 1 && dy <= 1 {
+                    // We are next to the chest, so store the item.
+                    world.add_component(entity, WantsToStoreItem {
+                        item_name: resource.to_string(),
+                        quantity: 1, // For now, just store 1
+                        target_chest: chest_entity,
+                    });
+                } else if self.current_path.is_none() {
+                    // Pathfind to the chest
+                    if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (chest_pos.x, chest_pos.y), &self.mental_map) {
+                        self.current_path = Some(path);
+                    }
+                }
+            }
+        } else {
+            // No chest found. Abort.
+            // A better AI might plan to build a chest first.
+            self.current_goal = None;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -605,7 +700,7 @@ mod tests {
     use crate::item::{ItemRegistry, Item};
     use crate::player::Player;
     use crate::components::Resource;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::env;
 
     fn create_test_brain() -> Brain {
@@ -923,5 +1018,78 @@ mod tests {
 
         // Assert that building was chosen despite the lower Q-value, due to the night bonus
         assert_eq!(chosen_goal, Goal::Build("foundation".to_string()));
+    }
+
+    #[test]
+    fn test_stockpile_goal_execution() {
+        let mut brain = create_test_brain();
+        for y in 0..crate::config::HEIGHT {
+            for x in 0..crate::config::WIDTH {
+                brain.mental_map[y as usize][x as usize] = Some(MemoryTile {
+                    tile: Tile::new('.', "plains".to_string())
+                });
+            }
+        }
+        let mut world = World::new();
+
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, Position { x: 1, y: 1 });
+        let mut inventory = Inventory::new();
+        inventory.add_item("wood", 10);
+        world.add_component(player_entity, inventory);
+
+        brain.home_base = Some(Position { x: 5, y: 5 });
+
+        let chest_entity = world.create_entity();
+        world.add_component(chest_entity, Position { x: 5, y: 6 });
+        world.add_component(chest_entity, Chest { inventory: Inventory::new() });
+
+        brain.execute_stockpile_goal(&mut world, player_entity, "wood", 0).unwrap();
+
+        // After one tick, the AI should be pathfinding to the chest
+        assert!(brain.current_path.is_some());
+
+        // Manually move player next to chest
+        if let Some(pos) = world.get_component_mut::<Position>(player_entity) {
+            pos.x = 5;
+            pos.y = 7;
+        }
+        brain.current_path = None; // Clear path
+
+        // Execute again
+        brain.execute_stockpile_goal(&mut world, player_entity, "wood", 0).unwrap();
+
+        // Now it should want to store the item
+        let wants_to_store = world.get_component::<WantsToStoreItem>(player_entity);
+        assert!(wants_to_store.is_some());
+        assert_eq!(wants_to_store.unwrap().target_chest, chest_entity);
+    }
+
+    #[test]
+    fn test_territorial_defense_aggression() {
+        let mut brain = create_test_brain();
+        let mut world = World::new();
+
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, crate::components::Health { current: 40, max: 100 });
+        world.add_component(player_entity, Position { x: 5, y: 5 });
+
+        // Set a home base
+        brain.home_base = Some(Position { x: 6, y: 6 });
+
+        // Create hostile players
+        let threat1 = world.create_entity();
+        world.add_component(threat1, Position { x: 7, y: 7 }); // Inside defense radius
+        brain.player_memories.insert(threat1 as u32, PlayerMemory { relationship: RelationshipStatus::Hostile });
+
+        let threat2 = world.create_entity();
+        world.add_component(threat2, Position { x: 50, y: 50 }); // Outside defense radius
+        brain.player_memories.insert(threat2 as u32, PlayerMemory { relationship: RelationshipStatus::Hostile });
+
+        let handled = brain.handle_threats(&world, player_entity);
+
+        assert!(handled);
+        // AI is not outnumbered by territorial threats, but health is low. It should still fight.
+        assert_eq!(brain.current_goal, Some(Goal::Attack(threat1 as u32)));
     }
 }

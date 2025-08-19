@@ -1,6 +1,7 @@
 use crate::ecs::{Component, Entity};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct Position {
@@ -50,7 +51,21 @@ pub struct WantsToBuild {
     pub structure_name: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Chest {
+    pub inventory: Inventory,
+}
+
+#[derive(Clone, Debug)]
+pub struct WantsToStoreItem {
+    pub item_name: String,
+    pub quantity: u32,
+    pub target_chest: Entity,
+}
+
 impl Component for WantsToBuild {}
+impl Component for Chest {}
+impl Component for WantsToStoreItem {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct WantsToAttack {
@@ -88,7 +103,7 @@ pub struct DroppedItem {
 
 impl Component for DroppedItem {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inventory {
     pub items: HashMap<String, u32>,
 }

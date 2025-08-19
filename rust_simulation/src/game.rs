@@ -7,7 +7,7 @@ use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
 use super::components::{Position, Inventory};
 use super::events::EventBus;
-use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system};
+use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system, storage_system};
 use std::sync::{Arc, Mutex};
 use crate::fov;
 use std::env;
@@ -307,7 +307,8 @@ impl Game {
         movement_system(&mut world, &mut self.map);
         gathering_system(&mut world, &self.item_registry);
         crafting_system(&mut world, &self.recipe_manager, &self.item_registry);
-        building_system(&mut world, &mut self.map);
+        building_system(&mut world, &mut self.map, &self.brains);
+        storage_system(&mut world);
         combat_system(&mut world, &self.event_bus);
         pickup_system(&mut world, &self.item_registry, &mut self.map);
         death_system(&mut world, &self.event_bus, &mut self.map);
