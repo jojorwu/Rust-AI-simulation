@@ -16,6 +16,13 @@ pub const MAX_STEPS_PER_EPISODE: u32 = 20;
 pub const DAY_LENGTH: u32 = 100;
 pub const NIGHT_LENGTH: u32 = 50;
 
+// AI Configuration
+pub const OPPORTUNISTIC_COMMITMENT_THRESHOLD: u32 = 5;
+pub const VALUABLE_RESOURCES: &[&str] = &["iron_ore"];
+pub const DEFENSE_RADIUS: u32 = 10;
+pub const CRITICAL_HEALTH_RATIO: f32 = 0.25;
+pub const STANDARD_HEALTH_RATIO: f32 = 0.5;
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct RoadSetting {
     pub name: String,

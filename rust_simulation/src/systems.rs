@@ -128,12 +128,6 @@ mod tests {
         assert!(world.get_component::<WantsToGather>(gatherer).is_none());
     }
 
-    // This test needs a way to create a test brain, moving it here from brain.rs
-    fn create_test_brain() -> Brain {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let recipe_manager = Arc::new(crate::recipes::RecipeManager::new(&format!("{}/recipes.json", manifest_dir)));
-        Brain::new(recipe_manager, 0.1, 0.9, 0.1)
-    }
 }
 
 pub fn movement_system(world: &mut World, map: &mut Map) {
@@ -245,7 +239,9 @@ pub fn building_system(world: &mut World, map: &mut Map, brains: &Vec<Arc<Mutex<
 
             if tile.tile_type == '.' {
                 if let Some(inventory) = world.get_component_mut::<Inventory>(builder) {
+                    println!("[build_system] Builder {} has inventory: {:?}", builder, inventory.items);
                     if inventory.remove_item(&wants_to_build.structure_name, 1) {
+                        println!("[build_system] Item removed!");
                         let built_structure = wants_to_build.structure_name.clone();
 
                         if built_structure == "chest" {

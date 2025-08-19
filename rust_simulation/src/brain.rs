@@ -4,11 +4,10 @@ use super::config::{WIDTH, HEIGHT};
 use std::cmp::Ordering;
 use super::map::Tile;
 use super::pathfinding;
-use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource, Inventory, Chest, WantsToStoreItem};
+use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource, Inventory, Chest, WantsToStoreItem, Health};
 use std::collections::{HashMap, HashSet};
 use super::recipes::RecipeManager;
 use super::ecs::{World, Entity};
-use super::player::Player;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 use std::fs;
@@ -258,27 +257,22 @@ impl Brain {
     }
 
     fn handle_opportunities(&mut self, world: &World, entity: Entity, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, visible_tiles: &Vec<(Position, Tile)>) {
-        if self.goal_commitment_ticks >= 5 { return; } // Too committed to be distracted
-
-        let valuable_resources = ["iron_ore"]; // Hardcoded for now
+        if self.goal_commitment_ticks >= crate::config::OPPORTUNISTIC_COMMITMENT_THRESHOLD { return; }
 
         for (pos, _tile) in visible_tiles {
             if let Some(entities_at_pos) = spatial_map.get(&(pos.x, pos.y)) {
                 for &entity_id in entities_at_pos {
                     if let Some(resource) = world.get_component::<Resource>(entity_id) {
-                        if valuable_resources.contains(&resource.name.as_str()) {
-                            // Found a valuable resource!
-                            // Is it a new opportunity? Check inventory.
+                        if crate::config::VALUABLE_RESOURCES.contains(&resource.name.as_str()) {
                             let has_it_already = world.get_component::<Inventory>(entity)
                                 .map_or(false, |inv| inv.get_quantity(&resource.name) > 0);
 
                             if !has_it_already {
-                                // This is a good opportunity. Interrupt current plan.
                                 self.goal_stack.clear();
                                 self.current_path = None;
                                 self.current_goal = Some(Goal::GatherResource(resource.name.clone()));
                                 self.goal_commitment_ticks = 10; // Commit to this new goal
-                                return; // Only take one opportunity per tick
+                                return;
                             }
                         }
                     }
@@ -520,57 +514,62 @@ impl Brain {
             return false;
         }
 
-        let defense_radius = 10;
-        let mut territorial_threats = Vec::new();
+        if self.handle_territorial_threats(world, &player_pos, health, &hostile_players) {
+            return true;
+        }
+
+        if self.handle_standard_threats(world, &player_pos, health, &hostile_players) {
+            return true;
+        }
+
+        false
+    }
+
+    fn handle_territorial_threats(&mut self, world: &World, player_pos: &Position, health: &Health, hostile_players: &[u32]) -> bool {
         if let Some(home_base_pos) = self.home_base {
-            for &id in &hostile_players {
-                if let Some(threat_pos) = world.get_component::<Position>(id as usize) {
-                    if threat_pos.x.abs_diff(home_base_pos.x) <= defense_radius &&
-                       threat_pos.y.abs_diff(home_base_pos.y) <= defense_radius {
-                        territorial_threats.push(id);
+            let territorial_threats: Vec<_> = hostile_players.iter().filter(|&&id| {
+                world.get_component::<Position>(id as usize).map_or(false, |p|
+                    p.x.abs_diff(home_base_pos.x) <= crate::config::DEFENSE_RADIUS && p.y.abs_diff(home_base_pos.y) <= crate::config::DEFENSE_RADIUS
+                )
+            }).copied().collect();
+
+            if !territorial_threats.is_empty() {
+                if (health.current as f32 / health.max as f32) < crate::config::CRITICAL_HEALTH_RATIO {
+                    self.set_goal(Goal::Flee);
+                    return true;
+                } else {
+                    if let Some(id) = self.find_closest_threat(world, player_pos, &territorial_threats) {
+                        self.set_goal(Goal::Attack(id));
+                        return true;
                     }
                 }
             }
         }
+        false
+    }
 
-        if !territorial_threats.is_empty() {
-            // Highly aggressive when defending territory
-            if health.current < health.max / 4 { // Flee only if health is critical
-                self.current_goal = Some(Goal::Flee);
-                self.current_path = None;
-                return true;
-            } else {
-                // Attack the closest territorial threat
-                let closest_threat = territorial_threats.iter()
-                    .min_by_key(|&&id| world.get_component::<Position>(id as usize).map_or(u32::MAX, |p| p.x.abs_diff(player_pos.x) + p.y.abs_diff(player_pos.y)))
-                    .map(|&id| id);
-
-                if let Some(id) = closest_threat {
-                    self.current_goal = Some(Goal::Attack(id));
-                    self.current_path = None;
-                    return true;
-                }
-            }
+    fn handle_standard_threats(&mut self, world: &World, player_pos: &Position, health: &Health, hostile_players: &[u32]) -> bool {
+        if hostile_players.len() > 1 || (health.current as f32 / health.max as f32) < crate::config::STANDARD_HEALTH_RATIO {
+            self.set_goal(Goal::Flee);
+            return true;
         } else {
-            // Standard threat response when not defending territory
-            if hostile_players.len() > 1 || health.current < health.max / 2 {
-                self.current_goal = Some(Goal::Flee);
-                self.current_path = None;
+            if let Some(id) = self.find_closest_threat(world, player_pos, hostile_players) {
+                self.set_goal(Goal::Attack(id));
                 return true;
-            } else {
-                let closest_threat = hostile_players.iter()
-                    .min_by_key(|&&id| world.get_component::<Position>(id as usize).map_or(u32::MAX, |p| p.x.abs_diff(player_pos.x) + p.y.abs_diff(player_pos.y)))
-                    .map(|&id| id);
-
-                if let Some(id) = closest_threat {
-                    self.current_goal = Some(Goal::Attack(id));
-                    self.current_path = None;
-                    return true;
-                }
             }
         }
-
         false
+    }
+
+    fn find_closest_threat(&self, world: &World, player_pos: &Position, threats: &[u32]) -> Option<u32> {
+        threats.iter()
+            .min_by_key(|&&id| world.get_component::<Position>(id as usize).map_or(u32::MAX, |p| p.x.abs_diff(player_pos.x) + p.y.abs_diff(player_pos.y)))
+            .copied()
+    }
+
+    fn set_goal(&mut self, goal: Goal) {
+        self.current_goal = Some(goal);
+        self.current_path = None;
     }
 
     fn execute_attack_goal(&mut self, world: &mut World, entity: Entity, target_id: u32, _current_episode: u32) -> Result<(), SimulationError> {
@@ -640,55 +639,41 @@ impl Brain {
     }
 
     fn execute_stockpile_goal(&mut self, world: &mut World, entity: Entity, resource: &str, _current_episode: u32) -> Result<(), SimulationError> {
-        if self.home_base.is_none() {
-            // Cannot stockpile without a home base.
-            self.current_goal = None; // Abort goal
+        let Some(home_base_pos) = self.home_base else {
+            self.current_goal = None; // Abort goal if no home base
             return Ok(());
-        }
-        let home_base_pos = self.home_base.unwrap();
+        };
 
-        // Find the closest chest to home base
-        let mut closest_chest: Option<(Entity, Position)> = None;
-        let mut min_dist = u32::MAX;
-
-        for chest_entity in 0..world.entities.len() {
-            if world.get_component::<Chest>(chest_entity).is_some() {
-                if let Some(chest_pos) = world.get_component::<Position>(chest_entity) {
-                    let dist = chest_pos.x.abs_diff(home_base_pos.x) + chest_pos.y.abs_diff(home_base_pos.y);
-                    if dist < min_dist {
-                        min_dist = dist;
-                        closest_chest = Some((chest_entity, *chest_pos));
-                    }
-                }
-            }
-        }
-
-        if let Some((chest_entity, chest_pos)) = closest_chest {
+        if let Some((chest_entity, chest_pos)) = self.find_closest_chest(world, &home_base_pos) {
             if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
                 let dx = (player_pos.x as i32 - chest_pos.x as i32).abs();
                 let dy = (player_pos.y as i32 - chest_pos.y as i32).abs();
 
                 if dx <= 1 && dy <= 1 {
-                    // We are next to the chest, so store the item.
                     world.add_component(entity, WantsToStoreItem {
                         item_name: resource.to_string(),
                         quantity: 1, // For now, just store 1
                         target_chest: chest_entity,
                     });
                 } else if self.current_path.is_none() {
-                    // Pathfind to the chest
                     if let Some(path) = pathfinding::find_path((player_pos.x, player_pos.y), (chest_pos.x, chest_pos.y), &self.mental_map) {
                         self.current_path = Some(path);
                     }
                 }
             }
         } else {
-            // No chest found. Abort.
-            // A better AI might plan to build a chest first.
+            // No chest found. A better AI might plan to build one.
             self.current_goal = None;
         }
 
         Ok(())
+    }
+
+    fn find_closest_chest(&self, world: &World, pos: &Position) -> Option<(Entity, Position)> {
+        (0..world.entities.len())
+            .filter_map(|e| world.get_component::<Chest>(e).map(|_| e))
+            .filter_map(|e| world.get_component::<Position>(e).map(|p| (e, *p)))
+            .min_by_key(|(_, chest_pos)| chest_pos.x.abs_diff(pos.x) + chest_pos.y.abs_diff(pos.y))
     }
 }
 
@@ -697,10 +682,9 @@ mod tests {
     use super::*;
     use crate::ecs::World;
     use crate::recipes::RecipeManager;
-    use crate::item::{ItemRegistry, Item};
     use crate::player::Player;
     use crate::components::Resource;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::env;
 
     fn create_test_brain() -> Brain {
@@ -761,9 +745,6 @@ mod tests {
     fn test_is_goal_complete() {
         let brain = create_test_brain();
         let mut world = World::new();
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let item_registry = ItemRegistry::new(&format!("{}/items.json", manifest_dir));
-
 
         let player_entity = world.create_entity();
         let player = Player::new(0, 100, 100);
