@@ -15,6 +15,10 @@ impl RecipeManager {
         RecipeManager { recipes }
     }
 
+    pub fn with_recipes(recipes: HashMap<String, HashMap<String, u32>>) -> Self {
+        RecipeManager { recipes }
+    }
+
     pub fn get_required_resources(&self, item: &str, quantity: u32) -> HashMap<String, u32> {
         let mut required_resources = HashMap::new();
 

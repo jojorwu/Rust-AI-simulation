@@ -162,6 +162,40 @@ impl Brain {
         }
     }
 
+    pub fn plan_goal(&self, world: &World, entity: Entity, goal: &Goal) -> Result<Vec<Goal>, SimulationError> {
+        let mut plan = Vec::new();
+        match goal {
+            Goal::CraftItem(item_name) => {
+                let required = self.recipe_manager.get_required_resources(item_name, 1);
+                let inventory = world.get_component::<Inventory>(entity);
+
+                for (resource, &required_amount) in &required {
+                    let has_enough = inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
+                    if !has_enough {
+                        plan.push(Goal::GatherResource(resource.clone()));
+                    }
+                }
+                plan.push(goal.clone());
+            }
+            Goal::Build(structure_name) => {
+                let required = self.recipe_manager.get_required_resources(structure_name, 1);
+                let inventory = world.get_component::<Inventory>(entity);
+
+                for (resource, &required_amount) in &required {
+                     let has_enough = inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
+                    if !has_enough {
+                        plan.push(Goal::GatherResource(resource.clone()));
+                    }
+                }
+                plan.push(goal.clone());
+            }
+            _ => {
+                plan.push(goal.clone());
+            }
+        }
+        Ok(plan)
+    }
+
     pub fn tick(&mut self, world: &mut World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, high_level_state: &HighLevelState, visible_tiles: &Vec<(Position, Tile)>) -> Result<(), SimulationError> {
         // Update Q-table based on the outcome of the previous action
         if let (Some(prev_state), Some(prev_goal)) = (self.prev_state.clone(), self.prev_goal.clone()) {
@@ -215,16 +249,30 @@ impl Brain {
         }
 
         if let Some(goal) = &self.current_goal {
-            if self.is_goal_complete(world, entity, goal) || !self.is_goal_valid(world, goal) {
+            if self.is_goal_complete(world, entity, goal) {
+                self.current_path = None; // Reset path for next step
+                self.current_goal = self.goal_stack.pop();
+            } else if !self.is_goal_valid(world, goal) {
+                // Current step is invalid, so the whole plan is invalid. Replanning needed.
                 self.current_goal = None;
+                self.goal_stack.clear();
                 self.current_path = None;
-                self.goal_commitment_ticks = 0;
+                self.goal_commitment_ticks = 0; // Force replan
             }
         }
 
         if self.current_goal.is_none() && self.goal_commitment_ticks == 0 {
-            self.current_goal = Some(self.choose_goal(world, high_level_state)?);
-            self.goal_commitment_ticks = 10; // Commit to the new goal for 10 ticks
+            let new_high_level_goal = self.choose_goal(world, high_level_state)?;
+
+            let mut plan = self.plan_goal(world, entity, &new_high_level_goal)?;
+            plan.reverse();
+            self.goal_stack = plan;
+
+            self.current_goal = self.goal_stack.pop();
+
+            if self.current_goal.is_some() {
+                self.goal_commitment_ticks = 10; // Commit to the new plan
+            }
         }
         Ok(())
     }
@@ -363,38 +411,8 @@ impl Brain {
     }
 
     fn execute_craft_item_goal(&mut self, world: &mut World, entity: Entity, item_name: &str, _current_episode: u32) -> Result<(), SimulationError> {
-        let recipe = self.recipe_manager.get_required_resources(item_name, 1);
-        let mut missing_resource = None;
-
-        if let Some(inventory) = world.get_component::<Inventory>(entity) {
-            for (resource, &required_amount) in &recipe {
-                if inventory.get_quantity(resource) < required_amount {
-                    missing_resource = Some(resource.clone());
-                    break;
-                }
-            }
-        } else {
-            // No inventory, can't check for resources. Maybe we should just return?
-            // For now, let's assume we are missing everything.
-            if let Some(resource) = recipe.keys().next() {
-                missing_resource = Some(resource.clone());
-            }
-        }
-
-
-        if let Some(resource) = missing_resource {
-            // We are missing a resource, so we need to gather it.
-            // Push the current CraftItem goal onto the stack.
-            if let Some(craft_goal) = self.current_goal.clone() {
-                self.goal_stack.push(craft_goal);
-            }
-            // Set the new goal to gather the missing resource.
-            self.current_goal = Some(Goal::GatherResource(resource));
-        } else {
-            // We have all the resources, so we can craft the item.
-            self.current_goal = self.goal_stack.pop(); // Go back to the parent goal
-            world.add_component(entity, WantsToCraft { item_name: item_name.to_string() });
-        }
+        // The planner should ensure we have the resources. Just craft.
+        world.add_component(entity, WantsToCraft { item_name: item_name.to_string() });
         Ok(())
     }
 
@@ -625,5 +643,42 @@ mod tests {
         let prev_state_key = serde_json::to_string(&prev_state).unwrap();
         let q_value = brain.goal_q_table.get(&prev_state_key).unwrap().get(&goal).unwrap();
         assert_eq!(*q_value, 1.0); // 0 + 0.1 * (10 + 0.9 * 0 - 0) = 1.0
+    }
+
+    #[test]
+    fn test_multi_step_planning() {
+        // 1. Setup
+        let mut recipes = HashMap::new();
+        recipes.insert("plank".to_string(), {
+            let mut ingredients = HashMap::new();
+            ingredients.insert("wood".to_string(), 1);
+            ingredients
+        });
+        recipes.insert("wooden_box".to_string(), {
+            let mut ingredients = HashMap::new();
+            ingredients.insert("plank".to_string(), 4);
+            ingredients
+        });
+        let recipe_manager = Arc::new(RecipeManager::with_recipes(recipes));
+        let brain = Brain::new(recipe_manager, 0.1, 0.9, 0.1);
+
+        let mut world = World::new();
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, Inventory::new());
+
+        // 2. Plan
+        let goal = Goal::CraftItem("wooden_box".to_string());
+        let plan = brain.plan_goal(&world, player_entity, &goal).unwrap();
+
+        // 3. Assert
+        let expected_plan = vec![
+            Goal::GatherResource("wood".to_string()),
+            Goal::CraftItem("wooden_box".to_string()),
+        ];
+
+        let plan_set: std::collections::HashSet<_> = plan.into_iter().collect();
+        let expected_set: std::collections::HashSet<_> = expected_plan.into_iter().collect();
+
+        assert_eq!(plan_set, expected_set);
     }
 }
