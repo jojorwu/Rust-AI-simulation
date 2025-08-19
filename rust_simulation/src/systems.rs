@@ -228,17 +228,20 @@ use crate::brain::Brain;
 pub fn building_system(world: &mut World, map: &mut Map, brains: &Vec<Arc<Mutex<Brain>>>) {
     let mut to_build = Vec::new();
     for entity in 0..world.entities.len() {
+        println!("[system] Checking entity {}", entity);
         if let Some(wants_to_build) = world.get_component::<WantsToBuild>(entity) {
+            println!("[system]   Entity {} WantsToBuild!", entity);
             to_build.push((entity, wants_to_build.clone()));
         }
     }
+    println!("[system] to_build vector has {} items", to_build.len());
 
-    for (builder, wants_to_build) in to_build {
-        if let Some(builder_pos) = world.get_component::<Position>(builder).map(|p| *p) {
+    for (builder, wants_to_build) in &to_build {
+        if let Some(builder_pos) = world.get_component::<Position>(*builder).map(|p| *p) {
             let tile = &mut map.grid[builder_pos.y as usize][builder_pos.x as usize];
 
             if tile.tile_type == '.' {
-                if let Some(inventory) = world.get_component_mut::<Inventory>(builder) {
+                if let Some(inventory) = world.get_component_mut::<Inventory>(*builder) {
                     if inventory.remove_item(&wants_to_build.structure_name, 1) {
                         let built_structure = wants_to_build.structure_name.clone();
 
@@ -257,8 +260,8 @@ pub fn building_system(world: &mut World, map: &mut Map, brains: &Vec<Arc<Mutex<
 
                             // If a foundation was built, set the home base for the AI
                             if built_structure == "foundation" {
-                                if builder < brains.len() {
-                                    let brain = Arc::clone(&brains[builder]);
+                            if *builder < brains.len() {
+                                let brain = Arc::clone(&brains[*builder]);
                                     let mut brain_lock = brain.lock().unwrap();
                                     if brain_lock.home_base.is_none() {
                                         brain_lock.home_base = Some(builder_pos);
