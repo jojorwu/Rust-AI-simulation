@@ -13,6 +13,8 @@ mod recipes;
 mod errors;
 mod events;
 mod fov;
+mod road;
+mod road_manager;
 
 use game::Game;
 use std::error::Error;

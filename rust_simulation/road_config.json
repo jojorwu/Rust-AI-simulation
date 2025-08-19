@@ -1,0 +1,24 @@
+{
+  "road_count": 2,
+  "allow_intersections": true,
+  "road_settings": [
+    {
+      "name": "Highway 1",
+      "start_point": "CityA",
+      "end_point": "CityB",
+      "width": 12,
+      "curvature": 0.2,
+      "material": "asphalt",
+      "terrain_following_strength": 0.9
+    },
+    {
+      "name": "Forest Trail",
+      "start_point": "CityA",
+      "end_point": "Old_Mine",
+      "width": 4,
+      "curvature": 0.7,
+      "material": "dirt",
+      "terrain_following_strength": 0.5
+    }
+  ]
+}
