@@ -1,7 +1,6 @@
 use rand::Rng;
 use super::errors::SimulationError;
 use super::config::{WIDTH, HEIGHT};
-use std::cmp::Ordering;
 use super::map::Tile;
 use super::pathfinding;
 use crate::components::{Position, WantsToGather, WantsToCraft, WantsToBuild, Resource, Inventory, Chest, WantsToStoreItem, Health, BrainComponent, Velocity};
@@ -118,7 +117,7 @@ impl Brain {
 
             modified_q_values.iter()
                 .filter(|(g, _)| self.is_goal_valid(brain_component, world, g))
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal))
+                .max_by(|a, b| a.1.total_cmp(&b.1))
                 .map(|(goal, _)| goal.clone())
                 .map(Ok)
                 .unwrap_or_else(choose_random_goal)
@@ -347,7 +346,7 @@ impl Brain {
         let prev_state_key = serde_json::to_string(prev_state)?;
         let new_state_key = serde_json::to_string(new_state)?;
         let old_q_value = brain_component.goal_q_table.get(&prev_state_key).and_then(|q| q.get(goal)).cloned().unwrap_or(0.0);
-        let max_future_q = brain_component.goal_q_table.get(&new_state_key).map(|q| q.values().cloned().max_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal)).unwrap_or(0.0)).unwrap_or(0.0);
+        let max_future_q = brain_component.goal_q_table.get(&new_state_key).map(|q| q.values().cloned().max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0)).unwrap_or(0.0);
         let new_q_value = old_q_value + self.learning_rate * (reward + self.discount_factor * max_future_q - old_q_value);
         brain_component.goal_q_table.entry(prev_state_key).or_default().insert(goal.clone(), new_q_value);
         Ok(())
@@ -527,37 +526,38 @@ mod tests {
     use std::sync::Arc;
     use std::env;
 
-    fn create_test_brain() -> Brain {
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    fn create_test_brain() -> Result<Brain, SimulationError> {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/data/recipes.json", manifest_dir)));
-        Brain::new(recipe_manager, 0.1, 0.9, 0.1)
+        Ok(Brain::new(recipe_manager, 0.1, 0.9, 0.1))
     }
 
     #[test]
-    fn test_is_goal_complete() {
-        let brain = create_test_brain();
+    fn test_is_goal_complete() -> Result<(), SimulationError> {
+        let brain = create_test_brain()?;
         let mut world = World::new();
         let player_entity = world.create_entity();
         let brain_component = BrainComponent::new();
         let mut inventory = Inventory::new();
         inventory.add_item("wood", 11);
-        world.add_component(player_entity, inventory);
+        world.add_component(player_entity, inventory)?;
 
         let goal = Goal::GatherResource("wood".to_string());
         assert!(brain.is_goal_complete(&brain_component, &world, player_entity, &goal));
+        Ok(())
     }
 
     #[test]
-    fn test_planning_with_known_resource() {
-        let brain = create_test_brain();
+    fn test_planning_with_known_resource() -> Result<(), SimulationError> {
+        let brain = create_test_brain()?;
         let mut world = World::new();
         let player_entity = world.create_entity();
         let mut brain_component = BrainComponent::new();
         brain_component.known_resources.entry("stone".to_string()).or_default().insert(Position { x: 10, y: 10 });
-        world.add_component(player_entity, Inventory::new());
+        world.add_component(player_entity, Inventory::new())?;
 
         let goal = Goal::CraftItem("stone_axe".to_string());
-        let plan = brain.plan_goal(&brain_component, &world, player_entity, &goal).unwrap();
+        let plan = brain.plan_goal(&brain_component, &world, player_entity, &goal)?;
 
         // The recipe for stone_axe requires wood and stone. The AI knows where stone is,
         // but not wood. So the plan should include exploring for wood, gathering wood,
@@ -566,5 +566,6 @@ mod tests {
         assert!(plan.contains(&Goal::GatherResource("stone".to_string())));
         assert!(plan.contains(&Goal::GatherResource("wood".to_string())));
         assert!(plan.contains(&Goal::Explore));
+        Ok(())
     }
 }

@@ -1,34 +1,20 @@
-use std::error::Error;
-use std::fmt;
 use std::io;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum SimulationError {
-    SerializationError(String),
+    #[error("Component not found: {0}")]
     ComponentNotFound(String),
-    IoError(String),
-}
 
-impl fmt::Display for SimulationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SimulationError::SerializationError(e) => write!(f, "Serialization Error: {}", e),
-            SimulationError::ComponentNotFound(e) => write!(f, "Component Not Found: {}", e),
-            SimulationError::IoError(e) => write!(f, "IO Error: {}", e),
-        }
-    }
-}
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
 
-impl Error for SimulationError {}
+    #[error("Serialization error: {0}")]
+    SerdeJson(#[from] serde_json::Error),
 
-impl From<serde_json::Error> for SimulationError {
-    fn from(err: serde_json::Error) -> Self {
-        SimulationError::SerializationError(err.to_string())
-    }
-}
+    #[error("Unwrap failed: {0}")]
+    UnwrapFailed(String),
 
-impl From<io::Error> for SimulationError {
-    fn from(err: io::Error) -> Self {
-        SimulationError::IoError(err.to_string())
-    }
+    #[error("Boxed error: {0}")]
+    BoxedError(#[from] Box<dyn std::error::Error>),
 }

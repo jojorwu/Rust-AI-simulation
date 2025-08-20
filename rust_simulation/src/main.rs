@@ -1,9 +1,8 @@
-use rust_simulation::Game;
+use rust_simulation::{Game, errors::SimulationError};
 use rust_simulation::road_builder;
-use std::error::Error;
 use std::env;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), SimulationError> {
     let args: Vec<String> = env::args().collect();
 
     if args.contains(&"--hard-wipe".to_string()) {
@@ -49,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &format!("{}/data/resources.json", manifest_dir),
         &format!("{}/data/items.json", manifest_dir),
         &format!("{}/data/recipes.json", manifest_dir),
-    );
+    )?;
 
     road_builder::generate_roads(&mut game)?;
 

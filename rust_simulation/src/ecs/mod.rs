@@ -49,7 +49,7 @@ impl World {
         entity_id
     }
 
-    pub fn add_component<T: Component + Send>(&mut self, entity: Entity, component: T) {
+    pub fn add_component<T: Component + Send>(&mut self, entity: Entity, component: T) -> Result<(), crate::errors::SimulationError> {
         let type_id = TypeId::of::<T>();
         let components = self.components
             .entry(type_id)
@@ -58,12 +58,13 @@ impl World {
         let components = components
             .as_any_mut()
             .downcast_mut::<Vec<Option<T>>>()
-            .unwrap();
+            .ok_or_else(|| crate::errors::SimulationError::UnwrapFailed("Failed to downcast component vector".to_string()))?;
 
         if entity >= components.len() {
             components.resize_with(entity + 1, || None);
         }
         components[entity] = Some(component);
+        Ok(())
     }
 
     pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
@@ -124,14 +125,14 @@ mod tests {
     impl Component for Velocity {}
 
     #[test]
-    fn test_remove_entity() {
+    fn test_remove_entity() -> Result<(), crate::errors::SimulationError> {
         let mut world = World::new();
         let entity1 = world.create_entity();
-        world.add_component(entity1, Position { x: 1.0, y: 2.0 });
-        world.add_component(entity1, Velocity { dx: 3.0, dy: 4.0 });
+        world.add_component(entity1, Position { x: 1.0, y: 2.0 })?;
+        world.add_component(entity1, Velocity { dx: 3.0, dy: 4.0 })?;
 
         let entity2 = world.create_entity();
-        world.add_component(entity2, Position { x: 5.0, y: 6.0 });
+        world.add_component(entity2, Position { x: 5.0, y: 6.0 })?;
 
         world.remove_entity(entity1);
 
@@ -139,5 +140,6 @@ mod tests {
         assert!(world.get_component::<Position>(entity1).is_none());
         assert!(world.get_component::<Velocity>(entity1).is_none());
         assert!(world.get_component::<Position>(entity2).is_some());
+        Ok(())
     }
 }
