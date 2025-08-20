@@ -1,24 +1,38 @@
-use super::map::{Map, Tile};
-use super::player::Player;
-use super::brain::{Brain, BrainAction, HighLevelState};
+pub mod map;
+pub mod pathfinding;
+pub mod player;
+pub mod ecs;
+pub mod components;
+pub mod systems;
+pub mod brain;
+pub mod item;
+pub mod config;
+pub mod recipes;
+pub mod errors;
+pub mod events;
+pub mod fov;
+pub mod road;
+pub mod road_manager;
+pub mod road_builder;
+
+use map::{Map, Tile};
+use player::Player;
+use brain::{Brain, BrainAction, HighLevelState};
 use std::any::TypeId;
-use super::recipes::RecipeManager;
-use super::errors::SimulationError;
-use super::item::ItemRegistry;
-use super::ecs::{World, Entity};
-use super::components::{Position, Inventory, BrainComponent};
-use super::events::EventBus;
-use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system, storage_system, brain_event_handler_system};
+use recipes::RecipeManager;
+use errors::SimulationError;
+use item::ItemRegistry;
+use ecs::{World, Entity};
+use components::{Position, Inventory, BrainComponent};
+use events::EventBus;
+use systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system, storage_system, brain_event_handler_system};
 use std::sync::{Arc, Mutex};
-use crate::fov;
 use std::env;
-use std::collections::HashMap;
 
 use rand::Rng;
 
-use super::config::*;
-use super::road::*;
-use super::road_manager::RoadManager;
+use config::*;
+use road_manager::RoadManager;
 
 
 /// The main struct for the simulation.
@@ -71,7 +85,6 @@ impl Game {
         };
 
         game.setup_new_map();
-        game.generate_roads_from_config().expect("Failed to generate roads");
         game.find_and_set_valid_start_positions();
 
         // Initial population of the spatial map
@@ -143,39 +156,6 @@ impl Game {
         }
     }
 
-    fn generate_roads_from_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let road_config = RoadConfig::load("road_config.json")?;
-
-        // This is a placeholder. In a real game, these locations might be dynamically determined.
-        let mut city_locations: HashMap<String, (i32, i32)> = HashMap::new();
-        city_locations.insert("CityA".to_string(), (20, 20));
-        city_locations.insert("CityB".to_string(), (80, 30));
-        city_locations.insert("CityC".to_string(), (30, 70));
-        city_locations.insert("CityD".to_string(), (90, 85));
-        city_locations.insert("Old_Mine".to_string(), (50, 90));
-
-
-        for setting in road_config.road_settings {
-            let start_pos = city_locations.get(&setting.start_point).ok_or("Start city not found")?;
-            let end_pos = city_locations.get(&setting.end_point).ok_or("End city not found")?;
-
-            let start_point = Point { x: start_pos.0 as f32, y: start_pos.1 as f32 };
-            let end_point = Point { x: end_pos.0 as f32, y: end_pos.1 as f32 };
-
-            let road = super::road::generate_road(setting, start_point, end_point);
-
-            for point in &road.path {
-                if point.x >= 0.0 && point.x < self.map.width as f32 && point.y >= 0.0 && point.y < self.map.height as f32 {
-                    let x = point.x as usize;
-                    let y = point.y as usize;
-                    let tile = &mut self.map.grid[y][x];
-                    tile.tile_type = '=';
-                }
-            }
-            self.road_manager.add_road(road);
-        }
-        Ok(())
-    }
 
     fn get_high_level_state(&self, world: &World, entity: Entity) -> Result<HighLevelState, SimulationError> {
         let health = world.get_component::<crate::components::Health>(entity)
@@ -184,7 +164,7 @@ impl Game {
         let brain_component = world.get_component::<BrainComponent>(entity)
             .ok_or_else(|| SimulationError::ComponentNotFound("BrainComponent".to_string()))?;
 
-        let num_hostile_players = brain_component.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
+        let num_hostile_players = brain_component.player_memories.values().filter(|m| m.relationship == brain::RelationshipStatus::Hostile).count() as u32;
 
         Ok(HighLevelState {
             has_wood: inventory.map_or(false, |inv| inv.has_item("wood", 1)),
@@ -406,10 +386,10 @@ mod tests {
     fn create_test_game() -> Game {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
         Game::new(
-            &format!("{}/biomes.json", manifest_dir),
-            &format!("{}/resources.json", manifest_dir),
-            &format!("{}/items.json", manifest_dir),
-            &format!("{}/recipes.json", manifest_dir),
+            &format!("{}/data/biomes.json", manifest_dir),
+            &format!("{}/data/resources.json", manifest_dir),
+            &format!("{}/data/items.json", manifest_dir),
+            &format!("{}/data/recipes.json", manifest_dir),
         )
     }
 
@@ -433,10 +413,10 @@ mod tests {
         // Create a game with a blank map (no walls) to make the test deterministic.
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
         let mut game = Game::new(
-            &format!("{}/biomes.json", manifest_dir),
-            &format!("{}/resources.json", manifest_dir),
-            &format!("{}/items.json", manifest_dir),
-            &format!("{}/recipes.json", manifest_dir),
+            &format!("{}/data/biomes.json", manifest_dir),
+            &format!("{}/data/resources.json", manifest_dir),
+            &format!("{}/data/items.json", manifest_dir),
+            &format!("{}/data/recipes.json", manifest_dir),
         );
         game.map.grid = vec![vec![Tile::new('.', "plains".to_string()); 100]; 100];
 

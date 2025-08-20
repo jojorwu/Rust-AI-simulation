@@ -513,7 +513,7 @@ mod tests {
 
     fn create_test_brain() -> Brain {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/recipes.json", manifest_dir)));
+        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/data/recipes.json", manifest_dir)));
         Brain::new(recipe_manager, 0.1, 0.9, 0.1)
     }
 

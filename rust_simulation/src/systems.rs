@@ -87,10 +87,11 @@ mod tests {
     #[test]
     fn test_building_system_publishes_event() {
         let mut world = World::new();
-        let mut map = Map::new(10, 10, "biomes.json", "resources.json").unwrap();
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let mut map = Map::new(10, 10, &format!("{}/data/biomes.json", manifest_dir), &format!("{}/data/resources.json", manifest_dir)).unwrap();
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/recipes.json", manifest_dir)));
+        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/data/recipes.json", manifest_dir)));
 
 
         let builder_entity = world.create_entity();
@@ -131,7 +132,8 @@ mod tests {
     #[test]
     fn test_movement_system() {
         let mut world = World::new();
-        let mut map = Map::new(10, 10, "biomes.json", "resources.json").unwrap();
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let mut map = Map::new(10, 10, &format!("{}/data/biomes.json", manifest_dir), &format!("{}/data/resources.json", manifest_dir)).unwrap();
 
         let entity = world.create_entity();
         world.add_component(entity, Position { x: 5, y: 5 });
@@ -149,7 +151,8 @@ mod tests {
     #[test]
     fn test_gathering_system() {
         let mut world = World::new();
-        let item_registry = ItemRegistry::new("items.json");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let item_registry = ItemRegistry::new(&format!("{}/data/items.json", manifest_dir));
 
         // Create gatherer
         let gatherer = world.create_entity();

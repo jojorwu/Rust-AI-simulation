@@ -1,21 +1,5 @@
-mod map;
-mod pathfinding;
-mod player;
-mod ecs;
-mod components;
-mod systems;
-mod brain;
-mod game;
-mod item;
-mod config;
-mod recipes;
-mod errors;
-mod events;
-mod fov;
-mod road;
-mod road_manager;
-
-use game::Game;
+use rust_simulation::Game;
+use rust_simulation::road_builder;
 use std::error::Error;
 use std::env;
 
@@ -59,12 +43,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let mut game = Game::new(
-        "biomes.json",
-        "resources.json",
-        "items.json",
-        "recipes.json",
+        &format!("{}/data/biomes.json", manifest_dir),
+        &format!("{}/data/resources.json", manifest_dir),
+        &format!("{}/data/items.json", manifest_dir),
+        &format!("{}/data/recipes.json", manifest_dir),
     );
+
+    road_builder::generate_roads(&mut game)?;
 
     if args.contains(&"--wipe".to_string()) {
         game.new_generation()?;
