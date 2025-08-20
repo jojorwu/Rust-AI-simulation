@@ -1,13 +1,14 @@
 use super::map::{Map, Tile};
 use super::player::Player;
-use super::brain::{Brain, HighLevelState};
+use super::brain::{Brain, BrainAction, HighLevelState};
+use std::any::TypeId;
 use super::recipes::RecipeManager;
 use super::errors::SimulationError;
 use super::item::ItemRegistry;
 use super::ecs::{World, Entity};
-use super::components::{Position, Inventory};
+use super::components::{Position, Inventory, BrainComponent};
 use super::events::EventBus;
-use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system, storage_system};
+use super::systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system, storage_system, brain_event_handler_system};
 use std::sync::{Arc, Mutex};
 use crate::fov;
 use std::env;
@@ -25,7 +26,7 @@ use super::road_manager::RoadManager;
 pub struct Game {
     pub map: Map,
     pub world: Arc<Mutex<World>>,
-    pub brains: Vec<Arc<Mutex<Brain>>>,
+    pub brain: Arc<Brain>,
     pub item_registry: ItemRegistry,
     pub recipe_manager: Arc<RecipeManager>,
     pub event_bus: Arc<Mutex<EventBus>>,
@@ -47,7 +48,7 @@ impl Game {
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
 
         let mut world = World::new();
-        let mut brains = Vec::new();
+        let brain = Arc::new(Brain::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0));
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
@@ -55,13 +56,13 @@ impl Game {
             world.add_component(player, Position { x: 0, y: 0 });
             world.add_component(player, crate::components::Health { current: 100, max: 100 });
             world.add_component(player, Inventory::new());
-            brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0))));
+            world.add_component(player, BrainComponent::new());
         }
 
         let mut game = Game {
             map,
             world: Arc::new(Mutex::new(world)),
-            brains,
+            brain,
             item_registry,
             recipe_manager,
             event_bus,
@@ -176,14 +177,14 @@ impl Game {
         Ok(())
     }
 
-    fn get_high_level_state(&self, entity: Entity) -> Result<HighLevelState, SimulationError> {
-        let world = self.world.lock().expect("Failed to lock world");
+    fn get_high_level_state(&self, world: &World, entity: Entity) -> Result<HighLevelState, SimulationError> {
         let health = world.get_component::<crate::components::Health>(entity)
             .ok_or_else(|| SimulationError::ComponentNotFound("Health".to_string()))?;
         let inventory = world.get_component::<Inventory>(entity);
+        let brain_component = world.get_component::<BrainComponent>(entity)
+            .ok_or_else(|| SimulationError::ComponentNotFound("BrainComponent".to_string()))?;
 
-        let brain_lock = self.brains[entity].lock().expect("Failed to lock brain");
-        let num_hostile_players = brain_lock.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
+        let num_hostile_players = brain_component.player_memories.values().filter(|m| m.relationship == super::brain::RelationshipStatus::Hostile).count() as u32;
 
         Ok(HighLevelState {
             has_wood: inventory.map_or(false, |inv| inv.has_item("wood", 1)),
@@ -213,9 +214,7 @@ impl Game {
         }
 
         println!("--- Training Finished ---");
-        for brain in &self.brains {
-            brain.lock().unwrap().save_q_table()?;
-        }
+        // self.brain.save_q_table()?; // TODO: Figure out how to save Q-tables for multiple entities
         Ok(())
     }
 
@@ -239,11 +238,10 @@ impl Game {
             self.map.display_observer_map(&self.world.lock().expect("Failed to lock world"));
 
             // DEBUG: Print agent 0's status
-            if self.brains.len() > 0 {
-                let brain = self.brains[0].lock().unwrap();
-                let world = self.world.lock().unwrap();
+            let world = self.world.lock().unwrap();
+            if let Some(brain_component) = world.get_component::<BrainComponent>(0) {
                 if let Some(inventory) = world.get_component::<Inventory>(0) {
-                    println!("Agent 0 Goal: {:?}", brain.current_goal);
+                    println!("Agent 0 Goal: {:?}", brain_component.current_goal);
                     println!("Agent 0 Inventory: {:?}", inventory.items);
                 }
             }
@@ -268,25 +266,47 @@ impl Game {
     }
 
     fn run_brain_ticks(&mut self, _episode: u32) -> Result<(), SimulationError> {
-        for i in 0..self.brains.len() {
-            let pos = {
-                let world = self.world.lock().unwrap();
-                if let Some(p) = world.get_component::<Position>(i) {
-                    *p
-                } else {
-                    continue;
+        let mut world = self.world.lock().expect("Failed to lock world");
+        let mut actions_to_execute = Vec::new();
+
+        let brain_components_type_id = TypeId::of::<BrainComponent>();
+
+        let mut brain_components_vec = if let Some(mut components_box) = world.components.remove(&brain_components_type_id) {
+            let vec = components_box.as_any_mut().downcast_mut::<Vec<Option<BrainComponent>>>().unwrap();
+            std::mem::take(vec)
+        } else {
+            return Ok(()); // No entities have brains
+        };
+
+        for i in 0..world.entities.len() {
+            if let Some(Some(brain_component)) = brain_components_vec.get_mut(i) {
+                let pos = match world.get_component::<Position>(i) {
+                    Some(p) => *p,
+                    None => continue,
+                };
+                let high_level_state = self.get_high_level_state(&world, i)?;
+                let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
+
+                if let Some(action) = self.brain.tick(brain_component, &world, &self.map.spatial_map, i, &high_level_state, &visible_tiles)? {
+                    actions_to_execute.push((i, action));
                 }
-            };
+            }
+        }
 
-            let high_level_state = self.get_high_level_state(i)?;
-            let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
+        // Put the brain components back into the world
+        let new_box = Box::new(brain_components_vec);
+        world.components.insert(brain_components_type_id, new_box);
 
-            let brain = Arc::clone(&self.brains[i]);
-            let mut brain_lock = brain.lock().expect("Failed to lock brain");
 
-            // The world is locked for the duration of the tick
-            let mut world_lock = self.world.lock().expect("Failed to lock world");
-            brain_lock.tick(&mut world_lock, &self.map.spatial_map, i, &high_level_state, &visible_tiles)?;
+        for (entity, action) in actions_to_execute {
+            match action {
+                BrainAction::Move(vel) => world.add_component(entity, vel),
+                BrainAction::Gather(g) => world.add_component(entity, g),
+                BrainAction::Craft(c) => world.add_component(entity, c),
+                BrainAction::Build(b) => world.add_component(entity, b),
+                BrainAction::Attack(a) => world.add_component(entity, a),
+                BrainAction::Store(s) => world.add_component(entity, s),
+            }
         }
         Ok(())
     }
@@ -307,11 +327,12 @@ impl Game {
         movement_system(&mut world, &mut self.map);
         gathering_system(&mut world, &self.item_registry);
         crafting_system(&mut world, &self.recipe_manager, &self.item_registry);
-        building_system(&mut world, &mut self.map, &self.brains);
+        building_system(&mut world, &mut self.map, &self.event_bus, &self.recipe_manager);
         storage_system(&mut world);
         combat_system(&mut world, &self.event_bus);
         pickup_system(&mut world, &self.item_registry, &mut self.map);
         death_system(&mut world, &self.event_bus, &mut self.map);
+        brain_event_handler_system(&mut world, &self.event_bus);
     }
 
     fn respawn_resources(&mut self, current_episode: u32) {
@@ -349,9 +370,9 @@ impl Game {
         self.tick_count = 0;
         self.event_bus = Arc::new(Mutex::new(EventBus::new()));
 
-        // 2. Create a new World and re-initialize brains
+        // 2. Create a new World and re-initialize brain
         let mut world = World::new();
-        let mut brains = Vec::new();
+        self.brain = Arc::new(Brain::new(Arc::clone(&self.recipe_manager), 0.1, 0.9, 1.0));
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
@@ -359,12 +380,10 @@ impl Game {
             world.add_component(player, Position { x: 0, y: 0 });
             world.add_component(player, crate::components::Health { current: 100, max: 100 });
             world.add_component(player, Inventory::new());
-            // This will create a new brain, which will either load a q-table or start fresh
-            brains.push(Arc::new(Mutex::new(Brain::new(Arc::clone(&self.recipe_manager), 0.1, 0.9, 1.0))));
+            world.add_component(player, BrainComponent::new());
         }
 
         self.world = Arc::new(Mutex::new(world));
-        self.brains = brains;
 
         // 3. Generate a new map and place resources
         self.setup_new_map();

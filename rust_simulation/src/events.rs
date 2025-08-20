@@ -1,8 +1,10 @@
 use crate::ecs::Entity;
+use crate::components::Position;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     EntityDied(Entity),
+    FoundationBuilt { builder: Entity, position: Position },
 }
 
 #[derive(Default)]

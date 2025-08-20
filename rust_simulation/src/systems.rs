@@ -78,8 +78,55 @@ mod tests {
     use super::*;
     use crate::ecs::World;
     use crate::map::Map;
-    use crate::components::{Position, Velocity, Inventory, Resource, WantsToGather};
+    use crate::components::{Position, Velocity, Inventory, Resource, WantsToGather, BrainComponent, WantsToBuild};
     use crate::item::ItemRegistry;
+    use std::sync::{Arc, Mutex};
+
+    use crate::map::Tile;
+
+    #[test]
+    fn test_building_system_publishes_event() {
+        let mut world = World::new();
+        let mut map = Map::new(10, 10, "biomes.json", "resources.json").unwrap();
+        let event_bus = Arc::new(Mutex::new(EventBus::new()));
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/recipes.json", manifest_dir)));
+
+
+        let builder_entity = world.create_entity();
+        let build_pos = Position { x: 5, y: 5 };
+        world.add_component(builder_entity, build_pos);
+        let mut inventory = Inventory::new();
+        inventory.add_item("stone", 20);
+        world.add_component(builder_entity, inventory);
+        world.add_component(builder_entity, WantsToBuild { structure_name: "foundation".to_string() });
+
+        // Set the tile to be buildable
+        map.grid[build_pos.y as usize][build_pos.x as usize] = Tile::new('.', "plains".to_string());
+
+        building_system(&mut world, &mut map, &event_bus, &recipe_manager);
+
+        let events = event_bus.lock().unwrap().take_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0], Event::FoundationBuilt { builder: builder_entity, position: build_pos });
+    }
+
+    #[test]
+    fn test_brain_event_handler_system_sets_home_base() {
+        let mut world = World::new();
+        let event_bus = Arc::new(Mutex::new(EventBus::new()));
+
+        let player_entity = world.create_entity();
+        world.add_component(player_entity, BrainComponent::new());
+
+        let build_pos = Position { x: 7, y: 8 };
+        event_bus.lock().unwrap().publish(Event::FoundationBuilt { builder: player_entity, position: build_pos });
+
+        brain_event_handler_system(&mut world, &event_bus);
+
+        let brain_component = world.get_component::<BrainComponent>(player_entity).unwrap();
+        assert_eq!(brain_component.home_base, Some(build_pos));
+    }
 
     #[test]
     fn test_movement_system() {
@@ -223,18 +270,15 @@ pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, _item_
     }
 }
 
-use crate::brain::Brain;
+use crate::components::BrainComponent;
 
-pub fn building_system(world: &mut World, map: &mut Map, brains: &Vec<Arc<Mutex<Brain>>>) {
+pub fn building_system(world: &mut World, map: &mut Map, event_bus: &Arc<Mutex<EventBus>>, recipe_manager: &Arc<RecipeManager>) {
     let mut to_build = Vec::new();
     for entity in 0..world.entities.len() {
-        println!("[system] Checking entity {}", entity);
         if let Some(wants_to_build) = world.get_component::<WantsToBuild>(entity) {
-            println!("[system]   Entity {} WantsToBuild!", entity);
             to_build.push((entity, wants_to_build.clone()));
         }
     }
-    println!("[system] to_build vector has {} items", to_build.len());
 
     for (builder, wants_to_build) in &to_build {
         if let Some(builder_pos) = world.get_component::<Position>(*builder).map(|p| *p) {
@@ -242,30 +286,29 @@ pub fn building_system(world: &mut World, map: &mut Map, brains: &Vec<Arc<Mutex<
 
             if tile.tile_type == '.' {
                 if let Some(inventory) = world.get_component_mut::<Inventory>(*builder) {
-                    if inventory.remove_item(&wants_to_build.structure_name, 1) {
-                        let built_structure = wants_to_build.structure_name.clone();
+                    let required = recipe_manager.get_required_resources(&wants_to_build.structure_name, 1);
+                    if inventory.has_resources(&required) {
+                        if inventory.remove_resources(&required) {
+                            let built_structure = wants_to_build.structure_name.clone();
 
-                        if built_structure == "chest" {
-                            let chest_entity = world.create_entity();
-                            world.add_component(chest_entity, builder_pos);
-                            world.add_component(chest_entity, Chest { inventory: Inventory::new() });
-                            tile.tile_type = 'C';
-                        } else {
-                            tile.tile_type = match built_structure.as_str() {
-                                "foundation" => 'B',
-                                "wall" => '#',
-                                "doorway" => 'O',
-                                _ => 'X',
-                            };
+                            if built_structure == "chest" {
+                                let chest_entity = world.create_entity();
+                                world.add_component(chest_entity, builder_pos);
+                                world.add_component(chest_entity, Chest { inventory: Inventory::new() });
+                                tile.tile_type = 'C';
+                            } else {
+                                tile.tile_type = match built_structure.as_str() {
+                                    "foundation" => 'B',
+                                    "wall" => '#',
+                                    "doorway" => 'O',
+                                    _ => 'X',
+                                };
 
-                            // If a foundation was built, set the home base for the AI
-                            if built_structure == "foundation" {
-                            if *builder < brains.len() {
-                                let brain = Arc::clone(&brains[*builder]);
-                                    let mut brain_lock = brain.lock().unwrap();
-                                    if brain_lock.home_base.is_none() {
-                                        brain_lock.home_base = Some(builder_pos);
-                                    }
+                                if built_structure == "foundation" {
+                                    event_bus.lock().unwrap().publish(Event::FoundationBuilt {
+                                        builder: *builder,
+                                        position: builder_pos,
+                                    });
                                 }
                             }
                         }
@@ -276,8 +319,25 @@ pub fn building_system(world: &mut World, map: &mut Map, brains: &Vec<Arc<Mutex<
     }
 
     // Reset wants to build
-    for entity in 0..world.entities.len() {
-        world.remove_component::<WantsToBuild>(entity);
+    let builders: Vec<_> = to_build.iter().map(|(e, _)| *e).collect();
+    for builder in builders {
+        world.remove_component::<WantsToBuild>(builder);
+    }
+}
+
+pub fn brain_event_handler_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) {
+    let events = event_bus.lock().unwrap().take_events();
+    for event in events {
+        match event {
+            Event::FoundationBuilt { builder, position } => {
+                if let Some(brain_component) = world.get_component_mut::<BrainComponent>(builder) {
+                    if brain_component.home_base.is_none() {
+                        brain_component.home_base = Some(position);
+                    }
+                }
+            }
+            _ => {} // Ignore other events
+        }
     }
 }
 
@@ -377,6 +437,7 @@ pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>, map: &m
                 // Remove the dead entity from the world
                 world.remove_entity(entity);
             }
+            _ => {} // Other events are not relevant to this system
         }
     }
 }

@@ -5,7 +5,7 @@ pub type Entity = usize;
 
 pub trait Component: 'static {}
 
-trait ComponentVec {
+pub trait ComponentVec {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn remove_component_for_entity(&mut self, entity: Entity);
@@ -30,7 +30,7 @@ impl<T: Component + Send> ComponentVec for Vec<Option<T>> {
 pub struct World {
     pub entities: Vec<Entity>,
     next_entity_id: usize,
-    components: HashMap<TypeId, Box<dyn ComponentVec + Send>>,
+    pub components: HashMap<TypeId, Box<dyn ComponentVec + Send>>,
 }
 
 impl World {
