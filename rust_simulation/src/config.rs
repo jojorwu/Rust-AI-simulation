@@ -1,3 +1,4 @@
+use crate::errors::SimulationError;
 use serde::Deserialize;
 use std::fs;
 
@@ -55,7 +56,7 @@ pub struct RoadConfig {
 }
 
 impl RoadConfig {
-    pub fn load(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn load(path: &str) -> Result<Self, SimulationError> {
         let data = fs::read_to_string(path)?;
         let config: RoadConfig = serde_json::from_str(&data)?;
         Ok(config)

@@ -1,3 +1,4 @@
+use crate::errors::SimulationError;
 use std::collections::HashMap;
 use std::fs;
 
@@ -6,13 +7,11 @@ pub struct RecipeManager {
 }
 
 impl RecipeManager {
-    pub fn new(filepath: &str) -> Self {
-        let file_content = fs::read_to_string(filepath)
-            .unwrap_or_else(|_| panic!("Unable to read recipes file at {filepath}"));
-        let recipes: HashMap<String, HashMap<String, u32>> =
-            serde_json::from_str(&file_content).expect("Unable to parse recipes file");
+    pub fn new(filepath: &str) -> Result<Self, SimulationError> {
+        let file_content = fs::read_to_string(filepath)?;
+        let recipes: HashMap<String, HashMap<String, u32>> = serde_json::from_str(&file_content)?;
 
-        RecipeManager { recipes }
+        Ok(RecipeManager { recipes })
     }
 
     pub fn with_recipes(recipes: HashMap<String, HashMap<String, u32>>) -> Self {

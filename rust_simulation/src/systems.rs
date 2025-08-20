@@ -236,7 +236,7 @@ pub fn building_system(
                                     event_bus
                                         .lock()
                                         .map_err(|e| {
-                                            crate::errors::SimulationError::UnwrapFailed(
+                                            crate::errors::SimulationError::MutexLockError(
                                                 e.to_string(),
                                             )
                                         })?
@@ -266,7 +266,7 @@ pub fn brain_event_handler_system(
 ) -> Result<(), crate::errors::SimulationError> {
     let events = event_bus
         .lock()
-        .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+        .map_err(|e| crate::errors::SimulationError::MutexLockError(e.to_string()))?
         .take_events();
     for event in events {
         if let Event::FoundationBuilt { builder, position } = event {
@@ -304,7 +304,7 @@ pub fn combat_system(
         if target_dead {
             event_bus
                 .lock()
-                .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+                .map_err(|e| crate::errors::SimulationError::MutexLockError(e.to_string()))?
                 .publish(Event::EntityDied(target));
         }
     }
@@ -371,7 +371,7 @@ pub fn death_system(
 ) -> Result<(), crate::errors::SimulationError> {
     let events = event_bus
         .lock()
-        .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+        .map_err(|e| crate::errors::SimulationError::MutexLockError(e.to_string()))?
         .take_events();
     for event in events {
         if let Event::EntityDied(entity) = event {
@@ -422,7 +422,7 @@ mod tests {
     fn test_building_system_publishes_event() -> Result<(), crate::errors::SimulationError> {
         let mut world = World::new();
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| crate::errors::SimulationError::EnvVarError(e.to_string()))?;
         let mut map = Map::new(
             10,
             10,
@@ -432,7 +432,7 @@ mod tests {
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
         let recipe_manager = Arc::new(RecipeManager::new(&format!(
             "{manifest_dir}/data/recipes.json"
-        )));
+        ))?);
 
         let builder_entity = world.create_entity();
         let build_pos = Position { x: 5, y: 5 };
@@ -454,7 +454,7 @@ mod tests {
 
         let events = event_bus
             .lock()
-            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+            .map_err(|e| crate::errors::SimulationError::MutexLockError(e.to_string()))?
             .take_events();
         assert_eq!(events.len(), 1);
         assert_eq!(
@@ -479,7 +479,7 @@ mod tests {
         let build_pos = Position { x: 7, y: 8 };
         event_bus
             .lock()
-            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+            .map_err(|e| crate::errors::SimulationError::MutexLockError(e.to_string()))?
             .publish(Event::FoundationBuilt {
                 builder: player_entity,
                 position: build_pos,
@@ -500,7 +500,7 @@ mod tests {
     fn test_movement_system() -> Result<(), crate::errors::SimulationError> {
         let mut world = World::new();
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| crate::errors::SimulationError::EnvVarError(e.to_string()))?;
         let mut map = Map::new(
             10,
             10,
@@ -528,8 +528,8 @@ mod tests {
     fn test_gathering_system() -> Result<(), crate::errors::SimulationError> {
         let mut world = World::new();
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
-        let item_registry = ItemRegistry::new(&format!("{manifest_dir}/data/items.json"));
+            .map_err(|e| crate::errors::SimulationError::EnvVarError(e.to_string()))?;
+        let item_registry = ItemRegistry::new(&format!("{manifest_dir}/data/items.json"))?;
 
         // Create gatherer
         let gatherer = world.create_entity();

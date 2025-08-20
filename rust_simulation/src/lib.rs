@@ -106,8 +106,8 @@ impl Game {
         recipes_path: &str,
     ) -> Result<Self, SimulationError> {
         let map = Map::new(WIDTH, HEIGHT, biomes_path, resources_path)?;
-        let item_registry = ItemRegistry::new(items_path);
-        let recipe_manager = Arc::new(RecipeManager::new(recipes_path));
+        let item_registry = ItemRegistry::new(items_path)?;
+        let recipe_manager = Arc::new(RecipeManager::new(recipes_path)?);
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
 
         let mut world = World::new();
@@ -152,7 +152,7 @@ impl Game {
             let world = game
                 .world
                 .lock()
-                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
             game.map.spatial_map.clear();
             for &entity in &world.entities {
                 if let Some(pos) = world.get_component::<Position>(entity) {
@@ -178,7 +178,7 @@ impl Game {
         let mut world = self
             .world
             .lock()
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
         for entity in 0..world.entities.len() {
             loop {
                 let x = rng.random_range(0..self.map.width);
@@ -209,7 +209,7 @@ impl Game {
         let mut world = self
             .world
             .lock()
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
         self.map.spatial_map.clear();
 
         for y in 0..self.map.height {
@@ -292,7 +292,7 @@ impl Game {
             let mut world = self
                 .world
                 .lock()
-                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
             visibility_system(&mut world, &self.map, self.is_day());
         }
 
@@ -333,7 +333,7 @@ impl Game {
             let world = self
                 .world
                 .lock()
-                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
             self.map.display(&world);
             self.map.display_observer_map(&world);
 
@@ -359,7 +359,7 @@ impl Game {
         let mut world = self
             .world
             .lock()
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
         for i in 0..world.entities.len() {
             if let Some(player) = world.get_component_mut::<Player>(i) {
                 player.reset();
@@ -372,7 +372,7 @@ impl Game {
         let mut world = self
             .world
             .lock()
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
         let mut actions_to_execute = Vec::new();
 
         let brain_components_type_id = TypeId::of::<BrainComponent>();
@@ -384,7 +384,7 @@ impl Game {
                 .as_any_mut()
                 .downcast_mut::<Vec<Option<BrainComponent>>>()
                 .ok_or_else(|| {
-                    SimulationError::UnwrapFailed("Failed to downcast brain components".to_string())
+                    SimulationError::DowncastFailed("Failed to downcast brain components".to_string())
                 })?;
             std::mem::take(vec)
         } else {
@@ -447,7 +447,7 @@ impl Game {
         let mut world = self
             .world
             .lock()
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
         visibility_system(&mut world, &self.map, self.is_day());
         movement_system(&mut world, &mut self.map);
         gathering_system(&mut world, &self.item_registry);
@@ -560,7 +560,7 @@ mod tests {
 
     fn create_test_game() -> Result<Game, SimulationError> {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
         Game::new(
             &format!("{manifest_dir}/data/biomes.json"),
             &format!("{manifest_dir}/data/resources.json"),
@@ -589,7 +589,7 @@ mod tests {
     fn test_get_visible_tiles() -> Result<(), SimulationError> {
         // Create a game with a blank map (no walls) to make the test deterministic.
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
         let mut game = Game::new(
             &format!("{manifest_dir}/data/biomes.json"),
             &format!("{manifest_dir}/data/resources.json"),
@@ -619,7 +619,7 @@ mod tests {
             let mut world = game
                 .world
                 .lock()
-                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
             // Set player position to the center for predictable FOV
             if let Some(pos) = world.get_component_mut::<Position>(player_entity) {
                 pos.x = 50;
@@ -633,7 +633,7 @@ mod tests {
             let mut world = game
                 .world
                 .lock()
-                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
             visibility_system(&mut world, &game.map, game.is_day());
 
             let player = world
@@ -655,7 +655,7 @@ mod tests {
             let mut world = game
                 .world
                 .lock()
-                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
             visibility_system(&mut world, &game.map, game.is_day());
 
             let player = world
@@ -686,7 +686,7 @@ mod tests {
             let mut world = game
                 .world
                 .lock()
-                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
             if let Some(pos) = world.get_component_mut::<Position>(player_entity) {
                 *pos = player_pos;
             }

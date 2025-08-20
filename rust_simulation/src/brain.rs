@@ -982,10 +982,10 @@ mod tests {
 
     fn create_test_brain() -> Result<Brain, SimulationError> {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            .map_err(|e| SimulationError::EnvVarError(e.to_string()))?;
         let recipe_manager = Arc::new(RecipeManager::new(&format!(
             "{manifest_dir}/data/recipes.json"
-        )));
+        ))?);
         Ok(Brain::new(
             recipe_manager,
             LEARNING_RATE,

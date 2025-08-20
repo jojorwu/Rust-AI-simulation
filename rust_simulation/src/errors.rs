@@ -12,9 +12,15 @@ pub enum SimulationError {
     #[error("Serialization error: {0}")]
     SerdeJson(#[from] serde_json::Error),
 
-    #[error("Unwrap failed: {0}")]
-    UnwrapFailed(String),
+    #[error("Mutex lock failed: {0}")]
+    MutexLockError(String),
 
-    #[error("Boxed error: {0}")]
-    BoxedError(#[from] Box<dyn std::error::Error>),
+    #[error("Downcast failed: {0}")]
+    DowncastFailed(String),
+
+    #[error("City not found: {0}")]
+    CityNotFound(String),
+
+    #[error("Environment variable error: {0}")]
+    EnvVarError(String),
 }

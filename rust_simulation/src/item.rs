@@ -1,3 +1,4 @@
+use crate::errors::SimulationError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -16,16 +17,14 @@ pub struct ItemRegistry {
 }
 
 impl ItemRegistry {
-    pub fn new(filepath: &str) -> Self {
-        let file_content = fs::read_to_string(filepath)
-            .unwrap_or_else(|_| panic!("Unable to read items file at {filepath}"));
-        let items_vec: Vec<Item> =
-            serde_json::from_str(&file_content).expect("Unable to parse items file");
+    pub fn new(filepath: &str) -> Result<Self, SimulationError> {
+        let file_content = fs::read_to_string(filepath)?;
+        let items_vec: Vec<Item> = serde_json::from_str(&file_content)?;
         let mut items = HashMap::new();
         for item in items_vec {
             items.insert(item.name.clone(), item);
         }
-        ItemRegistry { items }
+        Ok(ItemRegistry { items })
     }
 
     pub fn get_item(&self, item_name: &str) -> Option<&Item> {

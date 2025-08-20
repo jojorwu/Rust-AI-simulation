@@ -1,14 +1,15 @@
 use crate::config::RoadConfig;
+use crate::errors::SimulationError;
 use crate::road::*;
 use crate::Game;
 use std::collections::HashMap;
 use std::env;
 
-pub fn generate_roads(game: &mut Game) -> Result<(), Box<dyn std::error::Error>> {
+pub fn generate_roads(game: &mut Game) -> Result<(), SimulationError> {
     _generate_roads_from_config(game)
 }
 
-fn _generate_roads_from_config(game: &mut Game) -> Result<(), Box<dyn std::error::Error>> {
+fn _generate_roads_from_config(game: &mut Game) -> Result<(), SimulationError> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let road_config_path = format!("{manifest_dir}/data/road_config.json");
     let road_config = RoadConfig::load(&road_config_path)?;
@@ -24,10 +25,10 @@ fn _generate_roads_from_config(game: &mut Game) -> Result<(), Box<dyn std::error
     for setting in road_config.road_settings {
         let start_pos = city_locations
             .get(&setting.start_point)
-            .ok_or("Start city not found")?;
+            .ok_or(SimulationError::CityNotFound(setting.start_point.clone()))?;
         let end_pos = city_locations
             .get(&setting.end_point)
-            .ok_or("End city not found")?;
+            .ok_or(SimulationError::CityNotFound(setting.end_point.clone()))?;
 
         let start_point = Point {
             x: start_pos.0 as f32,

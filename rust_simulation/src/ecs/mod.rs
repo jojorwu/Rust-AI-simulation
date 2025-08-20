@@ -70,7 +70,7 @@ impl World {
             .as_any_mut()
             .downcast_mut::<Vec<Option<T>>>()
             .ok_or_else(|| {
-                crate::errors::SimulationError::UnwrapFailed(
+                crate::errors::SimulationError::MutexLockError(
                     "Failed to downcast component vector".to_string(),
                 )
             })?;

@@ -9,8 +9,8 @@ use super::player::Player;
 use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use crate::errors::SimulationError;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 
 /// Represents the visibility state of a tile from a player's perspective.
@@ -164,7 +164,7 @@ impl Map {
         height: u32,
         biomes_path: &str,
         resources_path: &str,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, SimulationError> {
         let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
 
