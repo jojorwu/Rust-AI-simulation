@@ -121,7 +121,7 @@ impl Game {
     }
 
     fn find_and_set_valid_start_positions(&mut self) -> Result<(), SimulationError> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut occupied_positions = std::collections::HashSet::new();
 
         let plains_biome = self.map.biomes.iter().find(|b| b.name == "plains");
@@ -133,8 +133,8 @@ impl Game {
             .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         for entity in 0..world.entities.len() {
             loop {
-                let x = rng.gen_range(0..self.map.width);
-                let y = rng.gen_range(0..self.map.height);
+                let x = rng.random_range(0..self.map.width);
+                let y = rng.random_range(0..self.map.height);
                 if self.map.grid[y as usize][x as usize].tile_type == plains_tile_type
                     && !occupied_positions.contains(&(x, y))
                 {
@@ -157,7 +157,7 @@ impl Game {
     }
 
     fn place_resources(&mut self) -> Result<(), SimulationError> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut world = self
             .world
             .lock()
@@ -169,7 +169,7 @@ impl Game {
                 let tile = &self.map.grid[y as usize][x as usize];
                 for resource_def in &self.map.resources {
                     if resource_def.biomes.contains(&tile.biome) {
-                        if rng.r#gen::<f64>() < resource_def.density {
+                        if rng.random::<f64>() < resource_def.density {
                             let resource_entity = world.create_entity();
                             world.add_component(resource_entity, Position { x, y })?;
                             world.add_component(

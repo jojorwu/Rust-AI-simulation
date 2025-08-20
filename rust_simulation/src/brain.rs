@@ -127,11 +127,11 @@ impl Brain {
         }
 
         let choose_random_goal = || {
-            let index = rand::thread_rng().gen_range(0..valid_goals.len());
+            let index = rand::rng().random_range(0..valid_goals.len());
             Ok(valid_goals[index].clone())
         };
 
-        if rand::thread_rng().r#gen::<f64>() < self.epsilon {
+        if rand::rng().random::<f64>() < self.epsilon {
             return choose_random_goal();
         }
 
@@ -826,7 +826,7 @@ impl Brain {
             }
         }
         if !unvisited.is_empty() {
-            let target_idx = rand::thread_rng().gen_range(0..unvisited.len());
+            let target_idx = rand::rng().random_range(0..unvisited.len());
             let target_pos = unvisited[target_idx];
             if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
                 if let Some(path) = pathfinding::find_path(

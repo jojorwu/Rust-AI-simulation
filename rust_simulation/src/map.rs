@@ -141,7 +141,7 @@ impl Map {
         persistence: f64,
         lacunarity: f64,
     ) {
-        let seed = rand::thread_rng().r#gen::<u32>();
+        let seed = rand::rng().random::<u32>();
 
         // Base terrain using OpenSimplex
         let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
@@ -195,7 +195,7 @@ impl Map {
                 // Keep the random flower generation
                 if biome_name == "plains"
                     && tile_char == '.'
-                    && rand::thread_rng().gen_range(0..100) < 5
+                    && rand::rng().random_range(0..100) < 5
                 {
                     tile_char = 'f';
                 }
