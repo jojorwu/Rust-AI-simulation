@@ -1,18 +1,38 @@
+//! A simulation of a simple world with agents that can gather resources,
+//! craft items, and build structures. The simulation is based on an
+//! Entity-Component-System (ECS) architecture.
+
+/// Contains the AI logic for the agents.
 pub mod brain;
+/// Defines the components that can be attached to entities.
 pub mod components;
+/// Contains configuration constants for the simulation.
 pub mod config;
+/// A simple Entity-Component-System (ECS) implementation.
 pub mod ecs;
+/// Defines the custom error types for the simulation.
 pub mod errors;
+/// An event bus for communication between systems.
 pub mod events;
+/// Field-of-view (FOV) calculations.
 pub mod fov;
+/// Item definitions and registry.
 pub mod item;
+/// Map generation and representation.
 pub mod map;
+/// Pathfinding logic.
 pub mod pathfinding;
+/// Player-specific components and logic.
 pub mod player;
+/// Recipe definitions and management.
 pub mod recipes;
+/// Road-related components and logic.
 pub mod road;
+/// A system for building roads.
 pub mod road_builder;
+/// A system for managing roads.
 pub mod road_manager;
+/// The systems that operate on entities and components.
 pub mod systems;
 
 use brain::{Brain, BrainAction, HighLevelState, InventorySummary};
@@ -37,20 +57,48 @@ use rand::Rng;
 use config::*;
 use road_manager::RoadManager;
 
-/// The main struct for the simulation.
-/// It holds the game state, including the map, the ECS world, and the brains for the agents.
+/// Represents the main simulation environment.
+///
+/// This struct holds all the state for the simulation, including the game map,
+/// the Entity-Component-System (ECS) world, and the various managers for items,
+/// recipes, and events.
 pub struct Game {
+    /// The game world, including the grid, biomes, and resources.
     pub map: Map,
+    /// The ECS world, which manages all entities and their components.
     pub world: Arc<Mutex<World>>,
+    /// The AI brain, which controls the behavior of the agents.
     pub brain: Arc<Brain>,
+    /// The registry for all items in the simulation.
     pub item_registry: ItemRegistry,
+    /// The manager for all crafting recipes.
     pub recipe_manager: Arc<RecipeManager>,
+    /// The event bus for communication between systems.
     pub event_bus: Arc<Mutex<EventBus>>,
+    /// The current tick count of the simulation.
     pub tick_count: u32,
+    /// The manager for roads.
     pub road_manager: RoadManager,
 }
 
 impl Game {
+    /// Creates a new `Game` instance.
+    ///
+    /// This function initializes the game state, including the map, ECS world,
+    /// and all the necessary managers. It also creates the initial set of
+    /// player entities.
+    ///
+    /// # Arguments
+    ///
+    /// * `biomes_path` - The path to the biomes configuration file.
+    /// * `resources_path` - The path to the resources configuration file.
+    /// * `items_path` - The path to the items configuration file.
+    /// * `recipes_path` - The path to the recipes configuration file.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the new `Game` instance, or a `SimulationError`
+    /// if initialization fails.
     pub fn new(
         biomes_path: &str,
         resources_path: &str,
@@ -227,6 +275,16 @@ impl Game {
         })
     }
 
+    /// Starts the main simulation loop.
+    ///
+    /// This function runs the simulation for a configured number of episodes.
+    /// In each episode, it runs a series of ticks, where each tick updates
+    /// the game state by running the AI brains and the various systems.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating whether the simulation completed successfully,
+    /// or a `SimulationError` if an error occurred.
     pub fn run(&mut self) -> Result<(), SimulationError> {
         println!("--- Starting Rust Training Simulation ---");
 
@@ -430,6 +488,16 @@ impl Game {
         }
     }
 
+    /// Wipes the current simulation state and starts a new generation.
+    ///
+    /// This function is used to reset the simulation to a clean state. It
+    /// deletes the old Q-table, resets the game state, creates a new ECS
+    /// world, and generates a new map with new resources.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating whether the new generation was created
+    /// successfully, or a `SimulationError` if an error occurred.
     pub fn new_generation(&mut self) -> Result<(), SimulationError> {
         println!("--- Wiping and creating a new generation ---");
 

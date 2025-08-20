@@ -1,3 +1,13 @@
+//! This module contains the core AI logic for the simulation agents.
+//!
+//! The main components are:
+//! - `Goal`: An enum representing the high-level objectives an agent can have.
+//! - `Brain`: A struct that encapsulates the decision-making logic for an agent.
+//! - `BrainAction`: An enum representing the concrete actions an agent can take.
+//!
+//! The `Brain` uses a Q-learning-based approach to decide on a `Goal`, and then
+//! uses a planner to break that goal down into a series of actions.
+
 use super::config::{
     BUILD_GOAL_BONUS, GATHER_GOAL_THRESHOLD, GOAL_COMMITMENT_TICKS, GOAL_PENALTY, GOAL_REWARD,
     HEIGHT, THREAT_GOAL_COMMITMENT_TICKS, WIDTH,
@@ -18,68 +28,106 @@ use std::env;
 use std::fs;
 use std::sync::Arc;
 
+/// Represents the high-level goals that an agent can have.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
+    /// Gather a specific resource.
     GatherResource(String),
+    /// Craft a specific item.
     CraftItem(String),
+    /// Build a specific structure.
     Build(String),
+    /// Attack a specific entity.
     Attack(u32),
+    /// Flee from a threat.
     Flee,
+    /// Explore the map to find resources.
     Explore,
+    /// Stockpile a resource in a chest.
     Stockpile(String),
 }
 
+/// Represents the concrete actions that an agent's brain can decide to take.
 #[derive(Debug)]
 pub enum BrainAction {
+    /// Move in a specific direction.
     Move(Velocity),
+    /// Gather a resource from a target entity.
     Gather(WantsToGather),
+    /// Craft an item.
     Craft(WantsToCraft),
+    /// Build a structure.
     Build(WantsToBuild),
+    /// Attack a target entity.
     Attack(crate::components::WantsToAttack),
+    /// Store an item in a chest.
     Store(WantsToStoreItem),
 }
 
+/// A summary of the agent's inventory, used as part of the `HighLevelState`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InventorySummary {
+    /// Whether the agent has any wood.
     pub has_wood: bool,
+    /// Whether the agent has any stone.
     pub has_stone: bool,
+    /// Whether the agent has any iron ore.
     pub has_iron_ore: bool,
+    /// Whether the agent has a stone axe.
     pub has_stone_axe: bool,
 }
 
+/// Represents the high-level state of the agent and its environment.
+/// This is used as the input to the Q-learning model for goal selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HighLevelState {
+    /// A summary of the agent's inventory.
     pub inventory_summary: InventorySummary,
+    /// The number of hostile players the agent is aware of.
     pub num_hostile_players: u32,
+    /// The agent's current health level.
     pub health_level: u32,
+    /// Whether it is currently night time.
     pub is_night: bool,
 }
 
+/// A tile as remembered by the agent.
 #[derive(Debug, Clone)]
 pub struct MemoryTile {
     pub tile: Tile,
 }
 
+/// The relationship status between agents.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelationshipStatus {
+    /// The other agent is considered hostile.
     Hostile,
 }
 
+/// A memory of another player.
 #[derive(Debug, Clone)]
 pub struct PlayerMemory {
     pub relationship: RelationshipStatus,
 }
 
-/// The Brain struct is now a stateless logic processor for the AI.
+/// The `Brain` struct is a stateless logic processor for the AI.
+/// It contains the core logic for decision-making, including goal selection,
+/// planning, and action execution.
 pub struct Brain {
+    /// The list of possible goals the agent can choose from.
     pub goals: Vec<Goal>,
+    /// A reference to the recipe manager for crafting information.
     pub recipe_manager: Arc<RecipeManager>,
+    /// The learning rate for the Q-learning algorithm.
     pub learning_rate: f64,
+    /// The discount factor for future rewards in the Q-learning algorithm.
     pub discount_factor: f64,
+    /// The exploration factor (epsilon) for the epsilon-greedy policy.
     pub epsilon: f64,
 }
 
 impl Brain {
+    /// Creates a new `Brain`.
     pub fn new(
         recipe_manager: Arc<RecipeManager>,
         learning_rate: f64,
@@ -102,6 +150,7 @@ impl Brain {
         }
     }
 
+    /// Saves the agent's Q-table to a file.
     pub fn save_q_table(&self, brain_component: &BrainComponent) -> Result<(), SimulationError> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let q_table_path = std::path::Path::new(manifest_dir).join("../q_table.json");
@@ -110,6 +159,11 @@ impl Brain {
         Ok(())
     }
 
+    /// Chooses a high-level goal for the agent based on the current state.
+    ///
+    /// This function uses an epsilon-greedy policy with a Q-table to select a
+    /// goal. With probability epsilon, it chooses a random valid goal. Otherwise,
+    /// it chooses the goal with the highest Q-value for the current state.
     pub fn choose_goal(
         &self,
         brain_component: &BrainComponent,
@@ -158,6 +212,7 @@ impl Brain {
         }
     }
 
+    /// Checks if a goal has been completed.
     pub fn is_goal_complete(
         &self,
         brain_component: &BrainComponent,
@@ -191,6 +246,7 @@ impl Brain {
         }
     }
 
+    /// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
     pub fn plan_goal(
         &self,
         brain_component: &BrainComponent,
@@ -229,6 +285,7 @@ impl Brain {
         Ok(plan)
     }
 
+    /// Plans the gathering of resources required for a crafting recipe.
     fn plan_resource_gathering(
         &self,
         brain_component: &BrainComponent,
@@ -249,6 +306,11 @@ impl Brain {
         plan
     }
 
+    /// The main entry point for the agent's AI logic for a single simulation tick.
+    ///
+    /// This function orchestrates the agent's decision-making process for a
+    /// single tick. It involves updating the Q-table, updating the agent's
+    /// internal state, choosing a goal and plan, and executing an action.
     pub fn tick(
         &self,
         brain_component: &mut BrainComponent,
@@ -277,6 +339,7 @@ impl Brain {
         Ok(action)
     }
 
+    /// Updates the Q-table based on the outcome of the previous action.
     fn update_q_table_based_on_previous_action(
         &self,
         brain_component: &mut BrainComponent,
@@ -304,6 +367,8 @@ impl Brain {
         Ok(())
     }
 
+    /// Updates the agent's internal state, including its mental map and any
+    /// opportunistic goals.
     fn update_internal_state(
         &self,
         brain_component: &mut BrainComponent,
@@ -316,6 +381,8 @@ impl Brain {
         self.handle_opportunities(brain_component, world, entity, spatial_map, visible_tiles);
     }
 
+    /// Checks for and handles opportunistic goals, such as gathering a valuable
+    /// resource that has just come into view.
     fn handle_opportunities(
         &self,
         brain_component: &mut BrainComponent,
@@ -352,6 +419,7 @@ impl Brain {
         }
     }
 
+    /// Updates the agent's mental map with the currently visible tiles.
     fn update_mental_map(
         &self,
         brain_component: &mut BrainComponent,
@@ -376,6 +444,7 @@ impl Brain {
         }
     }
 
+    /// Updates the agent's current goal and plan.
     fn update_goal_and_plan(
         &self,
         brain_component: &mut BrainComponent,
@@ -386,6 +455,7 @@ impl Brain {
         self._update_current_goal(brain_component, world, entity, high_level_state)
     }
 
+    /// The core logic for updating the agent's current goal.
     fn _update_current_goal(
         &self,
         brain_component: &mut BrainComponent,
@@ -427,6 +497,7 @@ impl Brain {
         Ok(())
     }
 
+    /// Checks if a goal is currently valid.
     fn is_goal_valid(&self, brain_component: &BrainComponent, _world: &World, goal: &Goal) -> bool {
         match goal {
             Goal::GatherResource(resource_name) => brain_component
@@ -437,6 +508,7 @@ impl Brain {
         }
     }
 
+    /// Chooses and executes an action for the current goal.
     fn choose_and_execute_action(
         &self,
         brain_component: &mut BrainComponent,
@@ -448,6 +520,7 @@ impl Brain {
         self._choose_action_for_goal(brain_component, world, spatial_map, entity, current_episode)
     }
 
+    /// The core logic for choosing an action for the current goal.
     fn _choose_action_for_goal(
         &self,
         brain_component: &mut BrainComponent,
@@ -493,6 +566,7 @@ impl Brain {
         }
     }
 
+    /// Follows the current path, if one exists.
     fn follow_path(
         &self,
         brain_component: &mut BrainComponent,
@@ -516,6 +590,7 @@ impl Brain {
         None
     }
 
+    /// Updates the Q-table for a given state-goal pair.
     fn _update_q_table(
         &self,
         brain_component: &mut BrainComponent,
@@ -552,6 +627,7 @@ impl Brain {
         Ok(())
     }
 
+    /// Executes the "gather resource" goal.
     fn execute_gather_goal(
         &self,
         brain_component: &mut BrainComponent,
@@ -604,6 +680,7 @@ impl Brain {
         Ok(None)
     }
 
+    /// Executes the "craft item" goal.
     fn execute_craft_item_goal(
         &self,
         _entity: Entity,
@@ -615,6 +692,7 @@ impl Brain {
         })))
     }
 
+    /// Executes the "build" goal.
     fn execute_build_goal(
         &self,
         _entity: Entity,
@@ -626,6 +704,7 @@ impl Brain {
         })))
     }
 
+    /// Handles threats to the agent.
     fn handle_threats(
         &self,
         brain_component: &mut BrainComponent,
@@ -668,6 +747,7 @@ impl Brain {
         false
     }
 
+    /// Handles threats that are within the agent's defined territory.
     fn handle_territorial_threats(
         &self,
         brain_component: &mut BrainComponent,
@@ -708,6 +788,7 @@ impl Brain {
         false
     }
 
+    /// Handles standard threats that are not within the agent's territory.
     fn handle_standard_threats(
         &self,
         brain_component: &mut BrainComponent,
@@ -730,6 +811,7 @@ impl Brain {
         false
     }
 
+    /// Finds the closest threat to the agent from a list of threats.
     fn find_closest_threat(
         &self,
         world: &World,
@@ -748,11 +830,13 @@ impl Brain {
             .copied()
     }
 
+    /// Sets the agent's current goal.
     fn set_goal(&self, brain_component: &mut BrainComponent, goal: Goal) {
         brain_component.current_goal = Some(goal);
         brain_component.current_path = None;
     }
 
+    /// Executes the "attack" goal.
     fn execute_attack_goal(
         &self,
         _entity: Entity,
@@ -766,6 +850,7 @@ impl Brain {
         )))
     }
 
+    /// Executes the "flee" goal.
     fn execute_flee_goal(
         &self,
         brain_component: &mut BrainComponent,
@@ -807,6 +892,7 @@ impl Brain {
         })))
     }
 
+    /// Executes the "explore" goal.
     fn execute_explore_goal(
         &self,
         brain_component: &mut BrainComponent,
@@ -841,6 +927,7 @@ impl Brain {
         Ok(None)
     }
 
+    /// Executes the "stockpile" goal.
     fn execute_stockpile_goal(
         &self,
         brain_component: &mut BrainComponent,
@@ -881,6 +968,7 @@ impl Brain {
         Ok(None)
     }
 
+    /// Finds the closest chest to a given position.
     fn find_closest_chest(&self, world: &World, pos: &Position) -> Option<(Entity, Position)> {
         (0..world.entities.len())
             .filter_map(|e| world.get_component::<Chest>(e).map(|_| e))
