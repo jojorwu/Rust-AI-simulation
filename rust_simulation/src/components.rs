@@ -67,7 +67,7 @@ pub struct WantsToStoreItem {
     pub target_chest: Entity,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BrainComponent {
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
     pub known_resources: HashMap<String, HashSet<Position>>,

@@ -44,7 +44,6 @@ use item::ItemRegistry;
 use map::{Map, Tile};
 use player::Player;
 use recipes::RecipeManager;
-use std::any::TypeId;
 use std::env;
 use std::sync::{Arc, Mutex};
 use systems::{
@@ -369,55 +368,49 @@ impl Game {
     }
 
     fn run_brain_ticks(&mut self, _episode: u32) -> Result<(), SimulationError> {
-        let mut world = self
+        let world = self
             .world
             .lock()
             .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
-        let mut actions_to_execute = Vec::new();
 
-        let brain_components_type_id = TypeId::of::<BrainComponent>();
+        let mut brain_updates = Vec::new();
 
-        let mut brain_components_vec = if let Some(mut components_box) =
-            world.components.remove(&brain_components_type_id)
-        {
-            let vec = components_box
-                .as_any_mut()
-                .downcast_mut::<Vec<Option<BrainComponent>>>()
-                .ok_or_else(|| {
-                    SimulationError::DowncastFailed("Failed to downcast brain components".to_string())
-                })?;
-            std::mem::take(vec)
-        } else {
-            return Ok(()); // No entities have brains
-        };
-
-        for i in 0..world.entities.len() {
-            if let Some(Some(brain_component)) = brain_components_vec.get_mut(i) {
-                let pos = match world.get_component::<Position>(i) {
+        // Phase 1: Read-only processing and collecting desired changes.
+        for entity in 0..world.entities.len() {
+            if let Some(brain_component) = world.get_component::<BrainComponent>(entity) {
+                let pos = match world.get_component::<Position>(entity) {
                     Some(p) => *p,
                     None => continue,
                 };
-                let high_level_state = self.get_high_level_state(&world, i)?;
+                let high_level_state = self.get_high_level_state(&world, entity)?;
                 let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
 
-                if let Some(action) = self.brain.tick(
+                if let Some((new_brain_state, action)) = self.brain.tick(
                     brain_component,
                     &world,
                     &self.map.spatial_map,
-                    i,
+                    entity,
                     &high_level_state,
                     &visible_tiles,
                 )? {
-                    actions_to_execute.push((i, action));
+                    brain_updates.push((entity, new_brain_state, action));
                 }
             }
         }
 
-        // Put the brain components back into the world
-        let new_box = Box::new(brain_components_vec);
-        world.components.insert(brain_components_type_id, new_box);
+        // Phase 2: Apply all the collected changes with a new mutable lock.
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
 
-        for (entity, action) in actions_to_execute {
+        for (entity, new_brain_state, action) in brain_updates {
+            // Update the brain component
+            if let Some(brain_component) = world.get_component_mut::<BrainComponent>(entity) {
+                *brain_component = new_brain_state;
+            }
+
+            // Apply the action
             match action {
                 BrainAction::Move(vel) => world.add_component(entity, vel)?,
                 BrainAction::Gather(g) => world.add_component(entity, g)?,
@@ -427,6 +420,7 @@ impl Game {
                 BrainAction::Store(s) => world.add_component(entity, s)?,
             }
         }
+
         Ok(())
     }
 
@@ -555,12 +549,13 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::errors::SimulationError;
     use crate::map::TileState;
     use std::env;
 
     fn create_test_game() -> Result<Game, SimulationError> {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
+            .map_err(|e| SimulationError::EnvVarError(e.to_string()))?;
         Game::new(
             &format!("{manifest_dir}/data/biomes.json"),
             &format!("{manifest_dir}/data/resources.json"),
@@ -589,7 +584,7 @@ mod tests {
     fn test_get_visible_tiles() -> Result<(), SimulationError> {
         // Create a game with a blank map (no walls) to make the test deterministic.
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
-            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
+            .map_err(|e| SimulationError::EnvVarError(e.to_string()))?;
         let mut game = Game::new(
             &format!("{manifest_dir}/data/biomes.json"),
             &format!("{manifest_dir}/data/resources.json"),

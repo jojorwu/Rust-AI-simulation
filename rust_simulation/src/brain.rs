@@ -311,30 +311,54 @@ impl Brain {
     /// internal state, choosing a goal and plan, and executing an action.
     pub fn tick(
         &self,
-        brain_component: &mut BrainComponent,
+        brain_component: &BrainComponent, // Takes an immutable reference
         world: &World,
         spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
         entity: Entity,
         high_level_state: &HighLevelState,
-        visible_tiles: &Vec<(Position, Tile)>,
-    ) -> Result<Option<BrainAction>, SimulationError> {
+        visible_tiles: &[(Position, Tile)],
+    ) -> Result<Option<(BrainComponent, BrainAction)>, SimulationError> {
+        // Clone the component to mutate it.
+        let mut new_brain_component = brain_component.clone();
+
         self.update_q_table_based_on_previous_action(
-            brain_component,
+            &mut new_brain_component,
             world,
             entity,
             high_level_state,
         )?;
 
-        self.update_internal_state(brain_component, world, entity, spatial_map, visible_tiles);
-        self.update_goal_and_plan(brain_component, world, entity, high_level_state)?;
+        self.update_internal_state(
+            &mut new_brain_component,
+            world,
+            entity,
+            spatial_map,
+            visible_tiles,
+        );
+        self.update_goal_and_plan(
+            &mut new_brain_component,
+            world,
+            entity,
+            high_level_state,
+        )?;
 
-        let action =
-            self.choose_and_execute_action(brain_component, world, spatial_map, entity, 0)?;
+        let action = self.choose_and_execute_action(
+            &mut new_brain_component,
+            world,
+            spatial_map,
+            entity,
+            0,
+        )?;
 
-        brain_component.prev_state = Some(high_level_state.clone());
-        brain_component.prev_goal = brain_component.current_goal.clone();
+        new_brain_component.prev_state = Some(high_level_state.clone());
+        new_brain_component.prev_goal = new_brain_component.current_goal.clone();
 
-        Ok(action)
+        // Return the new state of the brain component along with the action.
+        if let Some(a) = action {
+            Ok(Some((new_brain_component, a)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Updates the Q-table based on the outcome of the previous action.
@@ -373,7 +397,7 @@ impl Brain {
         world: &World,
         entity: Entity,
         spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
-        visible_tiles: &Vec<(Position, Tile)>,
+        visible_tiles: &[(Position, Tile)],
     ) {
         self.update_mental_map(brain_component, world, spatial_map, visible_tiles);
         self.handle_opportunities(brain_component, world, entity, spatial_map, visible_tiles);
@@ -387,7 +411,7 @@ impl Brain {
         world: &World,
         entity: Entity,
         spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
-        visible_tiles: &Vec<(Position, Tile)>,
+        visible_tiles: &[(Position, Tile)],
     ) {
         if brain_component.goal_commitment_ticks
             >= crate::config::OPPORTUNISTIC_COMMITMENT_THRESHOLD
@@ -423,7 +447,7 @@ impl Brain {
         brain_component: &mut BrainComponent,
         world: &World,
         spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
-        visible_tiles: &Vec<(Position, Tile)>,
+        visible_tiles: &[(Position, Tile)],
     ) {
         for (pos, tile) in visible_tiles {
             brain_component.mental_map[pos.y as usize][pos.x as usize] =
@@ -976,6 +1000,7 @@ mod tests {
     use crate::components::{BrainComponent, Inventory, Position};
     use crate::config::{DISCOUNT_FACTOR, EPSILON, LEARNING_RATE};
     use crate::ecs::World;
+    use crate::errors::SimulationError;
     use crate::recipes::RecipeManager;
     use std::env;
     use std::sync::Arc;
