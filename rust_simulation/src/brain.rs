@@ -37,11 +37,16 @@ pub enum BrainAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HighLevelState {
+pub struct InventorySummary {
     pub has_wood: bool,
     pub has_stone: bool,
     pub has_iron_ore: bool,
     pub has_stone_axe: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HighLevelState {
+    pub inventory_summary: InventorySummary,
     pub num_hostile_players: u32,
     pub health_level: u32,
     pub is_night: bool,

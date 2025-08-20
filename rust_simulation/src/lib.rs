@@ -15,7 +15,7 @@ pub mod road_builder;
 pub mod road_manager;
 pub mod systems;
 
-use brain::{Brain, BrainAction, HighLevelState};
+use brain::{Brain, BrainAction, HighLevelState, InventorySummary};
 use components::{BrainComponent, Inventory, Position};
 use ecs::{Entity, World};
 use errors::SimulationError;
@@ -207,11 +207,15 @@ impl Game {
             .filter(|m| m.relationship == brain::RelationshipStatus::Hostile)
             .count() as u32;
 
-        Ok(HighLevelState {
+        let inventory_summary = InventorySummary {
             has_wood: inventory.map_or(false, |inv| inv.has_item("wood", 1)),
             has_stone: inventory.map_or(false, |inv| inv.has_item("stone", 1)),
             has_iron_ore: inventory.map_or(false, |inv| inv.has_item("iron_ore", 1)),
             has_stone_axe: inventory.map_or(false, |inv| inv.has_item("stone_axe", 1)),
+        };
+
+        Ok(HighLevelState {
+            inventory_summary,
             num_hostile_players,
             health_level: health.current as u32,
             is_night: !self.is_day(),
