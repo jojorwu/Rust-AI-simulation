@@ -198,21 +198,30 @@ impl Brain {
     }
 
     pub fn tick(&self, brain_component: &mut BrainComponent, world: &World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, high_level_state: &HighLevelState, visible_tiles: &Vec<(Position, Tile)>) -> Result<Option<BrainAction>, SimulationError> {
-        if let (Some(prev_state), Some(prev_goal)) = (brain_component.prev_state.clone(), brain_component.prev_goal.clone()) {
-            let reward = if self.is_goal_complete(brain_component, world, entity, &prev_goal) { 10.0 } else { -0.1 };
-            self.update_q_table(brain_component, &prev_state, &prev_goal, reward, high_level_state)?;
-        }
+        self.update_q_table_based_on_previous_action(brain_component, world, entity, high_level_state)?;
 
-        self.update_mental_map(brain_component, world, spatial_map, visible_tiles);
-        self.handle_opportunities(brain_component, world, entity, spatial_map, visible_tiles);
-        self.update_current_goal(brain_component, world, entity, high_level_state)?;
+        self.update_internal_state(brain_component, world, entity, spatial_map, visible_tiles);
+        self.update_goal_and_plan(brain_component, world, entity, high_level_state)?;
 
-        let action = self.choose_action_for_goal(brain_component, world, spatial_map, entity, 0)?;
+        let action = self.choose_and_execute_action(brain_component, world, spatial_map, entity, 0)?;
 
         brain_component.prev_state = Some(high_level_state.clone());
         brain_component.prev_goal = brain_component.current_goal.clone();
 
         Ok(action)
+    }
+
+    fn update_q_table_based_on_previous_action(&self, brain_component: &mut BrainComponent, world: &World, entity: Entity, high_level_state: &HighLevelState) -> Result<(), SimulationError> {
+        if let (Some(prev_state), Some(prev_goal)) = (brain_component.prev_state.clone(), brain_component.prev_goal.clone()) {
+            let reward = if self.is_goal_complete(brain_component, world, entity, &prev_goal) { 10.0 } else { -0.1 };
+            self._update_q_table(brain_component, &prev_state, &prev_goal, reward, high_level_state)?;
+        }
+        Ok(())
+    }
+
+    fn update_internal_state(&self, brain_component: &mut BrainComponent, world: &World, entity: Entity, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, visible_tiles: &Vec<(Position, Tile)>) {
+        self.update_mental_map(brain_component, world, spatial_map, visible_tiles);
+        self.handle_opportunities(brain_component, world, entity, spatial_map, visible_tiles);
     }
 
     fn handle_opportunities(&self, brain_component: &mut BrainComponent, world: &World, entity: Entity, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, visible_tiles: &Vec<(Position, Tile)>) {
@@ -250,7 +259,11 @@ impl Brain {
         }
     }
 
-    fn update_current_goal(&self, brain_component: &mut BrainComponent, world: &World, entity: Entity, high_level_state: &HighLevelState) -> Result<(), SimulationError> {
+    fn update_goal_and_plan(&self, brain_component: &mut BrainComponent, world: &World, entity: Entity, high_level_state: &HighLevelState) -> Result<(), SimulationError> {
+        self._update_current_goal(brain_component, world, entity, high_level_state)
+    }
+
+    fn _update_current_goal(&self, brain_component: &mut BrainComponent, world: &World, entity: Entity, high_level_state: &HighLevelState) -> Result<(), SimulationError> {
         if self.handle_threats(brain_component, world, entity) {
             brain_component.goal_commitment_ticks = 5;
             return Ok(());
@@ -292,7 +305,11 @@ impl Brain {
         }
     }
 
-    fn choose_action_for_goal(&self, brain_component: &mut BrainComponent, world: &World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, current_episode: u32) -> Result<Option<BrainAction>, SimulationError> {
+    fn choose_and_execute_action(&self, brain_component: &mut BrainComponent, world: &World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, current_episode: u32) -> Result<Option<BrainAction>, SimulationError> {
+        self._choose_action_for_goal(brain_component, world, spatial_map, entity, current_episode)
+    }
+
+    fn _choose_action_for_goal(&self, brain_component: &mut BrainComponent, world: &World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, current_episode: u32) -> Result<Option<BrainAction>, SimulationError> {
         if let Some(action) = self.follow_path(brain_component, world, entity) {
             return Ok(Some(action));
         }
@@ -326,7 +343,7 @@ impl Brain {
         None
     }
 
-    pub fn update_q_table(&self, brain_component: &mut BrainComponent, prev_state: &HighLevelState, goal: &Goal, reward: f64, new_state: &HighLevelState) -> Result<(), SimulationError> {
+    fn _update_q_table(&self, brain_component: &mut BrainComponent, prev_state: &HighLevelState, goal: &Goal, reward: f64, new_state: &HighLevelState) -> Result<(), SimulationError> {
         let prev_state_key = serde_json::to_string(prev_state)?;
         let new_state_key = serde_json::to_string(new_state)?;
         let old_q_value = brain_component.goal_q_table.get(&prev_state_key).and_then(|q| q.get(goal)).cloned().unwrap_or(0.0);
@@ -507,7 +524,6 @@ mod tests {
     use crate::ecs::World;
     use crate::recipes::RecipeManager;
     use crate::components::{BrainComponent, Inventory, Position};
-    use crate::map::Tile;
     use std::sync::Arc;
     use std::env;
 
