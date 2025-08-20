@@ -23,6 +23,19 @@ pub const DEFENSE_RADIUS: u32 = 10;
 pub const CRITICAL_HEALTH_RATIO: f32 = 0.25;
 pub const STANDARD_HEALTH_RATIO: f32 = 0.5;
 
+// Q-learning parameters
+pub const LEARNING_RATE: f64 = 0.1;
+pub const DISCOUNT_FACTOR: f64 = 0.9;
+pub const EPSILON: f64 = 1.0;
+
+// GOAL-RELATED CONSTANTS
+pub const GOAL_REWARD: f64 = 10.0;
+pub const GOAL_PENALTY: f64 = -0.1;
+pub const BUILD_GOAL_BONUS: f64 = 10.0;
+pub const GATHER_GOAL_THRESHOLD: u32 = 10;
+pub const GOAL_COMMITMENT_TICKS: u32 = 10;
+pub const THREAT_GOAL_COMMITMENT_TICKS: u32 = 5;
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct RoadSetting {
     pub name: String,

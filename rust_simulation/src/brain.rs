@@ -1,4 +1,7 @@
-use super::config::{HEIGHT, WIDTH};
+use super::config::{
+    BUILD_GOAL_BONUS, GATHER_GOAL_THRESHOLD, GOAL_COMMITMENT_TICKS, GOAL_PENALTY, GOAL_REWARD,
+    HEIGHT, THREAT_GOAL_COMMITMENT_TICKS, WIDTH,
+};
 use super::ecs::{Entity, World};
 use super::errors::SimulationError;
 use super::map::Tile;
@@ -138,7 +141,7 @@ impl Brain {
             if state.is_night {
                 for (goal, q_value) in modified_q_values.iter_mut() {
                     if let Goal::Build(_) = goal {
-                        *q_value += 10.0;
+                        *q_value += BUILD_GOAL_BONUS;
                     }
                 }
             }
@@ -173,7 +176,7 @@ impl Brain {
                             }
                         }
                     }
-                    inventory.get_quantity(resource) > 10
+                    inventory.get_quantity(resource) > GATHER_GOAL_THRESHOLD
                 }
                 Goal::CraftItem(item) => inventory.has_item(item, 1),
                 Goal::Explore => brain_component
@@ -286,9 +289,9 @@ impl Brain {
             brain_component.prev_goal.clone(),
         ) {
             let reward = if self.is_goal_complete(brain_component, world, entity, &prev_goal) {
-                10.0
+                GOAL_REWARD
             } else {
-                -0.1
+                GOAL_PENALTY
             };
             self._update_q_table(
                 brain_component,
@@ -339,7 +342,7 @@ impl Brain {
                                 brain_component.current_path = None;
                                 brain_component.current_goal =
                                     Some(Goal::GatherResource(resource.name.clone()));
-                                brain_component.goal_commitment_ticks = 10;
+                                brain_component.goal_commitment_ticks = GOAL_COMMITMENT_TICKS;
                                 return;
                             }
                         }
@@ -391,7 +394,7 @@ impl Brain {
         high_level_state: &HighLevelState,
     ) -> Result<(), SimulationError> {
         if self.handle_threats(brain_component, world, entity) {
-            brain_component.goal_commitment_ticks = 5;
+            brain_component.goal_commitment_ticks = THREAT_GOAL_COMMITMENT_TICKS;
             return Ok(());
         }
 
@@ -418,7 +421,7 @@ impl Brain {
             brain_component.goal_stack = plan;
             brain_component.current_goal = brain_component.goal_stack.pop();
             if brain_component.current_goal.is_some() {
-                brain_component.goal_commitment_ticks = 10;
+                brain_component.goal_commitment_ticks = GOAL_COMMITMENT_TICKS;
             }
         }
         Ok(())
@@ -889,6 +892,7 @@ impl Brain {
 mod tests {
     use super::*;
     use crate::components::{BrainComponent, Inventory, Position};
+    use crate::config::{DISCOUNT_FACTOR, EPSILON, LEARNING_RATE};
     use crate::ecs::World;
     use crate::recipes::RecipeManager;
     use std::env;
@@ -901,7 +905,12 @@ mod tests {
             "{}/data/recipes.json",
             manifest_dir
         )));
-        Ok(Brain::new(recipe_manager, 0.1, 0.9, 0.1))
+        Ok(Brain::new(
+            recipe_manager,
+            LEARNING_RATE,
+            DISCOUNT_FACTOR,
+            EPSILON,
+        ))
     }
 
     #[test]

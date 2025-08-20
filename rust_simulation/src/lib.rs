@@ -63,7 +63,12 @@ impl Game {
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
 
         let mut world = World::new();
-        let brain = Arc::new(Brain::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0));
+        let brain = Arc::new(Brain::new(
+            Arc::clone(&recipe_manager),
+            LEARNING_RATE,
+            DISCOUNT_FACTOR,
+            EPSILON,
+        ));
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
@@ -441,7 +446,12 @@ impl Game {
 
         // 2. Create a new World and re-initialize brain
         let mut world = World::new();
-        self.brain = Arc::new(Brain::new(Arc::clone(&self.recipe_manager), 0.1, 0.9, 1.0));
+        self.brain = Arc::new(Brain::new(
+            Arc::clone(&self.recipe_manager),
+            LEARNING_RATE,
+            DISCOUNT_FACTOR,
+            EPSILON,
+        ));
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
