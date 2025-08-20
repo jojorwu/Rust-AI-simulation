@@ -33,6 +33,12 @@ pub struct World {
     pub components: HashMap<TypeId, Box<dyn ComponentVec + Send>>,
 }
 
+impl Default for World {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl World {
     pub fn new() -> Self {
         World {

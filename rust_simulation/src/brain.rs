@@ -203,7 +203,7 @@ impl Brain {
             modified_q_values
                 .iter()
                 .filter(|(g, _)| self.is_goal_valid(brain_component, world, g))
-                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .max_by(|a, b| a.1.total_cmp(b.1))
                 .map(|(goal, _)| goal.clone())
                 .map(Ok)
                 .unwrap_or_else(choose_random_goal)
@@ -223,12 +223,10 @@ impl Brain {
         if let Some(inventory) = world.get_component::<Inventory>(entity) {
             match goal {
                 Goal::GatherResource(resource) => {
-                    if let Some(parent_goal) = brain_component.goal_stack.last() {
-                        if let Goal::CraftItem(item_name) = parent_goal {
-                            let recipe = self.recipe_manager.get_required_resources(item_name, 1);
-                            if let Some(&required_amount) = recipe.get(resource) {
-                                return inventory.get_quantity(resource) >= required_amount;
-                            }
+                    if let Some(Goal::CraftItem(item_name)) = brain_component.goal_stack.last() {
+                        let recipe = self.recipe_manager.get_required_resources(item_name, 1);
+                        if let Some(&required_amount) = recipe.get(resource) {
+                            return inventory.get_quantity(resource) >= required_amount;
                         }
                     }
                     inventory.get_quantity(resource) > GATHER_GOAL_THRESHOLD
@@ -237,7 +235,7 @@ impl Brain {
                 Goal::Explore => brain_component
                     .current_path
                     .as_ref()
-                    .map_or(true, |p| p.is_empty()),
+                    .is_none_or(|p| p.is_empty()),
                 Goal::Stockpile(resource) => !inventory.has_item(resource, 1),
                 _ => false,
             }
@@ -272,7 +270,7 @@ impl Brain {
             }
             Goal::Stockpile(resource) => {
                 let inventory = world.get_component::<Inventory>(entity);
-                let has_enough = inventory.map_or(false, |inv| inv.has_item(resource, 1));
+                let has_enough = inventory.is_some_and(|inv| inv.has_item(resource, 1));
                 if !has_enough {
                     plan.push(Goal::GatherResource(resource.clone()));
                 }
@@ -295,7 +293,7 @@ impl Brain {
         let mut plan = Vec::new();
         for (resource, &required_amount) in required {
             let has_enough =
-                inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
+                inventory.is_some_and(|inv| inv.get_quantity(resource) >= required_amount);
             if !has_enough {
                 if !brain_component.known_resources.contains_key(resource) {
                     plan.push(Goal::Explore);
@@ -403,7 +401,7 @@ impl Brain {
                         if crate::config::VALUABLE_RESOURCES.contains(&resource.name.as_str()) {
                             let has_it_already = world
                                 .get_component::<Inventory>(entity)
-                                .map_or(false, |inv| inv.get_quantity(&resource.name) > 0);
+                                .is_some_and(|inv| inv.get_quantity(&resource.name) > 0);
                             if !has_it_already {
                                 brain_component.goal_stack.clear();
                                 brain_component.current_path = None;
@@ -503,7 +501,7 @@ impl Brain {
             Goal::GatherResource(resource_name) => brain_component
                 .known_resources
                 .get(resource_name)
-                .map_or(false, |p| !p.is_empty()),
+                .is_some_and(|p| !p.is_empty()),
             _ => true,
         }
     }
@@ -575,7 +573,7 @@ impl Brain {
     ) -> Option<BrainAction> {
         if let Some(path) = &mut brain_component.current_path {
             if !path.is_empty() {
-                if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
+                if let Some(player_pos) = world.get_component::<Position>(entity).copied() {
                     let next_pos = path.remove(0);
                     let (dx, dy) = (
                         next_pos.0 as i32 - player_pos.x as i32,
@@ -637,7 +635,7 @@ impl Brain {
         resource_name: &str,
         _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
-        let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) else {
+        let Some(player_pos) = world.get_component::<Position>(entity).copied() else {
             return Ok(None);
         };
         if let Some(known_positions) = brain_component.known_resources.get(resource_name) {
@@ -714,7 +712,7 @@ impl Brain {
         let Some(health) = world.get_component::<Health>(entity) else {
             return false;
         };
-        let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) else {
+        let Some(player_pos) = world.get_component::<Position>(entity).copied() else {
             return false;
         };
         let hostile_players: Vec<_> = brain_component
@@ -762,7 +760,7 @@ impl Brain {
                 .filter(|&id| {
                     world
                         .get_component::<Position>(*id as usize)
-                        .map_or(false, |p| {
+                        .is_some_and(|p| {
                             p.x.abs_diff(home_base_pos.x) <= crate::config::DEFENSE_RADIUS
                                 && p.y.abs_diff(home_base_pos.y) <= crate::config::DEFENSE_RADIUS
                         })
@@ -775,13 +773,11 @@ impl Brain {
                 {
                     self.set_goal(brain_component, Goal::Flee);
                     return true;
-                } else {
-                    if let Some(id) =
-                        self.find_closest_threat(world, player_pos, &territorial_threats)
-                    {
-                        self.set_goal(brain_component, Goal::Attack(id));
-                        return true;
-                    }
+                } else if let Some(id) =
+                    self.find_closest_threat(world, player_pos, &territorial_threats)
+                {
+                    self.set_goal(brain_component, Goal::Attack(id));
+                    return true;
                 }
             }
         }
@@ -802,11 +798,9 @@ impl Brain {
         {
             self.set_goal(brain_component, Goal::Flee);
             return true;
-        } else {
-            if let Some(id) = self.find_closest_threat(world, player_pos, hostile_players) {
-                self.set_goal(brain_component, Goal::Attack(id));
-                return true;
-            }
+        } else if let Some(id) = self.find_closest_threat(world, player_pos, hostile_players) {
+            self.set_goal(brain_component, Goal::Attack(id));
+            return true;
         }
         false
     }
@@ -858,7 +852,7 @@ impl Brain {
         entity: Entity,
         _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
-        let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) else {
+        let Some(player_pos) = world.get_component::<Position>(entity).copied() else {
             return Ok(None);
         };
         let hostile_positions: Vec<_> = brain_component
@@ -914,7 +908,7 @@ impl Brain {
         if !unvisited.is_empty() {
             let target_idx = rand::rng().random_range(0..unvisited.len());
             let target_pos = unvisited[target_idx];
-            if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
+            if let Some(player_pos) = world.get_component::<Position>(entity).copied() {
                 if let Some(path) = pathfinding::find_path(
                     (player_pos.x, player_pos.y),
                     target_pos,
@@ -941,7 +935,7 @@ impl Brain {
             return Ok(None);
         };
         if let Some((chest_entity, chest_pos)) = self.find_closest_chest(world, &home_base_pos) {
-            if let Some(player_pos) = world.get_component::<Position>(entity).map(|p| *p) {
+            if let Some(player_pos) = world.get_component::<Position>(entity).copied() {
                 let (dx, dy) = (
                     (player_pos.x as i32 - chest_pos.x as i32).abs(),
                     (player_pos.y as i32 - chest_pos.y as i32).abs(),
@@ -990,8 +984,7 @@ mod tests {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
             .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         let recipe_manager = Arc::new(RecipeManager::new(&format!(
-            "{}/data/recipes.json",
-            manifest_dir
+            "{manifest_dir}/data/recipes.json"
         )));
         Ok(Brain::new(
             recipe_manager,

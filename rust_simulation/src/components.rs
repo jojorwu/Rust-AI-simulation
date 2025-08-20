@@ -82,6 +82,12 @@ pub struct BrainComponent {
     pub goal_q_table: HashMap<String, HashMap<Goal, f64>>,
 }
 
+impl Default for BrainComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BrainComponent {
     pub fn new() -> Self {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -157,6 +163,12 @@ pub struct Inventory {
     pub items: HashMap<String, u32>,
 }
 
+impl Default for Inventory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Inventory {
     pub fn new() -> Self {
         Inventory {
@@ -184,7 +196,7 @@ impl Inventory {
     pub fn has_item(&self, item_name: &str, quantity: u32) -> bool {
         self.items
             .get(item_name)
-            .map_or(false, |&count| count >= quantity)
+            .is_some_and(|&count| count >= quantity)
     }
 
     pub fn get_quantity(&self, item_name: &str) -> u32 {

@@ -24,13 +24,13 @@ impl PartialOrd for Node {
 }
 
 fn heuristic(a: (u32, u32), b: (u32, u32)) -> u32 {
-    (a.0 as i32 - b.0 as i32).abs() as u32 + (a.1 as i32 - b.1 as i32).abs() as u32
+    (a.0 as i32 - b.0 as i32).unsigned_abs() + (a.1 as i32 - b.1 as i32).unsigned_abs()
 }
 
 pub fn find_path(
     start: (u32, u32),
     goal: (u32, u32),
-    mental_map: &Vec<Vec<Option<MemoryTile>>>,
+    mental_map: &[Vec<Option<MemoryTile>>],
 ) -> Option<Vec<(u32, u32)>> {
     let mut open_list = BinaryHeap::new();
     let mut closed_list = HashSet::new();
@@ -88,7 +88,7 @@ pub fn find_path(
 
 fn get_neighbors(
     position: (u32, u32),
-    mental_map: &Vec<Vec<Option<MemoryTile>>>,
+    mental_map: &[Vec<Option<MemoryTile>>],
 ) -> Vec<(u32, u32)> {
     let mut neighbors = Vec::new();
     let (x, y) = position;

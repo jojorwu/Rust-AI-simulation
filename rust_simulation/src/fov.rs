@@ -8,32 +8,30 @@ pub fn field_of_view(player_pos: &Position, radius: i32, map: &Map) -> HashSet<P
     visible_tiles.insert(*player_pos);
 
     for octant in 0..8 {
-        scan(
-            1,
-            1.0,
-            0.0,
+        let mut context = ScanContext {
             player_pos,
             radius,
             octant,
             map,
-            &mut visible_tiles,
-        );
+            visible_tiles: &mut visible_tiles,
+        };
+        scan(1, 1.0, 0.0, &mut context);
     }
 
     visible_tiles
 }
 
-fn scan(
-    row: i32,
-    mut start_slope: f32,
-    end_slope: f32,
-    player_pos: &Position,
+/// A context struct to hold the data that doesn't change during the scan recursion.
+struct ScanContext<'a> {
+    player_pos: &'a Position,
     radius: i32,
     octant: u8,
-    map: &Map,
-    visible_tiles: &mut HashSet<Position>,
-) {
-    if row > radius {
+    map: &'a Map,
+    visible_tiles: &'a mut HashSet<Position>,
+}
+
+fn scan(row: i32, mut start_slope: f32, end_slope: f32, context: &mut ScanContext) {
+    if row > context.radius {
         return;
     }
 
@@ -45,11 +43,11 @@ fn scan(
             continue;
         }
 
-        let (dx, dy) = transform_octant(col, row, octant);
-        let x = player_pos.x as i32 + dx;
-        let y = player_pos.y as i32 + dy;
+        let (dx, dy) = transform_octant(col, row, context.octant);
+        let x = context.player_pos.x as i32 + dx;
+        let y = context.player_pos.y as i32 + dy;
 
-        if x < 0 || x >= map.width as i32 || y < 0 || y >= map.height as i32 {
+        if x < 0 || x >= context.map.width as i32 || y < 0 || y >= context.map.height as i32 {
             continue;
         }
 
@@ -57,7 +55,7 @@ fn scan(
             x: x as u32,
             y: y as u32,
         };
-        let in_radius = (dx * dx + dy * dy) <= radius * radius;
+        let in_radius = (dx * dx + dy * dy) <= context.radius * context.radius;
 
         let top_slope = if col == 0 {
             1.0
@@ -74,24 +72,13 @@ fn scan(
         }
 
         if in_radius {
-            visible_tiles.insert(pos);
+            context.visible_tiles.insert(pos);
         }
 
-        let current_tile_is_wall = is_opaque(pos, map);
+        let current_tile_is_wall = is_opaque(pos, context.map);
         if current_tile_is_wall {
-            if !prev_tile_was_wall {
-                if col > 0 {
-                    scan(
-                        row + 1,
-                        start_slope,
-                        top_slope,
-                        player_pos,
-                        radius,
-                        octant,
-                        map,
-                        visible_tiles,
-                    );
-                }
+            if !prev_tile_was_wall && col > 0 {
+                scan(row + 1, start_slope, top_slope, context);
             }
             prev_tile_was_wall = true;
             start_slope = bottom_slope;
@@ -101,16 +88,7 @@ fn scan(
     }
 
     if !prev_tile_was_wall {
-        scan(
-            row + 1,
-            start_slope,
-            end_slope,
-            player_pos,
-            radius,
-            octant,
-            map,
-            visible_tiles,
-        );
+        scan(row + 1, start_slope, end_slope, context);
     }
 }
 
@@ -119,7 +97,7 @@ fn is_opaque(pos: Position, map: &Map) -> bool {
         return true;
     }
     let tile_type = map.grid[pos.y as usize][pos.x as usize].tile_type;
-    tile_type == '#' || tile_type == 'f' || tile_type == 'T'
+    matches!(tile_type, '#' | 'f' | 'T')
 }
 
 fn transform_octant(x: i32, y: i32, octant: u8) -> (i32, i32) {

@@ -18,7 +18,7 @@ pub struct ItemRegistry {
 impl ItemRegistry {
     pub fn new(filepath: &str) -> Self {
         let file_content = fs::read_to_string(filepath)
-            .expect(&format!("Unable to read items file at {}", filepath));
+            .unwrap_or_else(|_| panic!("Unable to read items file at {filepath}"));
         let items_vec: Vec<Item> =
             serde_json::from_str(&file_content).expect("Unable to parse items file");
         let mut items = HashMap::new();

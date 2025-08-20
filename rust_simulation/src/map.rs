@@ -143,7 +143,7 @@ impl Map {
                         '~' => print!("\x1b[34m~ \x1b[0m"), // Blue
                         '#' => print!("\x1b[90m# \x1b[0m"), // Dim White
                         'O' => print!("\x1b[36mO \x1b[0m"), // Cyan
-                        _ => print!("{} ", tile_char),
+                        _ => print!("{tile_char} "),
                     }
                 }
             }

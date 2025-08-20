@@ -4,6 +4,12 @@ pub struct RoadManager {
     pub roads: Vec<Road>,
 }
 
+impl Default for RoadManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RoadManager {
     pub fn new() -> Self {
         RoadManager { roads: Vec::new() }

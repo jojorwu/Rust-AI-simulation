@@ -10,7 +10,7 @@ pub fn generate_roads(game: &mut Game) -> Result<(), Box<dyn std::error::Error>>
 
 fn _generate_roads_from_config(game: &mut Game) -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let road_config_path = format!("{}/data/road_config.json", manifest_dir);
+    let road_config_path = format!("{manifest_dir}/data/road_config.json");
     let road_config = RoadConfig::load(&road_config_path)?;
 
     // This is a placeholder. In a real game, these locations might be dynamically determined.

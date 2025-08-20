@@ -120,7 +120,7 @@ impl Game {
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
-            world.add_component(player, Player::new(i as u32, map.width, map.height))?;
+            world.add_component(player, Player::new(i, map.width, map.height))?;
             world.add_component(player, Position { x: 0, y: 0 })?;
             world.add_component(
                 player,
@@ -216,8 +216,8 @@ impl Game {
             for x in 0..self.map.width {
                 let tile = &self.map.grid[y as usize][x as usize];
                 for resource_def in &self.map.resources {
-                    if resource_def.biomes.contains(&tile.biome) {
-                        if rng.random::<f64>() < resource_def.density {
+                    if resource_def.biomes.contains(&tile.biome)
+                        && rng.random::<f64>() < resource_def.density {
                             let resource_entity = world.create_entity();
                             world.add_component(resource_entity, Position { x, y })?;
                             world.add_component(
@@ -234,7 +234,6 @@ impl Game {
                                 .push(resource_entity);
                             break;
                         }
-                    }
                 }
             }
         }
@@ -261,10 +260,10 @@ impl Game {
             .count() as u32;
 
         let inventory_summary = InventorySummary {
-            has_wood: inventory.map_or(false, |inv| inv.has_item("wood", 1)),
-            has_stone: inventory.map_or(false, |inv| inv.has_item("stone", 1)),
-            has_iron_ore: inventory.map_or(false, |inv| inv.has_item("iron_ore", 1)),
-            has_stone_axe: inventory.map_or(false, |inv| inv.has_item("stone_axe", 1)),
+            has_wood: inventory.is_some_and(|inv| inv.has_item("wood", 1)),
+            has_stone: inventory.is_some_and(|inv| inv.has_item("stone", 1)),
+            has_iron_ore: inventory.is_some_and(|inv| inv.has_item("iron_ore", 1)),
+            has_stone_axe: inventory.is_some_and(|inv| inv.has_item("stone_axe", 1)),
         };
 
         Ok(HighLevelState {
@@ -329,7 +328,7 @@ impl Game {
                 MAX_STEPS_PER_EPISODE
             );
             let time_of_day = if self.is_day() { "Day" } else { "Night" };
-            println!("Time: {}", time_of_day);
+            println!("Time: {time_of_day}");
 
             let world = self
                 .world
@@ -525,7 +524,7 @@ impl Game {
             let player = world.create_entity();
             world.add_component(
                 player,
-                Player::new(i as u32, self.map.width, self.map.height),
+                Player::new(i, self.map.width, self.map.height),
             )?;
             world.add_component(player, Position { x: 0, y: 0 })?;
             world.add_component(
@@ -563,10 +562,10 @@ mod tests {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
             .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         Game::new(
-            &format!("{}/data/biomes.json", manifest_dir),
-            &format!("{}/data/resources.json", manifest_dir),
-            &format!("{}/data/items.json", manifest_dir),
-            &format!("{}/data/recipes.json", manifest_dir),
+            &format!("{manifest_dir}/data/biomes.json"),
+            &format!("{manifest_dir}/data/resources.json"),
+            &format!("{manifest_dir}/data/items.json"),
+            &format!("{manifest_dir}/data/recipes.json"),
         )
     }
 
@@ -592,10 +591,10 @@ mod tests {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
             .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         let mut game = Game::new(
-            &format!("{}/data/biomes.json", manifest_dir),
-            &format!("{}/data/resources.json", manifest_dir),
-            &format!("{}/data/items.json", manifest_dir),
-            &format!("{}/data/recipes.json", manifest_dir),
+            &format!("{manifest_dir}/data/biomes.json"),
+            &format!("{manifest_dir}/data/resources.json"),
+            &format!("{manifest_dir}/data/items.json"),
+            &format!("{manifest_dir}/data/recipes.json"),
         )?;
         game.map.grid = vec![vec![Tile::new('.', "plains".to_string()); 100]; 100];
 

@@ -14,7 +14,7 @@ fn main() -> Result<(), SimulationError> {
         let models_path = root_dir.join("../models");
         if models_path.exists() {
             if let Err(e) = std::fs::remove_dir_all(&models_path) {
-                eprintln!("Failed to remove models directory: {}", e);
+                eprintln!("Failed to remove models directory: {e}");
             } else {
                 println!("Removed models directory.");
             }
@@ -23,7 +23,7 @@ fn main() -> Result<(), SimulationError> {
         let q_table_path = root_dir.join("../q_table.json");
         if q_table_path.exists() {
             if let Err(e) = std::fs::remove_file(&q_table_path) {
-                eprintln!("Failed to remove q_table.json: {}", e);
+                eprintln!("Failed to remove q_table.json: {e}");
             } else {
                 println!("Removed q_table.json.");
             }
@@ -32,7 +32,7 @@ fn main() -> Result<(), SimulationError> {
         let sim_log_path = root_dir.join("../simulation_output.log");
         if sim_log_path.exists() {
             if let Err(e) = std::fs::remove_file(&sim_log_path) {
-                eprintln!("Failed to remove simulation_output.log: {}", e);
+                eprintln!("Failed to remove simulation_output.log: {e}");
             } else {
                 println!("Removed simulation_output.log.");
             }
@@ -44,10 +44,10 @@ fn main() -> Result<(), SimulationError> {
 
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let mut game = Game::new(
-        &format!("{}/data/biomes.json", manifest_dir),
-        &format!("{}/data/resources.json", manifest_dir),
-        &format!("{}/data/items.json", manifest_dir),
-        &format!("{}/data/recipes.json", manifest_dir),
+        &format!("{manifest_dir}/data/biomes.json"),
+        &format!("{manifest_dir}/data/resources.json"),
+        &format!("{manifest_dir}/data/items.json"),
+        &format!("{manifest_dir}/data/recipes.json"),
     )?;
 
     road_builder::generate_roads(&mut game)?;
