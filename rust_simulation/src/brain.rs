@@ -156,29 +156,13 @@ impl Brain {
             Goal::CraftItem(item_name) => {
                 let required = self.recipe_manager.get_required_resources(item_name, 1);
                 let inventory = world.get_component::<Inventory>(entity);
-                for (resource, &required_amount) in &required {
-                    let has_enough = inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
-                    if !has_enough {
-                        if !brain_component.known_resources.contains_key(resource) {
-                            plan.push(Goal::Explore);
-                        }
-                        plan.push(Goal::GatherResource(resource.clone()));
-                    }
-                }
+                plan.extend(self.plan_resource_gathering(brain_component, inventory, &required));
                 plan.push(goal.clone());
             }
             Goal::Build(structure_name) => {
                 let required = self.recipe_manager.get_required_resources(structure_name, 1);
                 let inventory = world.get_component::<Inventory>(entity);
-                for (resource, &required_amount) in &required {
-                     let has_enough = inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
-                    if !has_enough {
-                        if !brain_component.known_resources.contains_key(resource) {
-                            plan.push(Goal::Explore);
-                        }
-                        plan.push(Goal::GatherResource(resource.clone()));
-                    }
-                }
+                plan.extend(self.plan_resource_gathering(brain_component, inventory, &required));
                 plan.push(goal.clone());
             }
             Goal::Stockpile(resource) => {
@@ -194,6 +178,20 @@ impl Brain {
             }
         }
         Ok(plan)
+    }
+
+    fn plan_resource_gathering(&self, brain_component: &BrainComponent, inventory: Option<&Inventory>, required: &HashMap<String, u32>) -> Vec<Goal> {
+        let mut plan = Vec::new();
+        for (resource, &required_amount) in required {
+            let has_enough = inventory.map_or(false, |inv| inv.get_quantity(resource) >= required_amount);
+            if !has_enough {
+                if !brain_component.known_resources.contains_key(resource) {
+                    plan.push(Goal::Explore);
+                }
+                plan.push(Goal::GatherResource(resource.clone()));
+            }
+        }
+        plan
     }
 
     pub fn tick(&self, brain_component: &mut BrainComponent, world: &World, spatial_map: &HashMap<(u32, u32), Vec<Entity>>, entity: Entity, high_level_state: &HighLevelState, visible_tiles: &Vec<(Position, Tile)>) -> Result<Option<BrainAction>, SimulationError> {
