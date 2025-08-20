@@ -1,5 +1,5 @@
-use crate::ecs::Entity;
 use crate::components::Position;
+use crate::ecs::Entity;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {

@@ -1,18 +1,23 @@
-use crate::map::Map;
 use crate::components::Position;
+use crate::map::Map;
 use std::collections::HashSet;
 
 /// Calculates the Field of View for a given position and radius using a standard recursive shadowcasting implementation.
-pub fn field_of_view(
-    player_pos: &Position,
-    radius: i32,
-    map: &Map,
-) -> HashSet<Position> {
+pub fn field_of_view(player_pos: &Position, radius: i32, map: &Map) -> HashSet<Position> {
     let mut visible_tiles = HashSet::new();
     visible_tiles.insert(*player_pos);
 
     for octant in 0..8 {
-        scan(1, 1.0, 0.0, player_pos, radius, octant, map, &mut visible_tiles);
+        scan(
+            1,
+            1.0,
+            0.0,
+            player_pos,
+            radius,
+            octant,
+            map,
+            &mut visible_tiles,
+        );
     }
 
     visible_tiles
@@ -28,13 +33,17 @@ fn scan(
     map: &Map,
     visible_tiles: &mut HashSet<Position>,
 ) {
-    if row > radius { return; }
+    if row > radius {
+        return;
+    }
 
     let mut prev_tile_was_wall = false;
     let last_col = -1;
 
     for col in 0..=row {
-        if last_col != -1 && col < last_col { continue; }
+        if last_col != -1 && col < last_col {
+            continue;
+        }
 
         let (dx, dy) = transform_octant(col, row, octant);
         let x = player_pos.x as i32 + dx;
@@ -44,14 +53,25 @@ fn scan(
             continue;
         }
 
-        let pos = Position { x: x as u32, y: y as u32 };
-        let in_radius = (dx*dx + dy*dy) <= radius*radius;
+        let pos = Position {
+            x: x as u32,
+            y: y as u32,
+        };
+        let in_radius = (dx * dx + dy * dy) <= radius * radius;
 
-        let top_slope = if col == 0 { 1.0 } else { (2.0 * col as f32 - 1.0) / (2.0 * row as f32 - 1.0) };
+        let top_slope = if col == 0 {
+            1.0
+        } else {
+            (2.0 * col as f32 - 1.0) / (2.0 * row as f32 - 1.0)
+        };
         let bottom_slope = (2.0 * col as f32 + 1.0) / (2.0 * row as f32 + 1.0);
 
-        if start_slope < bottom_slope { continue; }
-        if end_slope > top_slope { break; }
+        if start_slope < bottom_slope {
+            continue;
+        }
+        if end_slope > top_slope {
+            break;
+        }
 
         if in_radius {
             visible_tiles.insert(pos);
@@ -61,7 +81,16 @@ fn scan(
         if current_tile_is_wall {
             if !prev_tile_was_wall {
                 if col > 0 {
-                    scan(row + 1, start_slope, top_slope, player_pos, radius, octant, map, visible_tiles);
+                    scan(
+                        row + 1,
+                        start_slope,
+                        top_slope,
+                        player_pos,
+                        radius,
+                        octant,
+                        map,
+                        visible_tiles,
+                    );
                 }
             }
             prev_tile_was_wall = true;
@@ -72,10 +101,18 @@ fn scan(
     }
 
     if !prev_tile_was_wall {
-        scan(row + 1, start_slope, end_slope, player_pos, radius, octant, map, visible_tiles);
+        scan(
+            row + 1,
+            start_slope,
+            end_slope,
+            player_pos,
+            radius,
+            octant,
+            map,
+            visible_tiles,
+        );
     }
 }
-
 
 fn is_opaque(pos: Position, map: &Map) -> bool {
     if pos.x >= map.width || pos.y >= map.height {

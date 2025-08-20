@@ -49,16 +49,25 @@ impl World {
         entity_id
     }
 
-    pub fn add_component<T: Component + Send>(&mut self, entity: Entity, component: T) -> Result<(), crate::errors::SimulationError> {
+    pub fn add_component<T: Component + Send>(
+        &mut self,
+        entity: Entity,
+        component: T,
+    ) -> Result<(), crate::errors::SimulationError> {
         let type_id = TypeId::of::<T>();
-        let components = self.components
+        let components = self
+            .components
             .entry(type_id)
             .or_insert_with(|| Box::new(Vec::<Option<T>>::new()));
 
         let components = components
             .as_any_mut()
             .downcast_mut::<Vec<Option<T>>>()
-            .ok_or_else(|| crate::errors::SimulationError::UnwrapFailed("Failed to downcast component vector".to_string()))?;
+            .ok_or_else(|| {
+                crate::errors::SimulationError::UnwrapFailed(
+                    "Failed to downcast component vector".to_string(),
+                )
+            })?;
 
         if entity >= components.len() {
             components.resize_with(entity + 1, || None);

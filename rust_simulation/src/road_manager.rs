@@ -1,4 +1,4 @@
-use crate::road::{Road, Point};
+use crate::road::{Point, Road};
 
 pub struct RoadManager {
     pub roads: Vec<Road>,
@@ -6,9 +6,7 @@ pub struct RoadManager {
 
 impl RoadManager {
     pub fn new() -> Self {
-        RoadManager {
-            roads: Vec::new(),
-        }
+        RoadManager { roads: Vec::new() }
     }
 
     pub fn add_road(&mut self, road: Road) {
@@ -27,7 +25,9 @@ impl RoadManager {
             .min_by(|(_, a), (_, b)| {
                 let dist_a = (a.x - point.x).powi(2) + (a.y - point.y).powi(2);
                 let dist_b = (b.x - point.x).powi(2) + (b.y - point.y).powi(2);
-                dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+                dist_a
+                    .partial_cmp(&dist_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
     }
 }

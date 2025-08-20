@@ -1,11 +1,11 @@
+use crate::brain::{Goal, HighLevelState, MemoryTile, PlayerMemory};
 use crate::ecs::{Component, Entity};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use serde::{Serialize, Deserialize};
 use std::collections::HashSet;
-use crate::brain::{PlayerMemory, Goal, HighLevelState, MemoryTile};
-use std::fs;
 use std::env;
+use std::fs;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct Position {
@@ -93,7 +93,10 @@ impl BrainComponent {
         };
 
         BrainComponent {
-            mental_map: vec![vec![None; crate::config::WIDTH as usize]; crate::config::HEIGHT as usize],
+            mental_map: vec![
+                vec![None; crate::config::WIDTH as usize];
+                crate::config::HEIGHT as usize
+            ],
             known_resources: HashMap::new(),
             player_memories: HashMap::new(),
             current_goal: None,
@@ -179,7 +182,9 @@ impl Inventory {
     }
 
     pub fn has_item(&self, item_name: &str, quantity: u32) -> bool {
-        self.items.get(item_name).map_or(false, |&count| count >= quantity)
+        self.items
+            .get(item_name)
+            .map_or(false, |&count| count >= quantity)
     }
 
     pub fn get_quantity(&self, item_name: &str) -> u32 {

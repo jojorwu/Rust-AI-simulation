@@ -9,8 +9,8 @@ impl RecipeManager {
     pub fn new(filepath: &str) -> Self {
         let file_content = fs::read_to_string(filepath)
             .expect(&format!("Unable to read recipes file at {}", filepath));
-        let recipes: HashMap<String, HashMap<String, u32>> = serde_json::from_str(&file_content)
-            .expect("Unable to parse recipes file");
+        let recipes: HashMap<String, HashMap<String, u32>> =
+            serde_json::from_str(&file_content).expect("Unable to parse recipes file");
 
         RecipeManager { recipes }
     }

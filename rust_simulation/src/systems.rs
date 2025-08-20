@@ -1,11 +1,14 @@
+use crate::components::{
+    Chest, DroppedItem, Health, Inventory, Position, Resource, Velocity, WantsToAttack,
+    WantsToBuild, WantsToCraft, WantsToGather, WantsToPickup, WantsToStoreItem,
+};
 use crate::ecs::World;
-use crate::components::{Position, Velocity, WantsToGather, Resource, WantsToCraft, WantsToBuild, WantsToAttack, Health, DroppedItem, WantsToPickup, Inventory, Chest, WantsToStoreItem};
-use crate::player::Player;
-use crate::recipes::RecipeManager;
+use crate::events::{Event, EventBus};
+use crate::fov;
 use crate::item::ItemRegistry;
 use crate::map::{Map, TileState};
-use crate::events::{EventBus, Event};
-use crate::fov;
+use crate::player::Player;
+use crate::recipes::RecipeManager;
 use std::sync::{Arc, Mutex};
 
 pub fn visibility_system(world: &mut World, map: &Map, is_day: bool) {
@@ -63,7 +66,9 @@ pub fn storage_system(world: &mut World) {
     // Step 2: Add to chest
     for transfer in successful_transfers {
         if let Some(chest_component) = world.get_component_mut::<Chest>(transfer.target_chest) {
-            chest_component.inventory.add_item(&transfer.item_name, transfer.quantity);
+            chest_component
+                .inventory
+                .add_item(&transfer.item_name, transfer.quantity);
         }
     }
 
@@ -76,10 +81,12 @@ pub fn storage_system(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::{
+        BrainComponent, Inventory, Position, Resource, Velocity, WantsToBuild, WantsToGather,
+    };
     use crate::ecs::World;
-    use crate::map::Map;
-    use crate::components::{Position, Velocity, Inventory, Resource, WantsToGather, BrainComponent, WantsToBuild};
     use crate::item::ItemRegistry;
+    use crate::map::Map;
     use std::sync::{Arc, Mutex};
 
     use crate::map::Tile;
@@ -87,11 +94,19 @@ mod tests {
     #[test]
     fn test_building_system_publishes_event() -> Result<(), crate::errors::SimulationError> {
         let mut world = World::new();
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
-        let mut map = Map::new(10, 10, &format!("{}/data/biomes.json", manifest_dir), &format!("{}/data/resources.json", manifest_dir))?;
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
+        let mut map = Map::new(
+            10,
+            10,
+            &format!("{}/data/biomes.json", manifest_dir),
+            &format!("{}/data/resources.json", manifest_dir),
+        )?;
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
-        let recipe_manager = Arc::new(RecipeManager::new(&format!("{}/data/recipes.json", manifest_dir)));
-
+        let recipe_manager = Arc::new(RecipeManager::new(&format!(
+            "{}/data/recipes.json",
+            manifest_dir
+        )));
 
         let builder_entity = world.create_entity();
         let build_pos = Position { x: 5, y: 5 };
@@ -99,21 +114,36 @@ mod tests {
         let mut inventory = Inventory::new();
         inventory.add_item("stone", 20);
         world.add_component(builder_entity, inventory)?;
-        world.add_component(builder_entity, WantsToBuild { structure_name: "foundation".to_string() })?;
+        world.add_component(
+            builder_entity,
+            WantsToBuild {
+                structure_name: "foundation".to_string(),
+            },
+        )?;
 
         // Set the tile to be buildable
         map.grid[build_pos.y as usize][build_pos.x as usize] = Tile::new('.', "plains".to_string());
 
         building_system(&mut world, &mut map, &event_bus, &recipe_manager)?;
 
-        let events = event_bus.lock().map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?.take_events();
+        let events = event_bus
+            .lock()
+            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+            .take_events();
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0], Event::FoundationBuilt { builder: builder_entity, position: build_pos });
+        assert_eq!(
+            events[0],
+            Event::FoundationBuilt {
+                builder: builder_entity,
+                position: build_pos
+            }
+        );
         Ok(())
     }
 
     #[test]
-    fn test_brain_event_handler_system_sets_home_base() -> Result<(), crate::errors::SimulationError> {
+    fn test_brain_event_handler_system_sets_home_base() -> Result<(), crate::errors::SimulationError>
+    {
         let mut world = World::new();
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
 
@@ -121,11 +151,21 @@ mod tests {
         world.add_component(player_entity, BrainComponent::new())?;
 
         let build_pos = Position { x: 7, y: 8 };
-        event_bus.lock().map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?.publish(Event::FoundationBuilt { builder: player_entity, position: build_pos });
+        event_bus
+            .lock()
+            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+            .publish(Event::FoundationBuilt {
+                builder: player_entity,
+                position: build_pos,
+            });
 
         brain_event_handler_system(&mut world, &event_bus)?;
 
-        let brain_component = world.get_component::<BrainComponent>(player_entity).ok_or_else(|| crate::errors::SimulationError::ComponentNotFound("BrainComponent".to_string()))?;
+        let brain_component = world
+            .get_component::<BrainComponent>(player_entity)
+            .ok_or_else(|| {
+                crate::errors::SimulationError::ComponentNotFound("BrainComponent".to_string())
+            })?;
         assert_eq!(brain_component.home_base, Some(build_pos));
         Ok(())
     }
@@ -133,8 +173,14 @@ mod tests {
     #[test]
     fn test_movement_system() -> Result<(), crate::errors::SimulationError> {
         let mut world = World::new();
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
-        let mut map = Map::new(10, 10, &format!("{}/data/biomes.json", manifest_dir), &format!("{}/data/resources.json", manifest_dir))?;
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
+        let mut map = Map::new(
+            10,
+            10,
+            &format!("{}/data/biomes.json", manifest_dir),
+            &format!("{}/data/resources.json", manifest_dir),
+        )?;
 
         let entity = world.create_entity();
         world.add_component(entity, Position { x: 5, y: 5 })?;
@@ -142,7 +188,9 @@ mod tests {
 
         movement_system(&mut world, &mut map);
 
-        let position = world.get_component::<Position>(entity).ok_or_else(|| crate::errors::SimulationError::ComponentNotFound("Position".to_string()))?;
+        let position = world.get_component::<Position>(entity).ok_or_else(|| {
+            crate::errors::SimulationError::ComponentNotFound("Position".to_string())
+        })?;
         assert_eq!(position.x, 6);
         assert_eq!(position.y, 4);
 
@@ -153,7 +201,8 @@ mod tests {
     #[test]
     fn test_gathering_system() -> Result<(), crate::errors::SimulationError> {
         let mut world = World::new();
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?;
         let item_registry = ItemRegistry::new(&format!("{}/data/items.json", manifest_dir));
 
         // Create gatherer
@@ -164,40 +213,67 @@ mod tests {
         // Create resource
         let resource_entity = world.create_entity();
         world.add_component(resource_entity, Position { x: 5, y: 6 })?;
-        world.add_component(resource_entity, Resource { name: "wood".to_string(), quantity: 5 })?;
+        world.add_component(
+            resource_entity,
+            Resource {
+                name: "wood".to_string(),
+                quantity: 5,
+            },
+        )?;
 
         // Set intention to gather
-        world.add_component(gatherer, WantsToGather { target: resource_entity })?;
+        world.add_component(
+            gatherer,
+            WantsToGather {
+                target: resource_entity,
+            },
+        )?;
 
         gathering_system(&mut world, &item_registry);
 
-        let inventory = world.get_component::<Inventory>(gatherer).ok_or_else(|| crate::errors::SimulationError::ComponentNotFound("Inventory".to_string()))?;
+        let inventory = world.get_component::<Inventory>(gatherer).ok_or_else(|| {
+            crate::errors::SimulationError::ComponentNotFound("Inventory".to_string())
+        })?;
         assert_eq!(inventory.get_quantity("wood"), 1);
 
-        let resource = world.get_component::<Resource>(resource_entity).ok_or_else(|| crate::errors::SimulationError::ComponentNotFound("Resource".to_string()))?;
+        let resource = world
+            .get_component::<Resource>(resource_entity)
+            .ok_or_else(|| {
+                crate::errors::SimulationError::ComponentNotFound("Resource".to_string())
+            })?;
         assert_eq!(resource.quantity, 4);
 
         assert!(world.get_component::<WantsToGather>(gatherer).is_none());
         Ok(())
     }
-
 }
 
 pub fn movement_system(world: &mut World, map: &mut Map) {
-    let entities_with_velocity: Vec<_> = world.entities.iter().filter_map(|&entity| {
-        world.get_component::<Velocity>(entity).map(|vel| (entity, *vel))
-    }).collect();
+    let entities_with_velocity: Vec<_> = world
+        .entities
+        .iter()
+        .filter_map(|&entity| {
+            world
+                .get_component::<Velocity>(entity)
+                .map(|vel| (entity, *vel))
+        })
+        .collect();
 
     for (entity, vel) in entities_with_velocity {
         if let Some(pos) = world.get_component_mut::<Position>(entity) {
             // Remove from old position in spatial map
-            map.spatial_map.entry((pos.x, pos.y)).and_modify(|v| v.retain(|&e| e != entity));
+            map.spatial_map
+                .entry((pos.x, pos.y))
+                .and_modify(|v| v.retain(|&e| e != entity));
 
             pos.x = (pos.x as i32 + vel.dx) as u32;
             pos.y = (pos.y as i32 + vel.dy) as u32;
 
             // Add to new position in spatial map
-            map.spatial_map.entry((pos.x, pos.y)).or_default().push(entity);
+            map.spatial_map
+                .entry((pos.x, pos.y))
+                .or_default()
+                .push(entity);
         }
     }
 
@@ -225,16 +301,17 @@ pub fn gathering_system(world: &mut World, _item_registry: &ItemRegistry) {
             let dy = (gatherer_pos.y as i32 - target_pos.y as i32).abs();
 
             if dx <= 1 && dy <= 1 {
-                let resource_name = if let Some(resource) = world.get_component_mut::<Resource>(target) {
-                    if resource.quantity > 0 {
-                        resource.quantity -= 1;
-                        Some(resource.name.clone())
+                let resource_name =
+                    if let Some(resource) = world.get_component_mut::<Resource>(target) {
+                        if resource.quantity > 0 {
+                            resource.quantity -= 1;
+                            Some(resource.name.clone())
+                        } else {
+                            None
+                        }
                     } else {
                         None
-                    }
-                } else {
-                    None
-                };
+                    };
 
                 if let Some(name) = resource_name {
                     if let Some(inventory) = world.get_component_mut::<Inventory>(gatherer) {
@@ -251,7 +328,11 @@ pub fn gathering_system(world: &mut World, _item_registry: &ItemRegistry) {
     }
 }
 
-pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, _item_registry: &ItemRegistry) {
+pub fn crafting_system(
+    world: &mut World,
+    recipe_manager: &RecipeManager,
+    _item_registry: &ItemRegistry,
+) {
     let mut to_craft = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_craft) = world.get_component::<WantsToCraft>(entity) {
@@ -260,7 +341,8 @@ pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, _item_
     }
 
     for (crafter, wants_to_craft) in to_craft {
-        let required_resources = recipe_manager.get_required_resources(&wants_to_craft.item_name, 1);
+        let required_resources =
+            recipe_manager.get_required_resources(&wants_to_craft.item_name, 1);
         if let Some(inventory) = world.get_component_mut::<Inventory>(crafter) {
             if inventory.has_resources(&required_resources) {
                 if inventory.remove_resources(&required_resources) {
@@ -278,7 +360,12 @@ pub fn crafting_system(world: &mut World, recipe_manager: &RecipeManager, _item_
 
 use crate::components::BrainComponent;
 
-pub fn building_system(world: &mut World, map: &mut Map, event_bus: &Arc<Mutex<EventBus>>, recipe_manager: &Arc<RecipeManager>) -> Result<(), crate::errors::SimulationError> {
+pub fn building_system(
+    world: &mut World,
+    map: &mut Map,
+    event_bus: &Arc<Mutex<EventBus>>,
+    recipe_manager: &Arc<RecipeManager>,
+) -> Result<(), crate::errors::SimulationError> {
     let mut to_build = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_build) = world.get_component::<WantsToBuild>(entity) {
@@ -292,7 +379,8 @@ pub fn building_system(world: &mut World, map: &mut Map, event_bus: &Arc<Mutex<E
 
             if tile.tile_type == '.' {
                 if let Some(inventory) = world.get_component_mut::<Inventory>(*builder) {
-                    let required = recipe_manager.get_required_resources(&wants_to_build.structure_name, 1);
+                    let required =
+                        recipe_manager.get_required_resources(&wants_to_build.structure_name, 1);
                     if inventory.has_resources(&required) {
                         if inventory.remove_resources(&required) {
                             let built_structure = wants_to_build.structure_name.clone();
@@ -300,7 +388,12 @@ pub fn building_system(world: &mut World, map: &mut Map, event_bus: &Arc<Mutex<E
                             if built_structure == "chest" {
                                 let chest_entity = world.create_entity();
                                 world.add_component(chest_entity, builder_pos)?;
-                                world.add_component(chest_entity, Chest { inventory: Inventory::new() })?;
+                                world.add_component(
+                                    chest_entity,
+                                    Chest {
+                                        inventory: Inventory::new(),
+                                    },
+                                )?;
                                 tile.tile_type = 'C';
                             } else {
                                 tile.tile_type = match built_structure.as_str() {
@@ -311,10 +404,17 @@ pub fn building_system(world: &mut World, map: &mut Map, event_bus: &Arc<Mutex<E
                                 };
 
                                 if built_structure == "foundation" {
-                                    event_bus.lock().map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?.publish(Event::FoundationBuilt {
-                                        builder: *builder,
-                                        position: builder_pos,
-                                    });
+                                    event_bus
+                                        .lock()
+                                        .map_err(|e| {
+                                            crate::errors::SimulationError::UnwrapFailed(
+                                                e.to_string(),
+                                            )
+                                        })?
+                                        .publish(Event::FoundationBuilt {
+                                            builder: *builder,
+                                            position: builder_pos,
+                                        });
                                 }
                             }
                         }
@@ -332,8 +432,14 @@ pub fn building_system(world: &mut World, map: &mut Map, event_bus: &Arc<Mutex<E
     Ok(())
 }
 
-pub fn brain_event_handler_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) -> Result<(), crate::errors::SimulationError> {
-    let events = event_bus.lock().map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?.take_events();
+pub fn brain_event_handler_system(
+    world: &mut World,
+    event_bus: &Arc<Mutex<EventBus>>,
+) -> Result<(), crate::errors::SimulationError> {
+    let events = event_bus
+        .lock()
+        .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+        .take_events();
     for event in events {
         match event {
             Event::FoundationBuilt { builder, position } => {
@@ -349,7 +455,10 @@ pub fn brain_event_handler_system(world: &mut World, event_bus: &Arc<Mutex<Event
     Ok(())
 }
 
-pub fn combat_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) -> Result<(), crate::errors::SimulationError> {
+pub fn combat_system(
+    world: &mut World,
+    event_bus: &Arc<Mutex<EventBus>>,
+) -> Result<(), crate::errors::SimulationError> {
     let mut to_attack = Vec::new();
     for entity in 0..world.entities.len() {
         if let Some(wants_to_attack) = world.get_component::<WantsToAttack>(entity) {
@@ -368,7 +477,10 @@ pub fn combat_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>) -> Res
         }
 
         if target_dead {
-            event_bus.lock().map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?.publish(Event::EntityDied(target));
+            event_bus
+                .lock()
+                .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+                .publish(Event::EntityDied(target));
         }
     }
 
@@ -392,7 +504,10 @@ pub fn pickup_system(world: &mut World, _item_registry: &ItemRegistry, map: &mut
             let mut items_to_remove = Vec::new();
             let mut items_to_add = Vec::new();
 
-            if let Some(entities_on_tile) = map.spatial_map.get(&(picker_upper_pos.x, picker_upper_pos.y)) {
+            if let Some(entities_on_tile) = map
+                .spatial_map
+                .get(&(picker_upper_pos.x, picker_upper_pos.y))
+            {
                 for &entity in entities_on_tile {
                     if let Some(item) = world.get_component::<DroppedItem>(entity) {
                         items_to_add.push((picker_upper, item.clone()));
@@ -400,7 +515,6 @@ pub fn pickup_system(world: &mut World, _item_registry: &ItemRegistry, map: &mut
                     }
                 }
             }
-
 
             for (picker_upper, item) in items_to_add {
                 if let Some(inventory) = world.get_component_mut::<Inventory>(picker_upper) {
@@ -410,7 +524,9 @@ pub fn pickup_system(world: &mut World, _item_registry: &ItemRegistry, map: &mut
 
             for entity in items_to_remove.iter() {
                 if let Some(pos) = world.get_component::<Position>(*entity) {
-                    map.spatial_map.entry((pos.x, pos.y)).and_modify(|v| v.retain(|&e| e != *entity));
+                    map.spatial_map
+                        .entry((pos.x, pos.y))
+                        .and_modify(|v| v.retain(|&e| e != *entity));
                 }
                 world.remove_entity(*entity);
             }
@@ -423,25 +539,40 @@ pub fn pickup_system(world: &mut World, _item_registry: &ItemRegistry, map: &mut
     }
 }
 
-pub fn death_system(world: &mut World, event_bus: &Arc<Mutex<EventBus>>, map: &mut Map) -> Result<(), crate::errors::SimulationError> {
-    let events = event_bus.lock().map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?.take_events();
+pub fn death_system(
+    world: &mut World,
+    event_bus: &Arc<Mutex<EventBus>>,
+    map: &mut Map,
+) -> Result<(), crate::errors::SimulationError> {
+    let events = event_bus
+        .lock()
+        .map_err(|e| crate::errors::SimulationError::UnwrapFailed(e.to_string()))?
+        .take_events();
     for event in events {
         match event {
             Event::EntityDied(entity) => {
                 if let Some(pos) = world.get_component::<Position>(entity).copied() {
                     // Remove the dead entity from the spatial map
-                    map.spatial_map.entry((pos.x, pos.y)).and_modify(|v| v.retain(|&e| e != entity));
+                    map.spatial_map
+                        .entry((pos.x, pos.y))
+                        .and_modify(|v| v.retain(|&e| e != entity));
 
                     // Create a new entity for the dropped item
                     let dropped_item_entity = world.create_entity();
-                    world.add_component(dropped_item_entity, DroppedItem {
-                        item_name: "meat".to_string(),
-                        quantity: 1,
-                    })?;
+                    world.add_component(
+                        dropped_item_entity,
+                        DroppedItem {
+                            item_name: "meat".to_string(),
+                            quantity: 1,
+                        },
+                    )?;
                     world.add_component(dropped_item_entity, pos)?;
 
                     // Add the new dropped item to the spatial map
-                    map.spatial_map.entry((pos.x, pos.y)).or_default().push(dropped_item_entity);
+                    map.spatial_map
+                        .entry((pos.x, pos.y))
+                        .or_default()
+                        .push(dropped_item_entity);
                 }
                 // Remove the dead entity from the world
                 world.remove_entity(entity);

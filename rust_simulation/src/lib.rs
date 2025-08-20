@@ -1,39 +1,41 @@
-pub mod map;
-pub mod pathfinding;
-pub mod player;
-pub mod ecs;
-pub mod components;
-pub mod systems;
 pub mod brain;
-pub mod item;
+pub mod components;
 pub mod config;
-pub mod recipes;
+pub mod ecs;
 pub mod errors;
 pub mod events;
 pub mod fov;
+pub mod item;
+pub mod map;
+pub mod pathfinding;
+pub mod player;
+pub mod recipes;
 pub mod road;
-pub mod road_manager;
 pub mod road_builder;
+pub mod road_manager;
+pub mod systems;
 
+use brain::{Brain, BrainAction, HighLevelState};
+use components::{BrainComponent, Inventory, Position};
+use ecs::{Entity, World};
+use errors::SimulationError;
+use events::EventBus;
+use item::ItemRegistry;
 use map::{Map, Tile};
 use player::Player;
-use brain::{Brain, BrainAction, HighLevelState};
-use std::any::TypeId;
 use recipes::RecipeManager;
-use errors::SimulationError;
-use item::ItemRegistry;
-use ecs::{World, Entity};
-use components::{Position, Inventory, BrainComponent};
-use events::EventBus;
-use systems::{visibility_system, movement_system, gathering_system, crafting_system, building_system, combat_system, pickup_system, death_system, storage_system, brain_event_handler_system};
-use std::sync::{Arc, Mutex};
+use std::any::TypeId;
 use std::env;
+use std::sync::{Arc, Mutex};
+use systems::{
+    brain_event_handler_system, building_system, combat_system, crafting_system, death_system,
+    gathering_system, movement_system, pickup_system, storage_system, visibility_system,
+};
 
 use rand::Rng;
 
 use config::*;
 use road_manager::RoadManager;
-
 
 /// The main struct for the simulation.
 /// It holds the game state, including the map, the ECS world, and the brains for the agents.
@@ -47,7 +49,6 @@ pub struct Game {
     pub tick_count: u32,
     pub road_manager: RoadManager,
 }
-
 
 impl Game {
     pub fn new(
@@ -68,7 +69,13 @@ impl Game {
             let player = world.create_entity();
             world.add_component(player, Player::new(i as u32, map.width, map.height))?;
             world.add_component(player, Position { x: 0, y: 0 })?;
-            world.add_component(player, crate::components::Health { current: 100, max: 100 })?;
+            world.add_component(
+                player,
+                crate::components::Health {
+                    current: 100,
+                    max: 100,
+                },
+            )?;
             world.add_component(player, Inventory::new())?;
             world.add_component(player, BrainComponent::new())?;
         }
@@ -89,11 +96,18 @@ impl Game {
 
         // Initial population of the spatial map
         {
-            let world = game.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            let world = game
+                .world
+                .lock()
+                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
             game.map.spatial_map.clear();
             for &entity in &world.entities {
                 if let Some(pos) = world.get_component::<Position>(entity) {
-                    game.map.spatial_map.entry((pos.x, pos.y)).or_default().push(entity);
+                    game.map
+                        .spatial_map
+                        .entry((pos.x, pos.y))
+                        .or_default()
+                        .push(entity);
                 }
             }
         }
@@ -108,12 +122,17 @@ impl Game {
         let plains_biome = self.map.biomes.iter().find(|b| b.name == "plains");
         let plains_tile_type = plains_biome.map_or('.', |b| b.tile_type);
 
-        let mut world = self.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         for entity in 0..world.entities.len() {
             loop {
                 let x = rng.gen_range(0..self.map.width);
                 let y = rng.gen_range(0..self.map.height);
-                if self.map.grid[y as usize][x as usize].tile_type == plains_tile_type && !occupied_positions.contains(&(x, y)) {
+                if self.map.grid[y as usize][x as usize].tile_type == plains_tile_type
+                    && !occupied_positions.contains(&(x, y))
+                {
                     if let Some(pos) = world.get_component_mut::<Position>(entity) {
                         pos.x = x;
                         pos.y = y;
@@ -134,7 +153,10 @@ impl Game {
 
     fn place_resources(&mut self) -> Result<(), SimulationError> {
         let mut rng = rand::thread_rng();
-        let mut world = self.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         self.map.spatial_map.clear();
 
         for y in 0..self.map.height {
@@ -145,11 +167,18 @@ impl Game {
                         if rng.r#gen::<f64>() < resource_def.density {
                             let resource_entity = world.create_entity();
                             world.add_component(resource_entity, Position { x, y })?;
-                            world.add_component(resource_entity, crate::components::Resource {
-                                name: resource_def.name.clone(),
-                                quantity: 5, // Placeholder quantity
-                            })?;
-                            self.map.spatial_map.entry((x, y)).or_default().push(resource_entity);
+                            world.add_component(
+                                resource_entity,
+                                crate::components::Resource {
+                                    name: resource_def.name.clone(),
+                                    quantity: 5, // Placeholder quantity
+                                },
+                            )?;
+                            self.map
+                                .spatial_map
+                                .entry((x, y))
+                                .or_default()
+                                .push(resource_entity);
                             break;
                         }
                     }
@@ -159,15 +188,24 @@ impl Game {
         Ok(())
     }
 
-
-    fn get_high_level_state(&self, world: &World, entity: Entity) -> Result<HighLevelState, SimulationError> {
-        let health = world.get_component::<crate::components::Health>(entity)
+    fn get_high_level_state(
+        &self,
+        world: &World,
+        entity: Entity,
+    ) -> Result<HighLevelState, SimulationError> {
+        let health = world
+            .get_component::<crate::components::Health>(entity)
             .ok_or_else(|| SimulationError::ComponentNotFound("Health".to_string()))?;
         let inventory = world.get_component::<Inventory>(entity);
-        let brain_component = world.get_component::<BrainComponent>(entity)
+        let brain_component = world
+            .get_component::<BrainComponent>(entity)
             .ok_or_else(|| SimulationError::ComponentNotFound("BrainComponent".to_string()))?;
 
-        let num_hostile_players = brain_component.player_memories.values().filter(|m| m.relationship == brain::RelationshipStatus::Hostile).count() as u32;
+        let num_hostile_players = brain_component
+            .player_memories
+            .values()
+            .filter(|m| m.relationship == brain::RelationshipStatus::Hostile)
+            .count() as u32;
 
         Ok(HighLevelState {
             has_wood: inventory.map_or(false, |inv| inv.has_item("wood", 1)),
@@ -185,7 +223,10 @@ impl Game {
 
         // Run visibility system once for the initial view
         {
-            let mut world = self.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            let mut world = self
+                .world
+                .lock()
+                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
             visibility_system(&mut world, &self.map, self.is_day());
         }
 
@@ -213,11 +254,20 @@ impl Game {
 
             // Display logic moved inside the loop
             print!("\x1B[2J\x1B[1;1H"); // Clear screen
-            println!("--- Episode: {}/{} | Step: {}/{} ---", episode + 1, EPISODES, step + 1, MAX_STEPS_PER_EPISODE);
+            println!(
+                "--- Episode: {}/{} | Step: {}/{} ---",
+                episode + 1,
+                EPISODES,
+                step + 1,
+                MAX_STEPS_PER_EPISODE
+            );
             let time_of_day = if self.is_day() { "Day" } else { "Night" };
             println!("Time: {}", time_of_day);
 
-            let world = self.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            let world = self
+                .world
+                .lock()
+                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
             self.map.display(&world);
             self.map.display_observer_map(&world);
 
@@ -240,7 +290,10 @@ impl Game {
     }
 
     fn reset_players(&mut self) -> Result<(), SimulationError> {
-        let mut world = self.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         for i in 0..world.entities.len() {
             if let Some(player) = world.get_component_mut::<Player>(i) {
                 player.reset();
@@ -250,13 +303,23 @@ impl Game {
     }
 
     fn run_brain_ticks(&mut self, _episode: u32) -> Result<(), SimulationError> {
-        let mut world = self.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         let mut actions_to_execute = Vec::new();
 
         let brain_components_type_id = TypeId::of::<BrainComponent>();
 
-        let mut brain_components_vec = if let Some(mut components_box) = world.components.remove(&brain_components_type_id) {
-            let vec = components_box.as_any_mut().downcast_mut::<Vec<Option<BrainComponent>>>().ok_or_else(|| SimulationError::UnwrapFailed("Failed to downcast brain components".to_string()))?;
+        let mut brain_components_vec = if let Some(mut components_box) =
+            world.components.remove(&brain_components_type_id)
+        {
+            let vec = components_box
+                .as_any_mut()
+                .downcast_mut::<Vec<Option<BrainComponent>>>()
+                .ok_or_else(|| {
+                    SimulationError::UnwrapFailed("Failed to downcast brain components".to_string())
+                })?;
             std::mem::take(vec)
         } else {
             return Ok(()); // No entities have brains
@@ -271,7 +334,14 @@ impl Game {
                 let high_level_state = self.get_high_level_state(&world, i)?;
                 let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
 
-                if let Some(action) = self.brain.tick(brain_component, &world, &self.map.spatial_map, i, &high_level_state, &visible_tiles)? {
+                if let Some(action) = self.brain.tick(
+                    brain_component,
+                    &world,
+                    &self.map.spatial_map,
+                    i,
+                    &high_level_state,
+                    &visible_tiles,
+                )? {
                     actions_to_execute.push((i, action));
                 }
             }
@@ -280,7 +350,6 @@ impl Game {
         // Put the brain components back into the world
         let new_box = Box::new(brain_components_vec);
         world.components.insert(brain_components_type_id, new_box);
-
 
         for (entity, action) in actions_to_execute {
             match action {
@@ -299,19 +368,30 @@ impl Game {
         let radius = if is_day { 8 } else { 4 }; // Use a larger radius for day
         let visible_positions = fov::field_of_view(pos, radius, &self.map);
 
-        visible_positions.iter().map(|position| {
-            let tile = self.map.grid[position.y as usize][position.x as usize].clone();
-            (*position, tile)
-        }).collect()
+        visible_positions
+            .iter()
+            .map(|position| {
+                let tile = self.map.grid[position.y as usize][position.x as usize].clone();
+                (*position, tile)
+            })
+            .collect()
     }
 
     fn run_systems(&mut self) -> Result<(), SimulationError> {
-        let mut world = self.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         visibility_system(&mut world, &self.map, self.is_day());
         movement_system(&mut world, &mut self.map);
         gathering_system(&mut world, &self.item_registry);
         crafting_system(&mut world, &self.recipe_manager, &self.item_registry);
-        building_system(&mut world, &mut self.map, &self.event_bus, &self.recipe_manager)?;
+        building_system(
+            &mut world,
+            &mut self.map,
+            &self.event_bus,
+            &self.recipe_manager,
+        )?;
         storage_system(&mut world);
         combat_system(&mut world, &self.event_bus)?;
         pickup_system(&mut world, &self.item_registry, &mut self.map);
@@ -361,9 +441,18 @@ impl Game {
 
         for i in 0..NUM_PLAYERS {
             let player = world.create_entity();
-            world.add_component(player, Player::new(i as u32, self.map.width, self.map.height))?;
+            world.add_component(
+                player,
+                Player::new(i as u32, self.map.width, self.map.height),
+            )?;
             world.add_component(player, Position { x: 0, y: 0 })?;
-            world.add_component(player, crate::components::Health { current: 100, max: 100 })?;
+            world.add_component(
+                player,
+                crate::components::Health {
+                    current: 100,
+                    max: 100,
+                },
+            )?;
             world.add_component(player, Inventory::new())?;
             world.add_component(player, BrainComponent::new())?;
         }
@@ -389,7 +478,8 @@ mod tests {
     use std::env;
 
     fn create_test_game() -> Result<Game, SimulationError> {
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         Game::new(
             &format!("{}/data/biomes.json", manifest_dir),
             &format!("{}/data/resources.json", manifest_dir),
@@ -417,7 +507,8 @@ mod tests {
     #[test]
     fn test_get_visible_tiles() -> Result<(), SimulationError> {
         // Create a game with a blank map (no walls) to make the test deterministic.
-        let manifest_dir = env::var("CARGO_MANIFEST_DIR").map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+            .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
         let mut game = Game::new(
             &format!("{}/data/biomes.json", manifest_dir),
             &format!("{}/data/resources.json", manifest_dir),
@@ -425,7 +516,6 @@ mod tests {
             &format!("{}/data/recipes.json", manifest_dir),
         )?;
         game.map.grid = vec![vec![Tile::new('.', "plains".to_string()); 100]; 100];
-
 
         let pos = Position { x: 50, y: 50 }; // Use center of map to avoid edge effects
 
@@ -445,7 +535,10 @@ mod tests {
         let player_entity = 0;
 
         {
-            let mut world = game.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            let mut world = game
+                .world
+                .lock()
+                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
             // Set player position to the center for predictable FOV
             if let Some(pos) = world.get_component_mut::<Position>(player_entity) {
                 pos.x = 50;
@@ -456,22 +549,44 @@ mod tests {
         // --- Test Day ---
         game.tick_count = 0; // Day time
         {
-            let mut world = game.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            let mut world = game
+                .world
+                .lock()
+                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
             visibility_system(&mut world, &game.map, game.is_day());
 
-            let player = world.get_component::<Player>(player_entity).ok_or_else(|| SimulationError::ComponentNotFound("Player".to_string()))?;
-            let visible_count = player.mental_map.grid.iter().flatten().filter(|&&s| s == TileState::Visible).count();
+            let player = world
+                .get_component::<Player>(player_entity)
+                .ok_or_else(|| SimulationError::ComponentNotFound("Player".to_string()))?;
+            let visible_count = player
+                .mental_map
+                .grid
+                .iter()
+                .flatten()
+                .filter(|&&s| s == TileState::Visible)
+                .count();
             assert_eq!(visible_count, 197, "Visible tiles on a clear day");
         }
 
         // --- Test Night ---
         game.tick_count = DAY_LENGTH; // Night time
         {
-            let mut world = game.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            let mut world = game
+                .world
+                .lock()
+                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
             visibility_system(&mut world, &game.map, game.is_day());
 
-            let player = world.get_component::<Player>(player_entity).ok_or_else(|| SimulationError::ComponentNotFound("Player".to_string()))?;
-            let visible_count = player.mental_map.grid.iter().flatten().filter(|&&s| s == TileState::Visible).count();
+            let player = world
+                .get_component::<Player>(player_entity)
+                .ok_or_else(|| SimulationError::ComponentNotFound("Player".to_string()))?;
+            let visible_count = player
+                .mental_map
+                .grid
+                .iter()
+                .flatten()
+                .filter(|&&s| s == TileState::Visible)
+                .count();
             assert_eq!(visible_count, 49, "Visible tiles on a clear night");
         }
         Ok(())
@@ -487,7 +602,10 @@ mod tests {
 
         // Set player position
         {
-            let mut world = game.world.lock().map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
+            let mut world = game
+                .world
+                .lock()
+                .map_err(|e| SimulationError::UnwrapFailed(e.to_string()))?;
             if let Some(pos) = world.get_component_mut::<Position>(player_entity) {
                 *pos = player_pos;
             }
@@ -498,18 +616,29 @@ mod tests {
         game.map.grid[tree_pos.y as usize][tree_pos.x as usize].tile_type = 'T'; // Place a tree
 
         let visible_tiles = game.get_visible_tiles(&player_pos, true);
-        let visible_positions: std::collections::HashSet<Position> = visible_tiles.into_iter().map(|(p, _)| p).collect();
+        let visible_positions: std::collections::HashSet<Position> =
+            visible_tiles.into_iter().map(|(p, _)| p).collect();
 
-        assert!(visible_positions.contains(&tree_pos), "Tree should be visible");
-        assert!(!visible_positions.contains(&target_pos), "Tile behind tree should not be visible");
+        assert!(
+            visible_positions.contains(&tree_pos),
+            "Tree should be visible"
+        );
+        assert!(
+            !visible_positions.contains(&target_pos),
+            "Tile behind tree should not be visible"
+        );
 
         // --- Test without tree ---
         game.map.grid[tree_pos.y as usize][tree_pos.x as usize].tile_type = '.'; // Remove the tree
 
         let visible_tiles_no_tree = game.get_visible_tiles(&player_pos, true);
-        let visible_positions_no_tree: std::collections::HashSet<Position> = visible_tiles_no_tree.into_iter().map(|(p, _)| p).collect();
+        let visible_positions_no_tree: std::collections::HashSet<Position> =
+            visible_tiles_no_tree.into_iter().map(|(p, _)| p).collect();
 
-        assert!(visible_positions_no_tree.contains(&target_pos), "Tile should be visible without tree");
+        assert!(
+            visible_positions_no_tree.contains(&target_pos),
+            "Tile should be visible without tree"
+        );
         Ok(())
     }
 }

@@ -1,5 +1,5 @@
-use rust_simulation::{Game, errors::SimulationError};
 use rust_simulation::road_builder;
+use rust_simulation::{errors::SimulationError, Game};
 use std::env;
 
 fn main() -> Result<(), SimulationError> {

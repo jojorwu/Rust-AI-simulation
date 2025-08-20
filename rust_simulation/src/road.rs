@@ -62,7 +62,9 @@ impl Road {
             .min_by(|a, b| {
                 let dist_a = (a.x - point.x).powi(2) + (a.y - point.y).powi(2);
                 let dist_b = (b.x - point.x).powi(2) + (b.y - point.y).powi(2);
-                dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+                dist_a
+                    .partial_cmp(&dist_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .copied()
     }
