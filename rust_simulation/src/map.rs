@@ -5,7 +5,6 @@
 //! using noise functions.
 
 use super::ecs::Entity;
-use super::player::Player;
 use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -119,38 +118,6 @@ pub struct Map {
 }
 
 impl Map {
-    /// Displays the map from an omniscient observer's perspective.
-    /// This shows all entities on the map, regardless of player visibility.
-    pub fn display_observer_map(&self, world: &super::ecs::World) {
-        println!("\n--- Observer Map ---");
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let entity_on_tile = self.spatial_map.get(&(x, y)).and_then(|v| v.first());
-
-                if let Some(&entity) = entity_on_tile {
-                    if world.get_component::<Player>(entity).is_some() {
-                        print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
-                    } else {
-                        print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
-                    }
-                } else {
-                    let tile_char = self.grid[y as usize][x as usize].tile_type;
-                    match tile_char {
-                        '.' => print!("\x1b[32m. \x1b[0m"), // Green
-                        'f' => print!("\x1b[93mf \x1b[0m"), // Bright Yellow
-                        'M' => print!("\x1b[97mM \x1b[0m"), // Bright White
-                        'T' => print!("\x1b[32m T\x1b[0m"), // Dark Green
-                        '~' => print!("\x1b[34m~ \x1b[0m"), // Blue
-                        '#' => print!("\x1b[90m# \x1b[0m"), // Dim White
-                        'O' => print!("\x1b[36mO \x1b[0m"), // Cyan
-                        _ => print!("{tile_char} "),
-                    }
-                }
-            }
-            println!();
-        }
-    }
-
     /// Creates a new `Map` instance from configuration files.
     ///
     /// # Arguments
@@ -266,59 +233,4 @@ impl Map {
         }
     }
 
-    /// Displays the map from the perspective of the first player found.
-    /// It respects the player's field of view and memory.
-    pub fn display(&self, world: &super::ecs::World) {
-        // For multi-player, we'd need to specify which player's map to show.
-        // For now, we'll just find the first entity with a Player component.
-        let player_entity =
-            (0..world.entities.len()).find(|&e| world.get_component::<Player>(e).is_some());
-
-        if let Some(player_entity) = player_entity {
-            if let Some(player) = world.get_component::<Player>(player_entity) {
-                let mental_map = &player.mental_map;
-
-                for y in 0..self.height {
-                    for x in 0..self.width {
-                        let tile_state = mental_map.grid[y as usize][x as usize];
-                        match tile_state {
-                            TileState::Unseen => print!("  "), // Two spaces for alignment
-                            TileState::Explored => {
-                                print!(
-                                    "\x1b[90m{} \x1b[0m",
-                                    self.grid[y as usize][x as usize].tile_type
-                                ); // Dim gray color
-                            }
-                            TileState::Visible => {
-                                let entity_on_tile =
-                                    self.spatial_map.get(&(x, y)).and_then(|v| v.first());
-
-                                if let Some(&entity) = entity_on_tile {
-                                    if world.get_component::<Player>(entity).is_some() {
-                                        print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
-                                    } else {
-                                        print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
-                                    }
-                                } else {
-                                    print!(
-                                        "\x1b[97m{} \x1b[0m",
-                                        self.grid[y as usize][x as usize].tile_type
-                                    ); // Bright White
-                                }
-                            }
-                        }
-                    }
-                    println!();
-                }
-            }
-        } else {
-            // Fallback if no player is found (e.g., during setup or for debugging)
-            for y in 0..self.height {
-                for x in 0..self.width {
-                    print!("{} ", self.grid[y as usize][x as usize].tile_type);
-                }
-                println!();
-            }
-        }
-    }
 }

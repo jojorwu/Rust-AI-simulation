@@ -1,3 +1,5 @@
+use rust_simulation::config::{EPISODES, MAX_STEPS_PER_EPISODE};
+use rust_simulation::renderer::Renderer;
 use rust_simulation::road_builder;
 use rust_simulation::{errors::SimulationError, Game};
 use std::env;
@@ -56,7 +58,25 @@ fn main() -> Result<(), SimulationError> {
         game.new_generation()?;
     }
 
-    game.run()?;
+    let renderer = Renderer::new();
+    renderer.print_intro();
+
+    for episode in 0..EPISODES {
+        for _step in 0..MAX_STEPS_PER_EPISODE {
+            game.tick()?;
+            let world = game
+                .world
+                .lock()
+                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
+            renderer.render(&game, &world);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        if (episode + 1) % 200 == 0 {
+            println!("Episode {}/{}", episode + 1, EPISODES);
+        }
+    }
+
+    renderer.print_outro();
 
     Ok(())
 }

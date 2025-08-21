@@ -34,6 +34,8 @@ pub mod road_builder;
 pub mod road_manager;
 /// The systems that operate on entities and components.
 pub mod systems;
+/// The rendering logic for the simulation.
+pub mod renderer;
 
 use brain::{Brain, BrainAction, HighLevelState, InventorySummary};
 use components::{BrainComponent, Inventory, Position};
@@ -167,6 +169,26 @@ impl Game {
         Ok(game)
     }
 
+    /// Advances the simulation by a single step.
+    pub fn tick(&mut self) -> Result<(), SimulationError> {
+        if self.tick_count % MAX_STEPS_PER_EPISODE == 0 {
+            let current_episode = self.tick_count / MAX_STEPS_PER_EPISODE;
+            self.start_new_episode(current_episode)?;
+        }
+
+        self.tick_count += 1;
+        self.run_brain_ticks()?;
+        self.run_systems()?;
+        Ok(())
+    }
+
+    fn start_new_episode(&mut self, episode: u32) -> Result<(), SimulationError> {
+        self.respawn_resources(episode);
+        self.reset_players()?;
+        self.find_and_set_valid_start_positions()?;
+        Ok(())
+    }
+
     fn find_and_set_valid_start_positions(&mut self) -> Result<(), SimulationError> {
         let mut rng = rand::rng();
         let mut occupied_positions = std::collections::HashSet::new();
@@ -273,84 +295,7 @@ impl Game {
         })
     }
 
-    /// Starts the main simulation loop.
-    ///
-    /// This function runs the simulation for a configured number of episodes.
-    /// In each episode, it runs a series of ticks, where each tick updates
-    /// the game state by running the AI brains and the various systems.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` indicating whether the simulation completed successfully,
-    /// or a `SimulationError` if an error occurred.
-    pub fn run(&mut self) -> Result<(), SimulationError> {
-        println!("--- Starting Rust Training Simulation ---");
-
-        // Run visibility system once for the initial view
-        {
-            let mut world = self
-                .world
-                .lock()
-                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
-            visibility_system(&mut world, &self.map, self.is_day());
-        }
-
-        for episode in 0..EPISODES {
-            self.run_episode(episode)?;
-            if (episode + 1) % 200 == 0 {
-                println!("Episode {}/{}", episode + 1, EPISODES);
-            }
-        }
-
-        println!("--- Training Finished ---");
-        // self.brain.save_q_table()?; // TODO: Figure out how to save Q-tables for multiple entities
-        Ok(())
-    }
-
-    fn run_episode(&mut self, episode: u32) -> Result<(), SimulationError> {
-        self.respawn_resources(episode);
-        self.reset_players()?;
-        self.find_and_set_valid_start_positions()?;
-
-        for step in 0..MAX_STEPS_PER_EPISODE {
-            self.tick_count += 1;
-            self.run_brain_ticks(episode)?;
-            self.run_systems()?;
-
-            // Display logic moved inside the loop
-            print!("\x1B[2J\x1B[1;1H"); // Clear screen
-            println!(
-                "--- Episode: {}/{} | Step: {}/{} ---",
-                episode + 1,
-                EPISODES,
-                step + 1,
-                MAX_STEPS_PER_EPISODE
-            );
-            let time_of_day = if self.is_day() { "Day" } else { "Night" };
-            println!("Time: {time_of_day}");
-
-            let world = self
-                .world
-                .lock()
-                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
-            self.map.display(&world);
-            self.map.display_observer_map(&world);
-
-            // DEBUG: Print agent 0's status
-            if let Some(brain_component) = world.get_component::<BrainComponent>(0) {
-                if let Some(inventory) = world.get_component::<Inventory>(0) {
-                    println!("Agent 0 Goal: {:?}", brain_component.current_goal);
-                    println!("Agent 0 Inventory: {:?}", inventory.items);
-                }
-            }
-
-            // Add a small delay to make the animation viewable
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-        Ok(())
-    }
-
-    fn is_day(&self) -> bool {
+    pub fn is_day(&self) -> bool {
         (self.tick_count % (DAY_LENGTH + NIGHT_LENGTH)) < DAY_LENGTH
     }
 
@@ -367,7 +312,7 @@ impl Game {
         Ok(())
     }
 
-    fn run_brain_ticks(&mut self, _episode: u32) -> Result<(), SimulationError> {
+    fn run_brain_ticks(&mut self) -> Result<(), SimulationError> {
         let world = self
             .world
             .lock()
@@ -497,13 +442,11 @@ impl Game {
     /// A `Result` indicating whether the new generation was created
     /// successfully, or a `SimulationError` if an error occurred.
     pub fn new_generation(&mut self) -> Result<(), SimulationError> {
-        println!("--- Wiping and creating a new generation ---");
-
         // Delete the old Q-table to ensure a fresh start
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let q_table_path = std::path::Path::new(manifest_dir).join("../q_table.json");
         if std::fs::remove_file(q_table_path).is_ok() {
-            println!("Removed old q_table.json");
+            // It's okay if this fails, the file might not exist.
         }
 
         // 1. Reset core game state
@@ -544,8 +487,6 @@ impl Game {
 
         // 4. Set starting positions for players
         self.find_and_set_valid_start_positions()?;
-
-        println!("--- New generation is ready ---");
 
         Ok(())
     }
