@@ -64,6 +64,17 @@ pub enum BrainAction {
     Store(WantsToStoreItem),
 }
 
+/// A struct to hold the fields of `BrainComponent` that are updated during a tick.
+#[derive(Debug, Clone)]
+pub struct BrainStateUpdate {
+    pub current_goal: Option<Goal>,
+    pub goal_stack: Vec<Goal>,
+    pub current_path: Option<Vec<(u32, u32)>>,
+    pub goal_commitment_ticks: u32,
+    pub prev_state: Option<HighLevelState>,
+    pub prev_goal: Option<Goal>,
+}
+
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InventorySummary {
@@ -191,19 +202,22 @@ impl Brain {
 
         let state_key_str = serde_json::to_string(state)?;
         if let Some(q_values) = brain_component.goal_q_table.get(&state_key_str) {
-            let mut modified_q_values = q_values.clone();
-            if state.is_night {
-                for (goal, q_value) in modified_q_values.iter_mut() {
-                    if let Goal::Build(_) = goal {
-                        *q_value += BUILD_GOAL_BONUS;
-                    }
-                }
-            }
-
-            modified_q_values
+            q_values
                 .iter()
                 .filter(|(g, _)| self.is_goal_valid(brain_component, world, g))
-                .max_by(|a, b| a.1.total_cmp(b.1))
+                .map(|(goal, q_value)| {
+                    let effective_q_value = if state.is_night {
+                        if let Goal::Build(_) = goal {
+                            *q_value + BUILD_GOAL_BONUS
+                        } else {
+                            *q_value
+                        }
+                    } else {
+                        *q_value
+                    };
+                    (goal, effective_q_value)
+                })
+                .max_by(|a, b| a.1.total_cmp(&b.1))
                 .map(|(goal, _)| goal.clone())
                 .map(Ok)
                 .unwrap_or_else(choose_random_goal)
@@ -317,48 +331,48 @@ impl Brain {
         entity: Entity,
         high_level_state: &HighLevelState,
         visible_tiles: &[(Position, Tile)],
-    ) -> Result<Option<(BrainComponent, BrainAction)>, SimulationError> {
-        // Clone the component to mutate it.
-        let mut new_brain_component = brain_component.clone();
+    ) -> Result<Option<(BrainStateUpdate, BrainAction)>, SimulationError> {
+        let mut brain_component = brain_component.clone();
 
         self.update_q_table_based_on_previous_action(
-            &mut new_brain_component,
+            &mut brain_component,
             world,
             entity,
             high_level_state,
         )?;
 
         self.update_internal_state(
-            &mut new_brain_component,
+            &mut brain_component,
             world,
             entity,
             spatial_map,
             visible_tiles,
         );
         self.update_goal_and_plan(
-            &mut new_brain_component,
+            &mut brain_component,
             world,
             entity,
             high_level_state,
         )?;
 
         let action = self.choose_and_execute_action(
-            &mut new_brain_component,
+            &mut brain_component,
             world,
             spatial_map,
             entity,
             0,
         )?;
 
-        new_brain_component.prev_state = Some(high_level_state.clone());
-        new_brain_component.prev_goal = new_brain_component.current_goal.clone();
+        let update = BrainStateUpdate {
+            current_goal: brain_component.current_goal.clone(),
+            goal_stack: brain_component.goal_stack.clone(),
+            current_path: brain_component.current_path.clone(),
+            goal_commitment_ticks: brain_component.goal_commitment_ticks,
+            prev_state: Some(high_level_state.clone()),
+            prev_goal: brain_component.current_goal.clone(),
+        };
 
-        // Return the new state of the brain component along with the action.
-        if let Some(a) = action {
-            Ok(Some((new_brain_component, a)))
-        } else {
-            Ok(None)
-        }
+        Ok(action.map(|a| (update, a)))
     }
 
     /// Updates the Q-table based on the outcome of the previous action.

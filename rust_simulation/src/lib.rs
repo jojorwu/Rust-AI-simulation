@@ -385,7 +385,7 @@ impl Game {
                 let high_level_state = self.get_high_level_state(&world, entity)?;
                 let visible_tiles = self.get_visible_tiles(&pos, self.is_day());
 
-                if let Some((new_brain_state, action)) = self.brain.tick(
+                if let Some((update, action)) = self.brain.tick(
                     brain_component,
                     &world,
                     &self.map.spatial_map,
@@ -393,7 +393,7 @@ impl Game {
                     &high_level_state,
                     &visible_tiles,
                 )? {
-                    brain_updates.push((entity, new_brain_state, action));
+                    brain_updates.push((entity, update, action));
                 }
             }
         }
@@ -404,10 +404,15 @@ impl Game {
             .lock()
             .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
 
-        for (entity, new_brain_state, action) in brain_updates {
+        for (entity, update, action) in brain_updates {
             // Update the brain component
             if let Some(brain_component) = world.get_component_mut::<BrainComponent>(entity) {
-                *brain_component = new_brain_state;
+                brain_component.current_goal = update.current_goal;
+                brain_component.goal_stack = update.goal_stack;
+                brain_component.current_path = update.current_path;
+                brain_component.goal_commitment_ticks = update.goal_commitment_ticks;
+                brain_component.prev_state = update.prev_state;
+                brain_component.prev_goal = update.prev_goal;
             }
 
             // Apply the action

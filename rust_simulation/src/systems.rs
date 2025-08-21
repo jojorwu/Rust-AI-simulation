@@ -108,7 +108,7 @@ pub fn movement_system(world: &mut World, map: &mut Map) {
     }
 
     // Reset velocities
-    let entities_with_velocity: Vec<_> = world.entities.to_vec();
+    let entities_with_velocity: Vec<_> = world.entities.iter().copied().collect();
     for entity in entities_with_velocity {
         world.remove_component::<Velocity>(entity);
     }
@@ -317,12 +317,12 @@ pub fn combat_system(
 }
 
 pub fn pickup_system(world: &mut World, _item_registry: &ItemRegistry, map: &mut Map) {
-    let mut to_pickup = Vec::new();
-    for entity in world.entities.clone() {
-        if world.get_component::<WantsToPickup>(entity).is_some() {
-            to_pickup.push(entity);
-        }
-    }
+    let to_pickup: Vec<_> = world
+        .entities
+        .iter()
+        .copied()
+        .filter(|&entity| world.get_component::<WantsToPickup>(entity).is_some())
+        .collect();
 
     for picker_upper in to_pickup {
         if let Some(picker_upper_pos) = world.get_component::<Position>(picker_upper).copied() {
