@@ -7,3 +7,4 @@ pub mod gathering;
 pub mod movement;
 pub mod pickup;
 pub mod storage;
+pub mod ai;

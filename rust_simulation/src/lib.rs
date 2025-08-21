@@ -32,6 +32,7 @@ use item::ItemRegistry;
 use map::Map;
 use player::Player;
 use recipes::RecipeManager;
+use systems::ai::{action_execution, goal_selection, q_learning};
 use systems::*;
 
 // --- Resources ---
@@ -118,26 +119,17 @@ pub fn create_schedule() -> Schedule {
 
     // Add systems to the schedule
     // Note: These systems need to be refactored to be Bevy systems.
-    schedule.add_systems(update_day_night);
-    schedule.add_systems((
-        // -- Perception --
-        // visibility::visibility_system,
-
-        // -- AI / Planning --
-        // brain_event_handler::brain_event_handler_system,
-
-        // -- Action Execution --
-        // movement::movement_system,
-        gathering::gathering_system,
-        crafting::crafting_system,
-        building::building_system,
-        storage::storage_system,
-        combat::combat_system,
-        // pickup::pickup_system,
-
-        // -- Consequences --
-        death::death_system,
-    ));
+    schedule
+        .add_systems(update_day_night)
+        .add_systems(q_learning::update_q_table_system)
+        .add_systems(goal_selection::goal_selection_system)
+        .add_systems(action_execution::action_execution_system)
+        .add_systems(gathering::gathering_system)
+        .add_systems(crafting::crafting_system)
+        .add_systems(building::building_system)
+        .add_systems(storage::storage_system)
+        .add_systems(combat::combat_system)
+        .add_systems(death::death_system);
 
     schedule
 }
