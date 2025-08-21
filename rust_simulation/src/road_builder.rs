@@ -43,13 +43,13 @@ fn _generate_roads_from_config(game: &mut Game) -> Result<(), SimulationError> {
 
         for point in &road.path {
             if point.x >= 0.0
-                && point.x < game.map.width as f32
+                && point.x < game.parallel_state.map.width as f32
                 && point.y >= 0.0
-                && point.y < game.map.height as f32
+                && point.y < game.parallel_state.map.height as f32
             {
                 let x = point.x as usize;
                 let y = point.y as usize;
-                let tile = &mut game.map.grid[y][x];
+                let tile = &mut game.parallel_state.map.grid[y][x];
                 tile.tile_type = '=';
             }
         }

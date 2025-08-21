@@ -101,6 +101,15 @@ pub struct Resource {
     pub density: f64,
 }
 
+/// Represents a rectangular region of the map for parallel processing.
+#[derive(Debug, Clone, Copy)]
+pub struct MapRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// Represents the game map, containing the grid of tiles and other world data.
 pub struct Map {
     /// The width of the map in tiles.
@@ -115,6 +124,8 @@ pub struct Map {
     pub resources: Vec<Resource>,
     /// A spatial hash map to quickly look up entities at a given position.
     pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
+    /// The regions the map is divided into for parallel processing.
+    pub regions: Vec<MapRegion>,
 }
 
 impl Map {
@@ -140,6 +151,8 @@ impl Map {
 
         let grid = vec![vec![Tile::new(' ', "none".to_string()); width as usize]; height as usize];
 
+        let regions = Self::calculate_regions(width, height);
+
         Ok(Map {
             width,
             height,
@@ -147,7 +160,57 @@ impl Map {
             biomes,
             resources,
             spatial_map: HashMap::new(),
+            regions,
         })
+    }
+
+    /// Calculates the map regions for parallel processing.
+    fn calculate_regions(width: u32, height: u32) -> Vec<MapRegion> {
+        let num_cores = num_cpus::get();
+        let (rows, cols) = Self::find_best_grid(num_cores);
+
+        let region_width = width / cols as u32;
+        let region_height = height / rows as u32;
+        let mut regions = Vec::new();
+
+        for row in 0..rows {
+            for col in 0..cols {
+                let x = col as u32 * region_width;
+                let y = row as u32 * region_height;
+                let w = if col == cols - 1 {
+                    width - x
+                } else {
+                    region_width
+                };
+                let h = if row == rows - 1 {
+                    height - y
+                } else {
+                    region_height
+                };
+                regions.push(MapRegion {
+                    x,
+                    y,
+                    width: w,
+                    height: h,
+                });
+            }
+        }
+        regions
+    }
+
+    /// Finds the best row/column combination for a grid of n items.
+    fn find_best_grid(n: usize) -> (usize, usize) {
+        if n == 0 {
+            return (0, 0);
+        }
+        let sqrt_n = (n as f64).sqrt() as usize;
+        for i in (1..=sqrt_n).rev() {
+            if n % i == 0 {
+                return (i, n / i);
+            }
+        }
+        // For prime numbers, just use a 1xN grid
+        (1, n)
     }
 
     /// Generates a procedural island map using noise functions.

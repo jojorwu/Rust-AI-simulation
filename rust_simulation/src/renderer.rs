@@ -27,8 +27,8 @@ impl Renderer {
         let time_of_day = if game.is_day() { "Day" } else { "Night" };
         println!("Time: {time_of_day}");
 
-        self.display_player_map(&game.map, world);
-        self.display_observer_map(&game.map, world);
+        self.display_player_map(&game.parallel_state.map, world);
+        self.display_observer_map(&game.parallel_state.map, world);
         self.display_debug_info(world);
     }
 

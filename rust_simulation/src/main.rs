@@ -65,6 +65,7 @@ fn main() -> Result<(), SimulationError> {
         for _step in 0..MAX_STEPS_PER_EPISODE {
             game.tick()?;
             let world = game
+                .parallel_state
                 .world
                 .lock()
                 .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;

@@ -94,6 +94,13 @@ impl World {
         None
     }
 
+    pub fn get_component_vec_mut<T: Component + Send>(&mut self) -> Option<&mut Vec<Option<T>>> {
+        let type_id = TypeId::of::<T>();
+        self.components
+            .get_mut(&type_id)
+            .and_then(|c| c.as_any_mut().downcast_mut::<Vec<Option<T>>>())
+    }
+
     pub fn get_component_mut<T: Component>(&mut self, entity: Entity) -> Option<&mut T> {
         let type_id = TypeId::of::<T>();
         if let Some(components) = self.components.get_mut(&type_id) {
