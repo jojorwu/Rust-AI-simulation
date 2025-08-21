@@ -24,8 +24,6 @@ use crate::components::{
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::env;
-use std::fs;
 use std::sync::Arc;
 
 /// A trait that abstracts the spatial querying capabilities the brain needs.
@@ -198,11 +196,8 @@ impl Brain {
     }
 
     /// Saves the agent's Q-table to a file.
-    pub fn save_q_table(&self, brain_component: &BrainComponent) -> Result<(), SimulationError> {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let q_table_path = std::path::Path::new(manifest_dir).join("../q_table.json");
-        let json = serde_json::to_string_pretty(&brain_component.goal_q_table)?;
-        fs::write(q_table_path, json)?;
+    pub fn save_q_table(&self, _brain_component: &BrainComponent) -> Result<(), SimulationError> {
+        // TODO: Implement a serialization method for the Q-table with struct keys.
         Ok(())
     }
 
