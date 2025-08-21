@@ -5,6 +5,7 @@ use rust_simulation::{errors::SimulationError, Game};
 use std::env;
 
 fn main() -> Result<(), SimulationError> {
+    env_logger::init();
     let args: Vec<String> = env::args().collect();
 
     if args.contains(&"--hard-wipe".to_string()) {

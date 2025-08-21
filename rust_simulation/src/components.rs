@@ -156,6 +156,12 @@ impl BrainComponent {
         &self,
         state: &HighLevelState,
     ) -> Result<Goal, SimulationError> {
+        // TODO: Improve this. The health level should ideally be a percentage.
+        const FLEE_HEALTH_THRESHOLD: u32 = 25;
+        if state.health_level < FLEE_HEALTH_THRESHOLD {
+            return Ok(Goal::Flee);
+        }
+
         let valid_goals: Vec<_> = self
             .goals
             .iter()

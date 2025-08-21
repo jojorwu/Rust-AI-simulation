@@ -1,4 +1,5 @@
 use super::brain::MemoryTile;
+use log::debug;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
@@ -56,6 +57,7 @@ pub fn find_path(
                 current = node.parent;
             }
             path.reverse();
+            debug!("Path found from {:?} to {:?}: {:?}", start, goal, path);
             return Some(path);
         }
 
@@ -83,6 +85,7 @@ pub fn find_path(
         }
     }
 
+    debug!("No path found from {:?} to {:?}", start, goal);
     None // No path found
 }
 

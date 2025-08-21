@@ -185,6 +185,7 @@ mod tests {
     use std::env;
 
     fn create_test_world() -> Result<World, SimulationError> {
+        let _ = env_logger::try_init();
         let manifest_dir = env::var("CARGO_MANIFEST_DIR")
             .map_err(|e| SimulationError::EnvVarError(e.to_string()))?;
         setup_world(
@@ -211,6 +212,21 @@ mod tests {
             world.query::<&BrainComponent>().iter(&world).count(),
             NUM_PLAYERS as usize
         );
+
+        // Run visibility system once and check that it has an effect
+        let mut schedule = create_schedule();
+        schedule.run(&mut world);
+
+        let mut player_query = world.query::<(Entity, &BrainComponent)>();
+        let (_, brain) = player_query.iter(&world).next().unwrap();
+
+        // Check that the mental map has been updated
+        let is_mental_map_updated = brain.mental_map.iter().any(|row| row.iter().any(|tile| tile.is_some()));
+        assert!(is_mental_map_updated, "Mental map was not updated after running visibility system");
+
+        // Check that the exploration frontier has been populated
+        assert!(!brain.exploration_frontier.is_empty(), "Exploration frontier is empty after running visibility system");
+
 
         Ok(())
     }
@@ -246,5 +262,48 @@ mod tests {
         world.get_resource_mut::<TickCount>().unwrap().0 = DAY_LENGTH + NIGHT_LENGTH - 1;
         schedule.run(&mut world); // Tick becomes DAY_LENGTH + NIGHT_LENGTH
         assert!(world.get_resource::<IsDay>().unwrap().0);
+    }
+
+    #[test]
+    fn test_visibility_system_populates_memory() {
+        let mut world = create_test_world().unwrap();
+
+        let player_entity = world.query::<(Entity, &BrainComponent)>().iter(&world).next().unwrap().0;
+
+        let brain = world.get::<BrainComponent>(player_entity).unwrap();
+        let is_mental_map_empty = brain.mental_map.iter().all(|row| row.iter().all(|tile| tile.is_none()));
+        assert!(is_mental_map_empty, "Mental map should be empty at the start");
+        assert!(brain.exploration_frontier.is_empty(), "Exploration frontier should be empty at the start");
+
+        // Run the visibility system
+        let mut schedule = Schedule::new(MySchedule::Test);
+        schedule.add_systems(systems::visibility_system::visibility_system);
+        schedule.run(&mut world);
+
+        // Ensure map and frontier are now populated
+        let brain = world.get::<BrainComponent>(player_entity).unwrap();
+        let is_mental_map_updated = brain.mental_map.iter().any(|row| row.iter().any(|tile| tile.is_some()));
+        assert!(is_mental_map_updated, "Mental map was not updated after running visibility system");
+        assert!(!brain.exploration_frontier.is_empty(), "Exploration frontier is empty after running visibility system");
+    }
+
+    #[test]
+    fn test_goal_selection_flee_on_low_health() {
+        let mut world = create_test_world().unwrap();
+        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+
+        // Set player health to a low value
+        let mut health = world.get_mut::<Health>(player_entity).unwrap();
+        health.current = 1;
+
+        // Run the goal selection system
+        let mut schedule = Schedule::new(MySchedule::Test);
+        schedule.add_systems(goal_selection::goal_selection_system);
+        schedule.run(&mut world);
+
+        // Check that the agent chose to flee
+        let brain = world.get::<BrainComponent>(player_entity).unwrap();
+        // The goal stack should contain Flee, which is then popped into current_goal
+        assert!(matches!(brain.current_goal, Some(brain::Goal::Flee)), "Agent did not choose to Flee on low health");
     }
 }
