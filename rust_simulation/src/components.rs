@@ -1,5 +1,5 @@
 use crate::brain::{Goal, HighLevelState, MemoryTile, PlayerMemory};
-use crate::ecs::{Component, Entity};
+use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -7,7 +7,7 @@ use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, Copy, Eq)]
+#[derive(Component, Debug, Clone, Copy, Eq)]
 pub struct Position {
     pub x: u32,
     pub y: u32,
@@ -26,48 +26,40 @@ impl PartialEq for Position {
     }
 }
 
-impl Component for Position {}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct Velocity {
     pub dx: i32,
     pub dy: i32,
 }
 
-impl Component for Velocity {}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct WantsToGather {
     pub target: Entity,
 }
 
-impl Component for WantsToGather {}
-
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct WantsToCraft {
     pub item_name: String,
 }
 
-impl Component for WantsToCraft {}
-
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct WantsToBuild {
     pub structure_name: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct Chest {
     pub inventory: Inventory,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Component, Clone, Debug)]
 pub struct WantsToStoreItem {
     pub item_name: String,
     pub quantity: u32,
     pub target_chest: Entity,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct BrainComponent {
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
     pub known_resources: HashMap<String, HashSet<Position>>,
@@ -117,48 +109,33 @@ impl BrainComponent {
     }
 }
 
-impl Component for BrainComponent {}
-impl Component for WantsToBuild {}
-impl Component for Chest {}
-impl Component for WantsToStoreItem {}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct WantsToAttack {
     pub target: Entity,
 }
 
-impl Component for WantsToAttack {}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct WantsToPickup {}
 
-impl Component for WantsToPickup {}
-
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct Resource {
     pub name: String,
     pub quantity: u32,
 }
 
-impl Component for Resource {}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct Health {
     pub current: i32,
     pub max: i32,
 }
 
-impl Component for Health {}
-
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct DroppedItem {
     pub item_name: String,
     pub quantity: u32,
 }
 
-impl Component for DroppedItem {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Component, Debug, Clone, Serialize, Deserialize)]
 pub struct Inventory {
     pub items: HashMap<String, u32>,
 }
@@ -222,5 +199,3 @@ impl Inventory {
         true
     }
 }
-
-impl Component for Inventory {}

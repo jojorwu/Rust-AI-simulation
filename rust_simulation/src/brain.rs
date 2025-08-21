@@ -12,7 +12,7 @@ use super::config::{
     BUILD_GOAL_BONUS, GATHER_GOAL_THRESHOLD, GOAL_COMMITMENT_TICKS, GOAL_PENALTY, GOAL_REWARD,
     HEIGHT, THREAT_GOAL_COMMITMENT_TICKS, WIDTH,
 };
-use super::ecs::{Entity, World};
+use bevy_ecs::prelude::*;
 use super::errors::SimulationError;
 use super::map::Tile;
 use super::pathfinding;

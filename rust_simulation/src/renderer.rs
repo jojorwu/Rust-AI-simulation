@@ -3,10 +3,10 @@
 
 use crate::components::{BrainComponent, Inventory};
 use crate::config::{EPISODES, MAX_STEPS_PER_EPISODE};
-use crate::ecs::World;
-use crate::Game;
 use crate::map::{Map, TileState};
 use crate::player::Player;
+use crate::Game;
+use bevy_ecs::prelude::*;
 
 pub struct Renderer;
 
@@ -15,7 +15,8 @@ impl Renderer {
         Renderer
     }
 
-    pub fn render(&self, game: &Game, world: &World) {
+    pub fn render(&self, game: &Game) {
+        let world = &game.parallel_state.world;
         print!("\x1B[2J\x1B[1;1H"); // Clear screen
         println!(
             "--- Episode: {}/{} | Step: {}/{} ---",
@@ -33,45 +34,48 @@ impl Renderer {
     }
 
     fn display_player_map(&self, map: &Map, world: &World) {
-        let player_entity =
-            (0..world.entities.len()).find(|&e| world.get_component::<Player>(e).is_some());
+        let mut player_query = world.query::<&Player>();
+        let player = player_query.iter(world).next();
 
-        if let Some(player_entity) = player_entity {
-            if let Some(player) = world.get_component::<Player>(player_entity) {
-                let mental_map = &player.mental_map;
+        if let Some(player) = player {
+            let mental_map = &player.mental_map;
 
-                for y in 0..map.height {
-                    for x in 0..map.width {
-                        let tile_state = mental_map.grid[y as usize][x as usize];
-                        match tile_state {
-                            TileState::Unseen => print!("  "), // Two spaces for alignment
-                            TileState::Explored => {
-                                print!(
-                                    "\x1b[90m{} \x1b[0m",
-                                    map.grid[y as usize][x as usize].tile_type
-                                ); // Dim gray color
-                            }
-                            TileState::Visible => {
-                                let entity_on_tile =
-                                    map.spatial_map.get(&(x, y)).and_then(|v| v.first());
+            for y in 0..map.height {
+                for x in 0..map.width {
+                    let tile_state = mental_map.grid[y as usize][x as usize];
 
-                                if let Some(&entity) = entity_on_tile {
-                                    if world.get_component::<Player>(entity).is_some() {
-                                        print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
-                                    } else {
-                                        print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
-                                    }
+                    let (chunk_x, chunk_y) = map.get_chunk_coords(x, y);
+                    let (tile_x, tile_y) = map.get_tile_coords_in_chunk(x, y);
+                    let chunk = map.chunks[chunk_y as usize][chunk_x as usize].lock().unwrap();
+
+                    match tile_state {
+                        TileState::Unseen => print!("  "), // Two spaces for alignment
+                        TileState::Explored => {
+                            print!(
+                                "\x1b[90m{} \x1b[0m",
+                                chunk.tiles[tile_y as usize][tile_x as usize].tile_type
+                            ); // Dim gray color
+                        }
+                        TileState::Visible => {
+                            let entity_on_tile =
+                                chunk.spatial_map.get(&(x, y)).and_then(|v| v.first());
+
+                            if let Some(&entity) = entity_on_tile {
+                                if world.get::<Player>(entity).is_some() {
+                                    print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
                                 } else {
-                                    print!(
-                                        "\x1b[97m{} \x1b[0m",
-                                        map.grid[y as usize][x as usize].tile_type
-                                    ); // Bright White
+                                    print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
                                 }
+                            } else {
+                                print!(
+                                    "\x1b[97m{} \x1b[0m",
+                                    chunk.tiles[tile_y as usize][tile_x as usize].tile_type
+                                ); // Bright White
                             }
                         }
                     }
-                    println!();
                 }
+                println!();
             }
         }
     }
@@ -80,16 +84,19 @@ impl Renderer {
         println!("\n--- Observer Map ---");
         for y in 0..map.height {
             for x in 0..map.width {
-                let entity_on_tile = map.spatial_map.get(&(x, y)).and_then(|v| v.first());
+                let (chunk_x, chunk_y) = map.get_chunk_coords(x, y);
+                let (tile_x, tile_y) = map.get_tile_coords_in_chunk(x, y);
+                let chunk = map.chunks[chunk_y as usize][chunk_x as usize].lock().unwrap();
+                let entity_on_tile = chunk.spatial_map.get(&(x, y)).and_then(|v| v.first());
 
                 if let Some(&entity) = entity_on_tile {
-                    if world.get_component::<Player>(entity).is_some() {
+                    if world.get::<Player>(entity).is_some() {
                         print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
                     } else {
                         print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
                     }
                 } else {
-                    let tile_char = map.grid[y as usize][x as usize].tile_type;
+                    let tile_char = chunk.tiles[tile_y as usize][tile_x as usize].tile_type;
                     match tile_char {
                         '.' => print!("\x1b[32m. \x1b[0m"), // Green
                         'f' => print!("\x1b[93mf \x1b[0m"), // Bright Yellow
@@ -107,11 +114,10 @@ impl Renderer {
     }
 
     fn display_debug_info(&self, world: &World) {
-        if let Some(brain_component) = world.get_component::<BrainComponent>(0) {
-            if let Some(inventory) = world.get_component::<Inventory>(0) {
-                println!("Agent 0 Goal: {:?}", brain_component.current_goal);
-                println!("Agent 0 Inventory: {:?}", inventory.items);
-            }
+        let mut query = world.query::<(Entity, &BrainComponent, &Inventory)>();
+        if let Some((_, brain_component, inventory)) = query.iter(world).next() {
+            println!("Agent 0 Goal: {:?}", brain_component.current_goal);
+            println!("Agent 0 Inventory: {:?}", inventory.items);
         }
     }
 

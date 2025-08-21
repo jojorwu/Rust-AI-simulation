@@ -5,7 +5,6 @@
 pub mod brain;
 pub mod components;
 pub mod config;
-pub mod ecs;
 pub mod errors;
 pub mod events;
 pub mod fov;
@@ -21,9 +20,11 @@ pub mod systems;
 pub mod renderer;
 pub mod world;
 
+use bevy_ecs::prelude::*;
+use bevy_ecs::prelude::*;
+use bevy_ecs::prelude::*;
 use brain::{Brain, BrainAction, HighLevelState, InventorySummary};
 use components::{BrainComponent, Inventory, Position};
-use ecs::{Entity, World as EcsWorld};
 use errors::SimulationError;
 use events::EventBus;
 use item::ItemRegistry;
@@ -32,7 +33,8 @@ use player::Player;
 use recipes::RecipeManager;
 use std::env;
 use std::sync::{Arc, Mutex};
-use systems::Scheduler;
+use bevy_ecs::schedule::Schedule;
+use systems::*;
 use world::ParallelGameState;
 
 use rand::Rng;
@@ -40,13 +42,16 @@ use rand::Rng;
 use config::*;
 use road_manager::RoadManager;
 
+#[derive(Resource)]
+pub struct IsDay(pub bool);
+
 /// Represents the main simulation environment.
 pub struct Game {
     pub parallel_state: ParallelGameState,
     pub brain: Arc<Brain>,
     pub tick_count: u32,
     pub road_manager: RoadManager,
-    scheduler: Scheduler,
+    schedule: Schedule,
 }
 
 impl Game {
@@ -61,7 +66,7 @@ impl Game {
         let recipe_manager = Arc::new(RecipeManager::new(recipes_path)?);
         let event_bus = Arc::new(Mutex::new(EventBus::new()));
 
-        let mut ecs_world = EcsWorld::new();
+        let mut world = World::new();
         let brain = Arc::new(Brain::new(
             Arc::clone(&recipe_manager),
             LEARNING_RATE,
@@ -70,24 +75,22 @@ impl Game {
         ));
 
         for i in 0..NUM_PLAYERS {
-            let player = ecs_world.create_entity();
-            ecs_world.add_component(player, Player::new(i, map.width, map.height))?;
-            ecs_world.add_component(player, Position { x: 0, y: 0 })?;
-            ecs_world.add_component(
-                player,
+            world.spawn((
+                Player::new(i, map.width, map.height),
+                Position { x: 0, y: 0 },
                 crate::components::Health {
                     current: 100,
                     max: 100,
                 },
-            )?;
-            ecs_world.add_component(player, Inventory::new())?;
-            ecs_world.add_component(player, BrainComponent::new())?;
+                Inventory::new(),
+                BrainComponent::new(),
+            ));
         }
 
         let mut game = Game {
             parallel_state: ParallelGameState {
                 map,
-                world: Arc::new(Mutex::new(ecs_world)),
+                world,
                 item_registry,
                 recipe_manager,
                 event_bus,
@@ -95,7 +98,22 @@ impl Game {
             brain,
             tick_count: 0,
             road_manager: RoadManager::new(),
-            scheduler: Scheduler::new(),
+            schedule: {
+                let mut schedule = Schedule::new();
+                schedule.add_systems((
+                    visibility::visibility_system,
+                    movement::movement_system,
+                    gathering::gathering_system,
+                    crafting::crafting_system,
+                    building::building_system,
+                    storage::storage_system,
+                    combat::combat_system,
+                    pickup::pickup_system,
+                    death::death_system,
+                    brain_event_handler::brain_event_handler_system,
+                ));
+                schedule
+            },
         };
 
         game.setup_new_map()?;
@@ -335,9 +353,9 @@ impl Game {
     }
 
     fn run_systems(&mut self) -> Result<(), SimulationError> {
-        let is_day = self.is_day();
-        self.scheduler
-            .run_parallel(&mut self.parallel_state, is_day)
+        self.parallel_state.world.insert_resource(IsDay(self.is_day()));
+        self.schedule.run(&mut self.parallel_state.world);
+        Ok(())
     }
 
     fn respawn_resources(&mut self, current_episode: u32) {

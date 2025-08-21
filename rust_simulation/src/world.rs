@@ -1,8 +1,8 @@
-use crate::ecs::World;
 use crate::events::EventBus;
 use crate::item::ItemRegistry;
 use crate::map::Map;
 use crate::recipes::RecipeManager;
+use bevy_ecs::prelude::*;
 use std::sync::{Arc, Mutex};
 
 /// A container for the game state that can be processed in parallel.
@@ -16,7 +16,7 @@ pub struct ParallelGameState {
     /// The game world, including the grid, biomes, and resources.
     pub map: Map,
     /// The ECS world, which manages all entities and their components.
-    pub world: Arc<Mutex<World>>,
+    pub world: World,
     /// The registry for all items in the simulation.
     pub item_registry: ItemRegistry,
     /// The manager for all crafting recipes.

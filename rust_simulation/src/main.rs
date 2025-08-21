@@ -64,12 +64,7 @@ fn main() -> Result<(), SimulationError> {
     for episode in 0..EPISODES {
         for _step in 0..MAX_STEPS_PER_EPISODE {
             game.tick()?;
-            let world = game
-                .parallel_state
-                .world
-                .lock()
-                .map_err(|e| SimulationError::MutexLockError(e.to_string()))?;
-            renderer.render(&game, &world);
+            renderer.render(&game);
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         if (episode + 1) % 200 == 0 {

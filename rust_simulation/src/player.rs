@@ -1,7 +1,7 @@
 use super::map::MentalMap;
-use crate::ecs::Component;
+use bevy_ecs::prelude::*;
 
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct Player {
     pub _held_item: Option<String>,
     pub mental_map: MentalMap,
@@ -19,5 +19,3 @@ impl Player {
         self._held_item = None;
     }
 }
-
-impl Component for Player {}
