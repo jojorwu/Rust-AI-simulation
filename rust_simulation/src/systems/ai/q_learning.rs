@@ -1,14 +1,11 @@
 use crate::components::BrainComponent;
 use crate::events::Event;
-use crate::BrainResource;
 use bevy_ecs::prelude::*;
 
 pub fn update_q_table_system(
     mut brain_query: Query<&mut BrainComponent>,
     mut event_reader: EventReader<Event>,
-    brain_res: Res<BrainResource>,
 ) {
-    let brain = &brain_res.0;
     for event in event_reader.read() {
         if let Event::GoalCompleted {
             entity,
@@ -36,7 +33,8 @@ pub fn update_q_table_system(
                     })
                     .unwrap_or(0.0);
                 let new_q_value = old_q_value
-                    + brain.learning_rate * (reward + brain.discount_factor * max_future_q - old_q_value);
+                    + brain_component.learning_rate
+                        * (reward + brain_component.discount_factor * max_future_q - old_q_value);
                 brain_component
                     .goal_q_table
                     .entry(prev_state.clone())

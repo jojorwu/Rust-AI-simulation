@@ -4,7 +4,6 @@ use crate::components::{
     WantsToStoreItem, Chest,
 };
 use crate::map::Map;
-use crate::BrainResource;
 use bevy_ecs::prelude::*;
 use crate::errors::SimulationError;
 use crate::pathfinding;
@@ -13,11 +12,9 @@ use rand::Rng;
 pub fn action_execution_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut BrainComponent, &Position)>,
-    brain_res: Res<BrainResource>,
     map: Res<Map>,
     chest_query: Query<(Entity, &Position, &Chest)>,
 ) {
-    let brain = &brain_res.0;
     for (entity, mut brain_component, position) in query.iter_mut() {
         if let Some(action) = follow_path(&mut brain_component, position) {
             apply_brain_action(&mut commands, entity, action);

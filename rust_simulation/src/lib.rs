@@ -24,7 +24,6 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::ScheduleLabel;
 use std::sync::Arc;
 
-use brain::Brain;
 use components::{BrainComponent, Inventory, Position, Health};
 use config::*;
 use errors::SimulationError;
@@ -49,9 +48,6 @@ pub struct RecipeManagerResource(pub Arc<RecipeManager>);
 #[derive(Resource)]
 pub struct ItemRegistryResource(pub Arc<ItemRegistry>);
 
-#[derive(Resource)]
-pub struct BrainResource(pub Arc<Brain>);
-
 
 // --- Simulation Setup ---
 
@@ -68,17 +64,10 @@ pub fn setup_world(
     let map = Map::new(WIDTH, HEIGHT, biomes_path, resources_path)?;
     let item_registry = Arc::new(ItemRegistry::new(items_path)?);
     let recipe_manager = Arc::new(RecipeManager::new(recipes_path)?);
-    let brain = Arc::new(Brain::new(
-        Arc::clone(&recipe_manager),
-        LEARNING_RATE,
-        DISCOUNT_FACTOR,
-        EPSILON,
-    ));
 
     world.insert_resource(map);
     world.insert_resource(ItemRegistryResource(item_registry));
-    world.insert_resource(RecipeManagerResource(recipe_manager));
-    world.insert_resource(BrainResource(brain));
+    world.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
     world.insert_resource(IsDay(true));
     world.insert_resource(TickCount(0));
 
@@ -92,7 +81,12 @@ pub fn setup_world(
             Position { x: 0, y: 0 }, // Position will be updated later
             Health { current: 100, max: 100 },
             Inventory::new(),
-            BrainComponent::new(),
+            BrainComponent::new(
+                Arc::clone(&recipe_manager),
+                LEARNING_RATE,
+                DISCOUNT_FACTOR,
+                EPSILON,
+            ),
         ));
     }
 
@@ -205,6 +199,11 @@ mod tests {
 
         let recipe_manager = world.get_resource::<RecipeManagerResource>().unwrap();
         assert!(recipe_manager.0.recipes.contains_key("stone_axe"));
+
+        assert_eq!(
+            world.query::<&BrainComponent>().iter(&world).count(),
+            NUM_PLAYERS as usize
+        );
 
         Ok(())
     }

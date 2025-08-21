@@ -1,9 +1,13 @@
-use crate::brain::{Goal, HighLevelState, MemoryTile, PlayerMemory};
+use crate::brain::{Goal, HighLevelState, InventorySummary, MemoryTile, PlayerMemory};
+use crate::errors::SimulationError;
+use crate::recipes::RecipeManager;
 use bevy_ecs::prelude::*;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 #[derive(Component, Debug, Clone, Copy, Eq)]
 pub struct Position {
@@ -57,7 +61,7 @@ pub struct WantsToStoreItem {
     pub target_chest: Entity,
 }
 
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Clone)]
 pub struct BrainComponent {
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
     pub known_resources: HashMap<String, HashSet<Position>>,
@@ -70,16 +74,29 @@ pub struct BrainComponent {
     pub prev_goal: Option<Goal>,
     pub home_base: Option<Position>,
     pub goal_q_table: HashMap<HighLevelState, HashMap<Goal, f64>>,
-}
 
-impl Default for BrainComponent {
-    fn default() -> Self {
-        Self::new()
-    }
+    // Fields from Brain
+    pub goals: Vec<Goal>,
+    pub recipe_manager: Arc<RecipeManager>,
+    pub learning_rate: f64,
+    pub discount_factor: f64,
+    pub epsilon: f64,
 }
 
 impl BrainComponent {
-    pub fn new() -> Self {
+    pub fn new(
+        recipe_manager: Arc<RecipeManager>,
+        learning_rate: f64,
+        discount_factor: f64,
+        epsilon: f64,
+    ) -> Self {
+        let goals = vec![
+            Goal::GatherResource("wood".to_string()),
+            Goal::GatherResource("stone".to_string()),
+            Goal::CraftItem("stone_axe".to_string()),
+            Goal::Build("foundation".to_string()),
+            Goal::Stockpile("wood".to_string()),
+        ];
         BrainComponent {
             mental_map: vec![
                 vec![None; crate::config::WIDTH as usize];
@@ -95,7 +112,153 @@ impl BrainComponent {
             prev_goal: None,
             home_base: None,
             goal_q_table: HashMap::new(),
+            goals,
+            recipe_manager,
+            learning_rate,
+            discount_factor,
+            epsilon,
         }
+    }
+
+    /// Constructs the high-level state of an agent from its components.
+    pub fn get_high_level_state(
+        &self,
+        health: &Health,
+        inventory: &Inventory,
+        is_day: bool,
+    ) -> HighLevelState {
+        let num_hostile_players = self
+            .player_memories
+            .values()
+            .filter(|m| m.relationship == crate::brain::RelationshipStatus::Hostile)
+            .count() as u32;
+
+        let inventory_summary = InventorySummary {
+            has_wood: inventory.has_item("wood", 1),
+            has_stone: inventory.has_item("stone", 1),
+            has_iron_ore: inventory.has_item("iron_ore", 1),
+            has_stone_axe: inventory.has_item("stone_axe", 1),
+        };
+
+        HighLevelState {
+            inventory_summary,
+            num_hostile_players,
+            health_level: health.current as u32,
+            is_night: !is_day,
+        }
+    }
+
+    /// Chooses a high-level goal for the agent based on the current state.
+    pub fn choose_goal(
+        &self,
+        state: &HighLevelState,
+    ) -> Result<Goal, SimulationError> {
+        let valid_goals: Vec<_> = self
+            .goals
+            .iter()
+            .filter(|g| self.is_goal_valid(g))
+            .cloned()
+            .collect();
+        if valid_goals.is_empty() {
+            return Ok(Goal::Flee);
+        }
+
+        if rand::thread_rng().random::<f64>() < self.epsilon {
+            let index = rand::thread_rng().random_range(0..valid_goals.len());
+            return Ok(valid_goals[index].clone());
+        }
+
+        if let Some(q_values) = self.goal_q_table.get(state) {
+            q_values
+                .iter()
+                .filter(|(g, _)| self.is_goal_valid(g))
+                .map(|(goal, q_value)| {
+                    let effective_q_value = if state.is_night {
+                        if let Goal::Build(_) = goal {
+                            *q_value + crate::config::BUILD_GOAL_BONUS
+                        } else {
+                            *q_value
+                        }
+                    } else {
+                        *q_value
+                    };
+                    (goal, effective_q_value)
+                })
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|(goal, _)| goal.clone())
+                .map(Ok)
+                .unwrap_or_else(|| {
+                    let index = rand::thread_rng().random_range(0..valid_goals.len());
+                    Ok(valid_goals[index].clone())
+                })
+        } else {
+            let index = rand::thread_rng().random_range(0..valid_goals.len());
+            Ok(valid_goals[index].clone())
+        }
+    }
+
+    /// Checks if a goal is currently valid.
+    fn is_goal_valid(&self, goal: &Goal) -> bool {
+        match goal {
+            Goal::GatherResource(resource_name) => self
+                .known_resources
+                .get(resource_name)
+                .is_some_and(|p| !p.is_empty()),
+            _ => true,
+        }
+    }
+
+    /// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
+    pub fn plan_goal(
+        &self,
+        inventory: &Inventory,
+        goal: &Goal,
+    ) -> Result<Vec<Goal>, SimulationError> {
+        let mut plan = Vec::new();
+        match goal {
+            Goal::CraftItem(item_name) => {
+                let required = self.recipe_manager.get_required_resources(item_name, 1);
+                plan.extend(self.plan_resource_gathering(inventory, &required));
+                plan.push(goal.clone());
+            }
+            Goal::Build(structure_name) => {
+                let required = self
+                    .recipe_manager
+                    .get_required_resources(structure_name, 1);
+                plan.extend(self.plan_resource_gathering(inventory, &required));
+                plan.push(goal.clone());
+            }
+            Goal::Stockpile(resource) => {
+                let has_enough = inventory.has_item(resource, 1);
+                if !has_enough {
+                    plan.push(Goal::GatherResource(resource.clone()));
+                }
+                plan.push(goal.clone());
+            }
+            _ => {
+                plan.push(goal.clone());
+            }
+        }
+        Ok(plan)
+    }
+
+    /// Plans the gathering of resources required for a crafting recipe.
+    fn plan_resource_gathering(
+        &self,
+        inventory: &Inventory,
+        required: &HashMap<String, u32>,
+    ) -> Vec<Goal> {
+        let mut plan = Vec::new();
+        for (resource, &required_amount) in required {
+            let has_enough = inventory.get_quantity(resource) >= required_amount;
+            if !has_enough {
+                if !self.known_resources.contains_key(resource) {
+                    plan.push(Goal::Explore);
+                }
+                plan.push(Goal::GatherResource(resource.clone()));
+            }
+        }
+        plan
     }
 }
 
