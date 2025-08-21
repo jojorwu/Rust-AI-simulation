@@ -223,13 +223,11 @@ impl Brain {
             return Ok(Goal::Flee);
         }
 
-        let choose_random_goal = || {
-            let index = rand::thread_rng().gen_range(0..valid_goals.len());
-            Ok(valid_goals[index].clone())
-        };
+        let mut rng = rand::thread_rng();
 
-        if rand::thread_rng().r#gen::<f64>() < self.epsilon {
-            return choose_random_goal();
+        if rng.random::<f64>() < self.epsilon {
+            let index = rng.random_range(0..valid_goals.len());
+            return Ok(valid_goals[index].clone());
         }
 
         let state_key_str = serde_json::to_string(state)?;
@@ -252,9 +250,13 @@ impl Brain {
                 .max_by(|a, b| a.1.total_cmp(&b.1))
                 .map(|(goal, _)| goal.clone())
                 .map(Ok)
-                .unwrap_or_else(choose_random_goal)
+                .unwrap_or_else(|| {
+                    let index = rng.random_range(0..valid_goals.len());
+                    Ok(valid_goals[index].clone())
+                })
         } else {
-            choose_random_goal()
+            let index = rng.random_range(0..valid_goals.len());
+            Ok(valid_goals[index].clone())
         }
     }
 
@@ -949,7 +951,8 @@ impl Brain {
             }
         }
         if !unvisited.is_empty() {
-            let target_idx = rand::thread_rng().gen_range(0..unvisited.len());
+            let mut rng = rand::thread_rng();
+            let target_idx = rng.random_range(0..unvisited.len());
             let target_pos = unvisited[target_idx];
             if let Some(player_pos) = world.get::<Position>(entity) {
                 if let Some(path) = pathfinding::find_path(
