@@ -1,95 +1,66 @@
 use crate::components::{Chest, Inventory, Position, WantsToBuild};
-use crate::ecs::World;
-use crate::errors::SimulationError;
-use crate::events::{Event, EventBus};
-use crate::systems::{Resource, System, SystemResources};
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use crate::events::Event;
+use crate::lib::RecipeManagerResource;
+use crate::map::{Map, CHUNK_SIZE};
+use bevy_ecs::prelude::*;
 
-pub struct BuildingSystem;
+pub fn building_system(
+    mut commands: Commands,
+    mut builder_query: Query<(Entity, &Position, &mut Inventory, &WantsToBuild)>,
+    mut event_writer: EventWriter<Event>,
+    map: Res<Map>,
+    recipe_manager: Res<RecipeManagerResource>,
+) {
+    let recipe_manager = &recipe_manager.0;
 
-impl System for BuildingSystem {
-    fn name(&self) -> &'static str {
-        "Building"
-    }
+    for (builder_entity, pos, mut inventory, wants_to_build) in builder_query.iter_mut() {
+        let required = recipe_manager.get_required_resources(&wants_to_build.structure_name, 1);
 
-    fn read_resources(&self) -> HashSet<Resource> {
-        let mut resources = HashSet::new();
-        resources.insert(Resource::RecipeManager);
-        resources
-    }
-
-    fn write_resources(&self) -> HashSet<Resource> {
-        let mut resources = HashSet::new();
-        resources.insert(Resource::World);
-        resources.insert(Resource::Map);
-        resources.insert(Resource::EventBus);
-        resources
-    }
-
-    fn run(&self, world: &mut World, resources: &mut SystemResources) -> Result<(), SimulationError> {
-        let mut to_build = Vec::new();
-        for entity in 0..world.entities.len() {
-            if let Some(wants_to_build) = world.get_component::<WantsToBuild>(entity) {
-                to_build.push((entity, wants_to_build.clone()));
-            }
+        // Check if the builder has the required resources
+        if !inventory.has_resources(&required) {
+            commands.entity(builder_entity).remove::<WantsToBuild>();
+            continue;
         }
 
-        for (builder, wants_to_build) in &to_build {
-            if let Some(builder_pos) = world.get_component::<Position>(*builder).copied() {
-                let tile = &mut resources.map.grid[builder_pos.y as usize][builder_pos.x as usize];
+        if let Some((chunk_x, chunk_y)) = map.get_chunk_index(pos.x, pos.y) {
+            let mut chunk = map.chunks[chunk_y][chunk_x].lock().unwrap();
+            let local_x = (pos.x % CHUNK_SIZE) as usize;
+            let local_y = (pos.y % CHUNK_SIZE) as usize;
+            let tile = &mut chunk.tiles[local_y][local_x];
 
-                if tile.tile_type == '.' {
-                    if let Some(inventory) = world.get_component_mut::<Inventory>(*builder) {
-                        let required =
-                            resources.recipe_manager.get_required_resources(&wants_to_build.structure_name, 1);
-                        if inventory.has_resources(&required)
-                            && inventory.remove_resources(&required) {
-                                let built_structure = wants_to_build.structure_name.clone();
+            // Check if the tile is suitable for building (e.g., it's empty ground)
+            if tile.tile_type == '.' {
+                // Consume resources
+                if inventory.remove_resources(&required) {
+                    let built_structure = wants_to_build.structure_name.clone();
 
-                                if built_structure == "chest" {
-                                    let chest_entity = world.create_entity();
-                                    world.add_component(chest_entity, builder_pos)?;
-                                    world.add_component(
-                                        chest_entity,
-                                        Chest {
-                                            inventory: Inventory::new(),
-                                        },
-                                    )?;
-                                    tile.tile_type = 'C';
-                                } else {
-                                    tile.tile_type = match built_structure.as_str() {
-                                        "foundation" => 'B',
-                                        "wall" => '#',
-                                        "doorway" => 'O',
-                                        _ => 'X',
-                                    };
-
-                                    if built_structure == "foundation" {
-                                        resources.event_bus
-                                            .lock()
-                                            .map_err(|e| {
-                                                crate::errors::SimulationError::MutexLockError(
-                                                    e.to_string(),
-                                                )
-                                            })?
-                                            .publish(Event::FoundationBuilt {
-                                                builder: *builder,
-                                                position: builder_pos,
-                                            });
-                                    }
-                                }
-                            }
+                    match built_structure.as_str() {
+                        "chest" => {
+                            // Spawn a chest entity and change the tile type
+                            commands.spawn((
+                                *pos,
+                                Chest {
+                                    inventory: Inventory::new(),
+                                },
+                            ));
+                            tile.tile_type = 'C';
+                        }
+                        "foundation" => {
+                            tile.tile_type = 'B';
+                            event_writer.send(Event::FoundationBuilt {
+                                builder: builder_entity,
+                                position: *pos,
+                            });
+                        }
+                        "wall" => tile.tile_type = '#',
+                        "doorway" => tile.tile_type = 'O',
+                        _ => tile.tile_type = 'X', // Default for unknown structures
                     }
                 }
             }
         }
 
-        // Reset wants to build
-        let builders: Vec<_> = to_build.iter().map(|(e, _)| *e).collect();
-        for builder in builders {
-            world.remove_component::<WantsToBuild>(builder);
-        }
-        Ok(())
+        // Remove the intent to build, whether successful or not.
+        commands.entity(builder_entity).remove::<WantsToBuild>();
     }
 }

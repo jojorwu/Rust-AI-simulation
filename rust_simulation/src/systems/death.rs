@@ -1,67 +1,38 @@
 use crate::components::{DroppedItem, Position};
-use crate::ecs::World;
-use crate::errors::SimulationError;
-use crate::events::{Event, EventBus};
-use crate::systems::{Resource, System, SystemResources};
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use crate::events::Event;
+use crate::map::Map;
+use bevy_ecs::prelude::*;
 
-pub struct DeathSystem;
+pub fn death_system(
+    mut commands: Commands,
+    mut event_reader: EventReader<Event>,
+    query: Query<&Position>,
+    map: Res<Map>,
+) {
+    for event in event_reader.read() {
+        if let Event::EntityDied(entity) = event {
+            if let Ok(pos) = query.get(*entity) {
+                // When an entity dies, it's removed from the world. We also need to update
+                // the spatial map in the corresponding map chunk.
+                map.remove_entity_from_spatial_map(*entity, pos.x, pos.y);
 
-impl System for DeathSystem {
-    fn name(&self) -> &'static str {
-        "Death"
-    }
-
-    fn read_resources(&self) -> HashSet<Resource> {
-        let mut resources = HashSet::new();
-        resources.insert(Resource::EventBus);
-        resources
-    }
-
-    fn write_resources(&self) -> HashSet<Resource> {
-        let mut resources = HashSet::new();
-        resources.insert(Resource::World);
-        resources.insert(Resource::Map);
-        resources
-    }
-
-    fn run(&self, world: &mut World, resources: &mut SystemResources) -> Result<(), SimulationError> {
-        let events = resources.event_bus
-            .lock()
-            .map_err(|e| SimulationError::MutexLockError(e.to_string()))?
-            .take_events();
-        for event in events {
-            if let Event::EntityDied(entity) = event {
-                if let Some(pos) = world.get_component::<Position>(entity).copied() {
-                    // Remove the dead entity from the spatial map
-                    resources.map
-                        .spatial_map
-                        .entry((pos.x, pos.y))
-                        .and_modify(|v| v.retain(|&e| e != entity));
-
-                    // Create a new entity for the dropped item
-                    let dropped_item_entity = world.create_entity();
-                    world.add_component(
-                        dropped_item_entity,
+                // Create a new entity for the dropped item (e.g., meat)
+                let dropped_item_entity = commands
+                    .spawn((
                         DroppedItem {
                             item_name: "meat".to_string(),
                             quantity: 1,
                         },
-                    )?;
-                    world.add_component(dropped_item_entity, pos)?;
+                        *pos,
+                    ))
+                    .id();
 
-                    // Add the new dropped item to the spatial map
-                    resources.map
-                        .spatial_map
-                        .entry((pos.x, pos.y))
-                        .or_default()
-                        .push(dropped_item_entity);
-                }
-                // Remove the dead entity from the world
-                world.remove_entity(entity);
+                // Add the new dropped item to the spatial map
+                map.add_entity_to_spatial_map(dropped_item_entity, pos.x, pos.y);
             }
+
+            // Despawn the dead entity from the world
+            commands.entity(*entity).despawn();
         }
-        Ok(())
     }
 }

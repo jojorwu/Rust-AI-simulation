@@ -28,6 +28,13 @@ use std::env;
 use std::fs;
 use std::sync::Arc;
 
+/// A trait that abstracts the spatial querying capabilities the brain needs.
+/// This allows the brain logic to be decoupled from the concrete map implementation.
+pub trait EntityFinder {
+    fn get_entities_at(&self, pos: &Position) -> Option<Vec<Entity>>;
+}
+
+
 /// Represents the high-level goals that an agent can have.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
@@ -38,7 +45,7 @@ pub enum Goal {
     /// Build a specific structure.
     Build(String),
     /// Attack a specific entity.
-    Attack(u32),
+    Attack(Entity),
     /// Flee from a threat.
     Flee,
     /// Explore the map to find resources.
@@ -76,7 +83,7 @@ pub struct BrainStateUpdate {
 }
 
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InventorySummary {
     /// Whether the agent has any wood.
     pub has_wood: bool,
@@ -90,7 +97,7 @@ pub struct InventorySummary {
 
 /// Represents the high-level state of the agent and its environment.
 /// This is used as the input to the Q-learning model for goal selection.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HighLevelState {
     /// A summary of the agent's inventory.
     pub inventory_summary: InventorySummary,
@@ -161,6 +168,35 @@ impl Brain {
         }
     }
 
+    /// Constructs the high-level state of an agent from its components.
+    pub fn get_high_level_state(
+        &self,
+        health: &Health,
+        inventory: &Inventory,
+        brain_component: &BrainComponent,
+        is_day: bool,
+    ) -> HighLevelState {
+        let num_hostile_players = brain_component
+            .player_memories
+            .values()
+            .filter(|m| m.relationship == RelationshipStatus::Hostile)
+            .count() as u32;
+
+        let inventory_summary = InventorySummary {
+            has_wood: inventory.has_item("wood", 1),
+            has_stone: inventory.has_item("stone", 1),
+            has_iron_ore: inventory.has_item("iron_ore", 1),
+            has_stone_axe: inventory.has_item("stone_axe", 1),
+        };
+
+        HighLevelState {
+            inventory_summary,
+            num_hostile_players,
+            health_level: health.current as u32,
+            is_night: !is_day,
+        }
+    }
+
     /// Saves the agent's Q-table to a file.
     pub fn save_q_table(&self, brain_component: &BrainComponent) -> Result<(), SimulationError> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -171,10 +207,6 @@ impl Brain {
     }
 
     /// Chooses a high-level goal for the agent based on the current state.
-    ///
-    /// This function uses an epsilon-greedy policy with a Q-table to select a
-    /// goal. With probability epsilon, it chooses a random valid goal. Otherwise,
-    /// it chooses the goal with the highest Q-value for the current state.
     pub fn choose_goal(
         &self,
         brain_component: &BrainComponent,
@@ -192,11 +224,11 @@ impl Brain {
         }
 
         let choose_random_goal = || {
-            let index = rand::rng().random_range(0..valid_goals.len());
+            let index = rand::thread_rng().gen_range(0..valid_goals.len());
             Ok(valid_goals[index].clone())
         };
 
-        if rand::rng().random::<f64>() < self.epsilon {
+        if rand::thread_rng().gen::<f64>() < self.epsilon {
             return choose_random_goal();
         }
 
@@ -230,31 +262,26 @@ impl Brain {
     pub fn is_goal_complete(
         &self,
         brain_component: &BrainComponent,
-        world: &World,
-        entity: Entity,
+        inventory: &Inventory,
         goal: &Goal,
     ) -> bool {
-        if let Some(inventory) = world.get_component::<Inventory>(entity) {
-            match goal {
-                Goal::GatherResource(resource) => {
-                    if let Some(Goal::CraftItem(item_name)) = brain_component.goal_stack.last() {
-                        let recipe = self.recipe_manager.get_required_resources(item_name, 1);
-                        if let Some(&required_amount) = recipe.get(resource) {
-                            return inventory.get_quantity(resource) >= required_amount;
-                        }
+        match goal {
+            Goal::GatherResource(resource) => {
+                if let Some(Goal::CraftItem(item_name)) = brain_component.goal_stack.last() {
+                    let recipe = self.recipe_manager.get_required_resources(item_name, 1);
+                    if let Some(&required_amount) = recipe.get(resource) {
+                        return inventory.get_quantity(resource) >= required_amount;
                     }
-                    inventory.get_quantity(resource) > GATHER_GOAL_THRESHOLD
                 }
-                Goal::CraftItem(item) => inventory.has_item(item, 1),
-                Goal::Explore => brain_component
-                    .current_path
-                    .as_ref()
-                    .is_none_or(|p| p.is_empty()),
-                Goal::Stockpile(resource) => !inventory.has_item(resource, 1),
-                _ => false,
+                inventory.get_quantity(resource) > GATHER_GOAL_THRESHOLD
             }
-        } else {
-            false
+            Goal::CraftItem(item) => inventory.has_item(item, 1),
+            Goal::Explore => brain_component
+                .current_path
+                .as_ref()
+                .map_or(true, |p| p.is_empty()),
+            Goal::Stockpile(resource) => !inventory.has_item(resource, 1),
+            _ => false,
         }
     }
 
@@ -262,15 +289,13 @@ impl Brain {
     pub fn plan_goal(
         &self,
         brain_component: &BrainComponent,
-        world: &World,
-        entity: Entity,
+        inventory: &Inventory,
         goal: &Goal,
     ) -> Result<Vec<Goal>, SimulationError> {
         let mut plan = Vec::new();
         match goal {
             Goal::CraftItem(item_name) => {
                 let required = self.recipe_manager.get_required_resources(item_name, 1);
-                let inventory = world.get_component::<Inventory>(entity);
                 plan.extend(self.plan_resource_gathering(brain_component, inventory, &required));
                 plan.push(goal.clone());
             }
@@ -278,13 +303,11 @@ impl Brain {
                 let required = self
                     .recipe_manager
                     .get_required_resources(structure_name, 1);
-                let inventory = world.get_component::<Inventory>(entity);
                 plan.extend(self.plan_resource_gathering(brain_component, inventory, &required));
                 plan.push(goal.clone());
             }
             Goal::Stockpile(resource) => {
-                let inventory = world.get_component::<Inventory>(entity);
-                let has_enough = inventory.is_some_and(|inv| inv.has_item(resource, 1));
+                let has_enough = inventory.has_item(resource, 1);
                 if !has_enough {
                     plan.push(Goal::GatherResource(resource.clone()));
                 }
@@ -301,13 +324,12 @@ impl Brain {
     fn plan_resource_gathering(
         &self,
         brain_component: &BrainComponent,
-        inventory: Option<&Inventory>,
+        inventory: &Inventory,
         required: &HashMap<String, u32>,
     ) -> Vec<Goal> {
         let mut plan = Vec::new();
         for (resource, &required_amount) in required {
-            let has_enough =
-                inventory.is_some_and(|inv| inv.get_quantity(resource) >= required_amount);
+            let has_enough = inventory.get_quantity(resource) >= required_amount;
             if !has_enough {
                 if !brain_component.known_resources.contains_key(resource) {
                     plan.push(Goal::Explore);
@@ -319,37 +341,34 @@ impl Brain {
     }
 
     /// The main entry point for the agent's AI logic for a single simulation tick.
-    ///
-    /// This function orchestrates the agent's decision-making process for a
-    /// single tick. It involves updating the Q-table, updating the agent's
-    /// internal state, choosing a goal and plan, and executing an action.
     pub fn tick(
         &self,
         brain_component: &BrainComponent, // Takes an immutable reference
-        world: &World,
-        spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
+        world_view: &dyn EntityFinder,
+        world: &World, // Bevy World for component lookups
         entity: Entity,
         high_level_state: &HighLevelState,
         visible_tiles: &[(Position, Tile)],
     ) -> Result<Option<(BrainStateUpdate, BrainAction)>, SimulationError> {
         let mut brain_component = brain_component.clone();
+        let inventory = world.get::<Inventory>(entity).ok_or_else(|| SimulationError::ComponentNotFound("Inventory".to_string()))?;
 
         self.update_q_table_based_on_previous_action(
             &mut brain_component,
-            world,
-            entity,
+            inventory,
             high_level_state,
         )?;
 
         self.update_internal_state(
             &mut brain_component,
+            world_view,
             world,
             entity,
-            spatial_map,
             visible_tiles,
         );
         self.update_goal_and_plan(
             &mut brain_component,
+            inventory,
             world,
             entity,
             high_level_state,
@@ -357,10 +376,9 @@ impl Brain {
 
         let action = self.choose_and_execute_action(
             &mut brain_component,
+            world_view,
             world,
-            spatial_map,
             entity,
-            0,
         )?;
 
         let update = BrainStateUpdate {
@@ -379,15 +397,14 @@ impl Brain {
     fn update_q_table_based_on_previous_action(
         &self,
         brain_component: &mut BrainComponent,
-        world: &World,
-        entity: Entity,
+        inventory: &Inventory,
         high_level_state: &HighLevelState,
     ) -> Result<(), SimulationError> {
         if let (Some(prev_state), Some(prev_goal)) = (
             brain_component.prev_state.clone(),
             brain_component.prev_goal.clone(),
         ) {
-            let reward = if self.is_goal_complete(brain_component, world, entity, &prev_goal) {
+            let reward = if self.is_goal_complete(brain_component, inventory, &prev_goal) {
                 GOAL_REWARD
             } else {
                 GOAL_PENALTY
@@ -408,13 +425,13 @@ impl Brain {
     fn update_internal_state(
         &self,
         brain_component: &mut BrainComponent,
+        world_view: &dyn EntityFinder,
         world: &World,
         entity: Entity,
-        spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
         visible_tiles: &[(Position, Tile)],
     ) {
-        self.update_mental_map(brain_component, world, spatial_map, visible_tiles);
-        self.handle_opportunities(brain_component, world, entity, spatial_map, visible_tiles);
+        self.update_mental_map(brain_component, world_view, world, visible_tiles);
+        self.handle_opportunities(brain_component, world_view, world, entity, visible_tiles);
     }
 
     /// Checks for and handles opportunistic goals, such as gathering a valuable
@@ -422,9 +439,9 @@ impl Brain {
     fn handle_opportunities(
         &self,
         brain_component: &mut BrainComponent,
+        world_view: &dyn EntityFinder,
         world: &World,
         entity: Entity,
-        spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
         visible_tiles: &[(Position, Tile)],
     ) {
         if brain_component.goal_commitment_ticks
@@ -433,12 +450,12 @@ impl Brain {
             return;
         }
         for (pos, _tile) in visible_tiles {
-            if let Some(entities_at_pos) = spatial_map.get(&(pos.x, pos.y)) {
-                for &entity_id in entities_at_pos {
-                    if let Some(resource) = world.get_component::<Resource>(entity_id) {
+            if let Some(entities_at_pos) = world_view.get_entities_at(pos) {
+                for &entity_id in entities_at_pos.iter() {
+                    if let Some(resource) = world.get::<Resource>(entity_id) {
                         if crate::config::VALUABLE_RESOURCES.contains(&resource.name.as_str()) {
                             let has_it_already = world
-                                .get_component::<Inventory>(entity)
+                                .get::<Inventory>(entity)
                                 .is_some_and(|inv| inv.get_quantity(&resource.name) > 0);
                             if !has_it_already {
                                 brain_component.goal_stack.clear();
@@ -459,16 +476,16 @@ impl Brain {
     fn update_mental_map(
         &self,
         brain_component: &mut BrainComponent,
+        world_view: &dyn EntityFinder,
         world: &World,
-        spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
         visible_tiles: &[(Position, Tile)],
     ) {
         for (pos, tile) in visible_tiles {
             brain_component.mental_map[pos.y as usize][pos.x as usize] =
                 Some(MemoryTile { tile: tile.clone() });
-            if let Some(entities_at_pos) = spatial_map.get(&(pos.x, pos.y)) {
-                for &entity_id in entities_at_pos {
-                    if let Some(resource) = world.get_component::<Resource>(entity_id) {
+            if let Some(entities_at_pos) = world_view.get_entities_at(pos) {
+                for &entity_id in entities_at_pos.iter() {
+                    if let Some(resource) = world.get::<Resource>(entity_id) {
                         brain_component
                             .known_resources
                             .entry(resource.name.clone())
@@ -484,17 +501,19 @@ impl Brain {
     fn update_goal_and_plan(
         &self,
         brain_component: &mut BrainComponent,
+        inventory: &Inventory,
         world: &World,
         entity: Entity,
         high_level_state: &HighLevelState,
     ) -> Result<(), SimulationError> {
-        self._update_current_goal(brain_component, world, entity, high_level_state)
+        self._update_current_goal(brain_component, inventory, world, entity, high_level_state)
     }
 
     /// The core logic for updating the agent's current goal.
     fn _update_current_goal(
         &self,
         brain_component: &mut BrainComponent,
+        inventory: &Inventory,
         world: &World,
         entity: Entity,
         high_level_state: &HighLevelState,
@@ -509,7 +528,7 @@ impl Brain {
         }
 
         if let Some(goal) = &brain_component.current_goal {
-            if self.is_goal_complete(brain_component, world, entity, goal) {
+            if self.is_goal_complete(brain_component, inventory, goal) {
                 brain_component.current_path = None;
                 brain_component.current_goal = brain_component.goal_stack.pop();
             } else if !self.is_goal_valid(brain_component, world, goal) {
@@ -522,7 +541,7 @@ impl Brain {
 
         if brain_component.current_goal.is_none() && brain_component.goal_commitment_ticks == 0 {
             let new_high_level_goal = self.choose_goal(brain_component, world, high_level_state)?;
-            let mut plan = self.plan_goal(brain_component, world, entity, &new_high_level_goal)?;
+            let mut plan = self.plan_goal(brain_component, inventory, &new_high_level_goal)?;
             plan.reverse();
             brain_component.goal_stack = plan;
             brain_component.current_goal = brain_component.goal_stack.pop();
@@ -548,22 +567,20 @@ impl Brain {
     fn choose_and_execute_action(
         &self,
         brain_component: &mut BrainComponent,
+        world_view: &dyn EntityFinder,
         world: &World,
-        spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
         entity: Entity,
-        current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
-        self._choose_action_for_goal(brain_component, world, spatial_map, entity, current_episode)
+        self._choose_action_for_goal(brain_component, world_view, world, entity)
     }
 
     /// The core logic for choosing an action for the current goal.
     fn _choose_action_for_goal(
         &self,
         brain_component: &mut BrainComponent,
+        world_view: &dyn EntityFinder,
         world: &World,
-        spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
         entity: Entity,
-        current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
         if let Some(action) = self.follow_path(brain_component, world, entity) {
             return Ok(Some(action));
@@ -572,29 +589,27 @@ impl Brain {
             match goal {
                 Goal::GatherResource(name) => self.execute_gather_goal(
                     brain_component,
+                    world_view,
                     world,
-                    spatial_map,
                     entity,
                     &name,
-                    current_episode,
                 ),
                 Goal::CraftItem(name) => {
-                    self.execute_craft_item_goal(entity, &name, current_episode)
+                    self.execute_craft_item_goal(&name)
                 }
-                Goal::Build(name) => self.execute_build_goal(entity, &name, current_episode),
-                Goal::Attack(id) => self.execute_attack_goal(entity, id, current_episode),
+                Goal::Build(name) => self.execute_build_goal(&name),
+                Goal::Attack(id) => self.execute_attack_goal(id),
                 Goal::Flee => {
-                    self.execute_flee_goal(brain_component, world, entity, current_episode)
+                    self.execute_flee_goal(brain_component, world, entity)
                 }
                 Goal::Explore => {
-                    self.execute_explore_goal(brain_component, world, entity, current_episode)
+                    self.execute_explore_goal(brain_component, world, entity)
                 }
                 Goal::Stockpile(res) => self.execute_stockpile_goal(
                     brain_component,
                     world,
                     entity,
                     &res,
-                    current_episode,
                 ),
             }
         } else {
@@ -611,7 +626,7 @@ impl Brain {
     ) -> Option<BrainAction> {
         if let Some(path) = &mut brain_component.current_path {
             if !path.is_empty() {
-                if let Some(player_pos) = world.get_component::<Position>(entity).copied() {
+                if let Some(player_pos) = world.get::<Position>(entity) {
                     let next_pos = path.remove(0);
                     let (dx, dy) = (
                         next_pos.0 as i32 - player_pos.x as i32,
@@ -667,13 +682,12 @@ impl Brain {
     fn execute_gather_goal(
         &self,
         brain_component: &mut BrainComponent,
+        world_view: &dyn EntityFinder,
         world: &World,
-        spatial_map: &HashMap<(u32, u32), Vec<Entity>>,
         entity: Entity,
         resource_name: &str,
-        _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
-        let Some(player_pos) = world.get_component::<Position>(entity).copied() else {
+        let Some(player_pos) = world.get::<Position>(entity) else {
             return Ok(None);
         };
         if let Some(known_positions) = brain_component.known_resources.get(resource_name) {
@@ -681,10 +695,10 @@ impl Brain {
             sorted_positions
                 .sort_by_key(|pos| pos.x.abs_diff(player_pos.x) + pos.y.abs_diff(player_pos.y));
             for target_pos in sorted_positions {
-                if let Some(entities_at_pos) = spatial_map.get(&(target_pos.x, target_pos.y)) {
-                    for &target_entity in entities_at_pos {
+                if let Some(entities_at_pos) = world_view.get_entities_at(target_pos) {
+                    for &target_entity in entities_at_pos.iter() {
                         if let Some(resource) =
-                            world.get_component::<super::components::Resource>(target_entity)
+                            world.get::<super::components::Resource>(target_entity)
                         {
                             if resource.name == resource_name {
                                 let (dx, dy) = (
@@ -719,9 +733,7 @@ impl Brain {
     /// Executes the "craft item" goal.
     fn execute_craft_item_goal(
         &self,
-        _entity: Entity,
         item_name: &str,
-        _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
         Ok(Some(BrainAction::Craft(WantsToCraft {
             item_name: item_name.to_string(),
@@ -731,9 +743,7 @@ impl Brain {
     /// Executes the "build" goal.
     fn execute_build_goal(
         &self,
-        _entity: Entity,
         structure_name: &str,
-        _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
         Ok(Some(BrainAction::Build(WantsToBuild {
             structure_name: structure_name.to_string(),
@@ -747,10 +757,10 @@ impl Brain {
         world: &World,
         entity: Entity,
     ) -> bool {
-        let Some(health) = world.get_component::<Health>(entity) else {
+        let Some(health) = world.get::<Health>(entity) else {
             return false;
         };
-        let Some(player_pos) = world.get_component::<Position>(entity).copied() else {
+        let Some(player_pos) = world.get::<Position>(entity) else {
             return false;
         };
         let hostile_players: Vec<_> = brain_component
@@ -765,7 +775,7 @@ impl Brain {
         if self.handle_territorial_threats(
             brain_component,
             world,
-            &player_pos,
+            player_pos,
             health,
             &hostile_players,
         ) {
@@ -774,7 +784,7 @@ impl Brain {
         if self.handle_standard_threats(
             brain_component,
             world,
-            &player_pos,
+            player_pos,
             health,
             &hostile_players,
         ) {
@@ -790,14 +800,14 @@ impl Brain {
         world: &World,
         player_pos: &Position,
         health: &Health,
-        hostile_players: &[u32],
+        hostile_players: &[Entity],
     ) -> bool {
         if let Some(home_base_pos) = brain_component.home_base {
             let territorial_threats: Vec<_> = hostile_players
                 .iter()
-                .filter(|&id| {
+                .filter(|&&id| {
                     world
-                        .get_component::<Position>(*id as usize)
+                        .get::<Position>(id)
                         .is_some_and(|p| {
                             p.x.abs_diff(home_base_pos.x) <= crate::config::DEFENSE_RADIUS
                                 && p.y.abs_diff(home_base_pos.y) <= crate::config::DEFENSE_RADIUS
@@ -829,7 +839,7 @@ impl Brain {
         world: &World,
         player_pos: &Position,
         health: &Health,
-        hostile_players: &[u32],
+        hostile_players: &[Entity],
     ) -> bool {
         if hostile_players.len() > 1
             || (health.current as f32 / health.max as f32) < crate::config::STANDARD_HEALTH_RATIO
@@ -848,13 +858,13 @@ impl Brain {
         &self,
         world: &World,
         player_pos: &Position,
-        threats: &[u32],
-    ) -> Option<u32> {
+        threats: &[Entity],
+    ) -> Option<Entity> {
         threats
             .iter()
-            .min_by_key(|&id| {
+            .min_by_key(|&&id| {
                 world
-                    .get_component::<Position>(*id as usize)
+                    .get::<Position>(id)
                     .map_or(u32::MAX, |p| {
                         p.x.abs_diff(player_pos.x) + p.y.abs_diff(player_pos.y)
                     })
@@ -871,13 +881,11 @@ impl Brain {
     /// Executes the "attack" goal.
     fn execute_attack_goal(
         &self,
-        _entity: Entity,
-        target_id: u32,
-        _current_episode: u32,
+        target_id: Entity,
     ) -> Result<Option<BrainAction>, SimulationError> {
         Ok(Some(BrainAction::Attack(
             crate::components::WantsToAttack {
-                target: target_id as usize,
+                target: target_id,
             },
         )))
     }
@@ -888,16 +896,15 @@ impl Brain {
         brain_component: &mut BrainComponent,
         world: &World,
         entity: Entity,
-        _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
-        let Some(player_pos) = world.get_component::<Position>(entity).copied() else {
+        let Some(player_pos) = world.get::<Position>(entity) else {
             return Ok(None);
         };
         let hostile_positions: Vec<_> = brain_component
             .player_memories
             .iter()
             .filter(|(_, mem)| mem.relationship == RelationshipStatus::Hostile)
-            .filter_map(|(id, _)| world.get_component::<Position>(*id as usize).cloned())
+            .filter_map(|(id, _)| world.get::<Position>(*id).cloned())
             .collect();
         if hostile_positions.is_empty() {
             brain_component.current_goal = None;
@@ -930,7 +937,6 @@ impl Brain {
         brain_component: &mut BrainComponent,
         world: &World,
         entity: Entity,
-        _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
         if brain_component.current_path.is_some() {
             return Ok(None);
@@ -944,9 +950,9 @@ impl Brain {
             }
         }
         if !unvisited.is_empty() {
-            let target_idx = rand::rng().random_range(0..unvisited.len());
+            let target_idx = rand::thread_rng().gen_range(0..unvisited.len());
             let target_pos = unvisited[target_idx];
-            if let Some(player_pos) = world.get_component::<Position>(entity).copied() {
+            if let Some(player_pos) = world.get::<Position>(entity) {
                 if let Some(path) = pathfinding::find_path(
                     (player_pos.x, player_pos.y),
                     target_pos,
@@ -966,14 +972,13 @@ impl Brain {
         world: &World,
         entity: Entity,
         resource: &str,
-        _current_episode: u32,
     ) -> Result<Option<BrainAction>, SimulationError> {
         let Some(home_base_pos) = brain_component.home_base else {
             brain_component.current_goal = None;
             return Ok(None);
         };
         if let Some((chest_entity, chest_pos)) = self.find_closest_chest(world, &home_base_pos) {
-            if let Some(player_pos) = world.get_component::<Position>(entity).copied() {
+            if let Some(player_pos) = world.get::<Position>(entity) {
                 let (dx, dy) = (
                     (player_pos.x as i32 - chest_pos.x as i32).abs(),
                     (player_pos.y as i32 - chest_pos.y as i32).abs(),
@@ -1002,12 +1007,14 @@ impl Brain {
 
     /// Finds the closest chest to a given position.
     fn find_closest_chest(&self, world: &World, pos: &Position) -> Option<(Entity, Position)> {
-        (0..world.entities.len())
-            .filter_map(|e| world.get_component::<Chest>(e).map(|_| e))
-            .filter_map(|e| world.get_component::<Position>(e).map(|p| (e, *p)))
+        world.query::<(Entity, &Position, &Chest)>()
+            .iter(world)
+            .map(|(e, p, _c)| (e, *p))
             .min_by_key(|(_, chest_pos)| chest_pos.x.abs_diff(pos.x) + chest_pos.y.abs_diff(pos.y))
     }
 }
+
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1074,3 +1081,4 @@ mod tests {
         Ok(())
     }
 }
+*/

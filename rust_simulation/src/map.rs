@@ -1,80 +1,57 @@
-//! This module handles the generation and representation of the game world.
-//!
-//! It includes structures for the `Map` itself, individual `Tile`s, `Biome`s,
-//! and `Resource`s. It also contains the logic for procedural island generation
-//! using noise functions.
+//! This module handles the representation of the game world, divided into chunks for concurrent access.
 
-use super::ecs::Entity;
+use bevy_ecs::prelude::*;
 use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
 use rand::Rng;
-use serde::{Deserialize, Serialize};
-use crate::errors::SimulationError;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::sync::{Arc, Mutex};
+
+use crate::errors::SimulationError;
+
+pub const CHUNK_SIZE: u32 = 16;
 
 /// Represents the visibility state of a tile from a player's perspective.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TileState {
-    /// The tile has not yet been seen by the player.
     Unseen,
-    /// The tile has been seen previously but is not currently in view.
     Explored,
-    /// The tile is currently visible to the player.
     Visible,
 }
 
-/// Represents a player's memory of the map.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MentalMap {
-    /// The width of the map.
-    pub width: u32,
-    /// The height of the map.
-    pub height: u32,
-    /// The grid of tile states representing the player's memory.
-    pub grid: Vec<Vec<TileState>>,
-}
-
-impl MentalMap {
-    /// Creates a new `MentalMap` of the given dimensions.
-    pub fn new(width: u32, height: u32) -> Self {
-        MentalMap {
-            width,
-            height,
-            grid: vec![vec![TileState::Unseen; width as usize]; height as usize],
-        }
-    }
-}
-
 /// Represents a single tile on the game map.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Tile {
-    /// The character representation of the tile type (e.g., '.', 'T', '~').
     pub tile_type: char,
-    /// The name of the biome this tile belongs to.
     pub biome: String,
-    /// An optional ID of an entity that has locked this tile.
-    pub lock_id: Option<u32>,
-    /// The number of resources remaining on this tile, if any.
-    pub remaining_resources: Option<u32>,
-    /// The simulation episode when this tile's resources were depleted.
-    pub depletion_episode: Option<u32>,
-    /// The original tile type before any changes (e.g., resource depletion).
     pub original_tile_type: char,
-    /// The health of a structure on this tile, if any.
     pub health: Option<f64>,
 }
 
 impl Tile {
-    /// Creates a new `Tile`.
     pub fn new(tile_type: char, biome: String) -> Self {
         Tile {
             tile_type,
             biome,
-            lock_id: None,
-            remaining_resources: None,
-            depletion_episode: None,
             original_tile_type: tile_type,
             health: None,
+        }
+    }
+}
+
+/// A chunk of the map, containing its own tiles and a spatial map for entities.
+#[derive(Debug, Clone)]
+pub struct MapChunk {
+    pub tiles: Vec<Vec<Tile>>,
+    pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
+}
+
+impl MapChunk {
+    pub fn new() -> Self {
+        MapChunk {
+            tiles: vec![vec![Tile::new(' ', "none".to_string()); CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+            spatial_map: HashMap::new(),
         }
     }
 }
@@ -82,61 +59,30 @@ impl Tile {
 /// Represents a biome type with its associated properties.
 #[derive(Debug, Deserialize)]
 pub struct Biome {
-    /// The name of the biome.
     pub name: String,
-    /// The character representation of the biome's default tile.
     pub tile_type: char,
-    /// The height range [min, max] for this biome to generate.
     pub height_range: [f64; 2],
 }
 
 /// Represents a resource that can be found in the world.
 #[derive(Debug, Deserialize, Clone)]
-pub struct Resource {
-    /// The name of the resource.
+pub struct ResourceDef {
     pub name: String,
-    /// A list of biomes where this resource can be found.
     pub biomes: Vec<String>,
-    /// The density of this resource within its biomes.
     pub density: f64,
 }
 
-/// Represents a rectangular region of the map for parallel processing.
-#[derive(Debug, Clone, Copy)]
-pub struct MapRegion {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-}
-
-/// Represents the game map, containing the grid of tiles and other world data.
+/// The main map resource, containing a grid of map chunks.
+#[derive(Resource, Clone)]
 pub struct Map {
-    /// The width of the map in tiles.
     pub width: u32,
-    /// The height of the map in tiles.
     pub height: u32,
-    /// The 2D grid of tiles that make up the map.
-    pub grid: Vec<Vec<Tile>>,
-    /// The list of biome definitions.
+    pub chunks: Vec<Vec<Arc<Mutex<MapChunk>>>>,
     pub biomes: Vec<Biome>,
-    /// The list of resource definitions.
-    pub resources: Vec<Resource>,
-    /// A spatial hash map to quickly look up entities at a given position.
-    pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
-    /// The regions the map is divided into for parallel processing.
-    pub regions: Vec<MapRegion>,
+    pub resources: Vec<ResourceDef>,
 }
 
 impl Map {
-    /// Creates a new `Map` instance from configuration files.
-    ///
-    /// # Arguments
-    ///
-    /// * `width` - The width of the map to create.
-    /// * `height` - The height of the map to create.
-    /// * `biomes_path` - The path to the biomes JSON configuration file.
-    /// * `resources_path` - The path to the resources JSON configuration file.
     pub fn new(
         width: u32,
         height: u32,
@@ -147,129 +93,119 @@ impl Map {
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
 
         let resources_data = fs::read_to_string(resources_path)?;
-        let resources: Vec<Resource> = serde_json::from_str(&resources_data)?;
+        let resources: Vec<ResourceDef> = serde_json::from_str(&resources_data)?;
 
-        let grid = vec![vec![Tile::new(' ', "none".to_string()); width as usize]; height as usize];
+        let chunks_x = (width as f32 / CHUNK_SIZE as f32).ceil() as usize;
+        let chunks_y = (height as f32 / CHUNK_SIZE as f32).ceil() as usize;
 
-        let regions = Self::calculate_regions(width, height);
+        let chunks = (0..chunks_y)
+            .map(|_| {
+                (0..chunks_x)
+                    .map(|_| Arc::new(Mutex::new(MapChunk::new())))
+                    .collect()
+            })
+            .collect();
 
-        Ok(Map {
+        let mut map = Map {
             width,
             height,
-            grid,
+            chunks,
             biomes,
             resources,
-            spatial_map: HashMap::new(),
-            regions,
-        })
+        };
+
+        map.generate_island_map(25.0, 5, 0.5, 2.0);
+        Ok(map)
     }
 
-    /// Calculates the map regions for parallel processing.
-    fn calculate_regions(width: u32, height: u32) -> Vec<MapRegion> {
-        let num_cores = num_cpus::get();
-        let (rows, cols) = Self::find_best_grid(num_cores);
-
-        let region_width = width / cols as u32;
-        let region_height = height / rows as u32;
-        let mut regions = Vec::new();
-
-        for row in 0..rows {
-            for col in 0..cols {
-                let x = col as u32 * region_width;
-                let y = row as u32 * region_height;
-                let w = if col == cols - 1 {
-                    width - x
-                } else {
-                    region_width
-                };
-                let h = if row == rows - 1 {
-                    height - y
-                } else {
-                    region_height
-                };
-                regions.push(MapRegion {
-                    x,
-                    y,
-                    width: w,
-                    height: h,
-                });
-            }
+    pub fn get_chunk_index(&self, x: u32, y: u32) -> Option<(usize, usize)> {
+        if x >= self.width || y >= self.height {
+            return None;
         }
-        regions
+        Some(((x / CHUNK_SIZE) as usize, (y / CHUNK_SIZE) as usize))
     }
 
-    /// Finds the best row/column combination for a grid of n items.
-    fn find_best_grid(n: usize) -> (usize, usize) {
-        if n == 0 {
-            return (0, 0);
-        }
-        let sqrt_n = (n as f64).sqrt() as usize;
-        for i in (1..=sqrt_n).rev() {
-            if n % i == 0 {
-                return (i, n / i);
-            }
-        }
-        // For prime numbers, just use a 1xN grid
-        (1, n)
+    pub fn get_tile(&self, x: u32, y: u32) -> Option<Tile> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = (x % CHUNK_SIZE) as usize;
+        let local_y = (y % CHUNK_SIZE) as usize;
+        chunk.tiles.get(local_y)?.get(local_x).cloned()
     }
 
-    /// Generates a procedural island map using noise functions.
-    ///
-    /// This method uses a combination of FBM (Fractional Brownian Motion) and
-    /// RidgedMulti noise to create a base terrain, then applies an island mask
-    /// to shape it into an island.
-    ///
-    /// # Arguments
-    ///
-    /// * `scale` - The scale of the noise function (a larger value means more zoomed in).
-    /// * `octaves` - The number of octaves for the FBM noise.
-    /// * `persistence` - The persistence for the FBM noise.
-    /// * `lacunarity` - The lacunarity for the FBM noise.
-    pub fn generate_island_map(
+    pub fn set_tile(&self, x: u32, y: u32, tile: Tile) -> Option<()> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = (x % CHUNK_SIZE) as usize;
+        let local_y = (y % CHUNK_SIZE) as usize;
+        if let Some(t) = chunk.tiles.get_mut(local_y)?.get_mut(local_x) {
+            *t = tile;
+        }
+        Some(())
+    }
+
+    pub fn add_entity_to_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = x % CHUNK_SIZE;
+        let local_y = y % CHUNK_SIZE;
+        chunk.spatial_map.entry((local_x, local_y)).or_default().push(entity);
+        Some(())
+    }
+
+    pub fn remove_entity_from_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = x % CHUNK_SIZE;
+        let local_y = y % CHUNK_SIZE;
+        if let Some(entities) = chunk.spatial_map.get_mut(&(local_x, local_y)) {
+            entities.retain(|&e| e != entity);
+        }
+        Some(())
+    }
+
+    pub fn get_entities_at(&self, x: u32, y: u32) -> Option<Vec<Entity>> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = x % CHUNK_SIZE;
+        let local_y = y % CHUNK_SIZE;
+        chunk.spatial_map.get(&(local_x, local_y)).cloned()
+    }
+
+
+    pub fn is_walkable(&self, x: u32, y: u32) -> bool {
+        self.get_tile(x, y)
+            .map_or(false, |tile| matches!(tile.tile_type, '.' | ',' | 'f'))
+    }
+
+    fn generate_island_map(
         &mut self,
         scale: f64,
         octaves: i32,
         persistence: f64,
         lacunarity: f64,
     ) {
-        let seed = rand::rng().random::<u32>();
+        let seed = rand::thread_rng().gen::<u32>();
 
-        // Base terrain using OpenSimplex
         let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
         base_fbm.octaves = octaves as usize;
         base_fbm.persistence = persistence;
         base_fbm.lacunarity = lacunarity;
 
-        // Mountainous terrain using RidgedMulti
         let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed.wrapping_add(1));
-        // We can tune RidgedMulti properties here if needed, e.g., frequency, octaves.
-        // For now, we'll use defaults and a different scale.
 
-        for y in 0..self.height {
-            for x in 0..self.width {
-                // Island mask calculations
-                let nx = 2.0 * x as f64 / self.width as f64 - 1.0;
-                let ny = 2.0 * y as f64 / self.height as f64 - 1.0;
+        for y_abs in 0..self.height {
+            for x_abs in 0..self.width {
+                let nx = 2.0 * x_abs as f64 / self.width as f64 - 1.0;
+                let ny = 2.0 * y_abs as f64 / self.height as f64 - 1.0;
                 let dist = 1.0 - (1.0 - nx.powi(2)) * (1.0 - ny.powi(2));
 
-                // Noise coordinates
-                let pos = [x as f64 / scale, y as f64 / scale];
-
-                // Calculate base noise
+                let pos = [x_abs as f64 / scale, y_abs as f64 / scale];
                 let base_noise = base_fbm.get(pos);
-
-                // Calculate mountain noise at a different scale (larger features)
-                let mountain_pos = [x as f64 / (scale * 2.5), y as f64 / (scale * 2.5)];
+                let mountain_pos = [x_abs as f64 / (scale * 2.5), y_abs as f64 / (scale * 2.5)];
                 let mountain_noise = ridged_multi.get(mountain_pos);
-
-                // Combine the noise values.
-                // The base noise provides the general elevation.
-                // The mountain_noise is weighted and added to create peaks and valleys.
-                // We square the mountain_noise to make the ridges sharper.
                 let combined_noise = base_noise + (mountain_noise.powi(2) * 0.6);
-
-                // Normalize and apply island mask
-                let island_val = (combined_noise.clamp(-1.0, 1.5) + 1.0) / 2.5; // Adjust clamping and normalization for the new range
+                let island_val = (combined_noise.clamp(-1.0, 1.5) + 1.0) / 2.5;
                 let height = island_val * (1.0 - dist);
 
                 let mut tile_char = ' ';
@@ -283,17 +219,12 @@ impl Map {
                     }
                 }
 
-                // Keep the random flower generation
-                if biome_name == "plains"
-                    && tile_char == '.'
-                    && rand::rng().random_range(0..100) < 5
-                {
+                if biome_name == "plains" && tile_char == '.' && rand::thread_rng().gen_range(0..100) < 5 {
                     tile_char = 'f';
                 }
 
-                self.grid[y as usize][x as usize] = Tile::new(tile_char, biome_name);
+                self.set_tile(x_abs, y_abs, Tile::new(tile_char, biome_name));
             }
         }
     }
-
 }

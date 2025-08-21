@@ -1,71 +1,31 @@
 use crate::components::{Inventory, Position, Resource as ResourceComponent, WantsToGather};
-use crate::ecs::World;
-use crate::errors::SimulationError;
-use crate::systems::{Resource, System, SystemResources};
-use std::collections::HashSet;
+use bevy_ecs::prelude::*;
 
-pub struct GatheringSystem;
+pub fn gathering_system(
+    mut commands: Commands,
+    mut gatherer_query: Query<(Entity, &Position, &mut Inventory, &WantsToGather)>,
+    mut resource_query: Query<(&mut ResourceComponent, &Position)>,
+) {
+    for (gatherer_entity, gatherer_pos, mut inventory, wants) in gatherer_query.iter_mut() {
+        if let Ok((mut resource, resource_pos)) = resource_query.get_mut(wants.target) {
+            let dx = (gatherer_pos.x as i32 - resource_pos.x as i32).abs();
+            let dy = (gatherer_pos.y as i32 - resource_pos.y as i32).abs();
 
-impl System for GatheringSystem {
-    fn name(&self) -> &'static str {
-        "Gathering"
-    }
+            // Check if the gatherer is adjacent to the resource
+            if dx <= 1 && dy <= 1 {
+                if resource.quantity > 0 {
+                    resource.quantity -= 1;
+                    inventory.add_item(&resource.name, 1);
 
-    fn read_resources(&self) -> HashSet<Resource> {
-        let mut resources = HashSet::new();
-        resources.insert(Resource::ItemRegistry);
-        resources
-    }
-
-    fn write_resources(&self) -> HashSet<Resource> {
-        let mut resources = HashSet::new();
-        resources.insert(Resource::World);
-        resources
-    }
-
-    fn run(&self, world: &mut World, _resources: &mut SystemResources) -> Result<(), SimulationError> {
-        let mut to_gather = Vec::new();
-        for entity in 0..world.entities.len() {
-            if let Some(wants_to_gather) = world.get_component::<WantsToGather>(entity) {
-                to_gather.push((entity, wants_to_gather.target));
-            }
-        }
-
-        for (gatherer, target) in to_gather {
-            if let (Some(gatherer_pos), Some(target_pos)) = (
-                world.get_component::<Position>(gatherer).copied(),
-                world.get_component::<Position>(target).copied(),
-            ) {
-                let dx = (gatherer_pos.x as i32 - target_pos.x as i32).abs();
-                let dy = (gatherer_pos.y as i32 - target_pos.y as i32).abs();
-
-                if dx <= 1 && dy <= 1 {
-                    let resource_name =
-                        if let Some(resource) = world.get_component_mut::<ResourceComponent>(target) {
-                            if resource.quantity > 0 {
-                                resource.quantity -= 1;
-                                Some(resource.name.clone())
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-
-                    if let Some(name) = resource_name {
-                        if let Some(inventory) = world.get_component_mut::<Inventory>(gatherer) {
-                            inventory.add_item(&name, 1);
-                        }
+                    // If the resource is depleted, despawn it
+                    if resource.quantity == 0 {
+                        commands.entity(wants.target).despawn();
                     }
                 }
             }
         }
-
-        // Reset wants to gather
-        for entity in 0..world.entities.len() {
-            world.remove_component::<WantsToGather>(entity);
-        }
-
-        Ok(())
+        // The entity has attempted to gather, so remove the component.
+        // In a more complex system, this might only be removed on success.
+        commands.entity(gatherer_entity).remove::<WantsToGather>();
     }
 }
