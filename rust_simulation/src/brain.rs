@@ -224,11 +224,11 @@ impl Brain {
         }
 
         let choose_random_goal = || {
-            let index = rand::thread_rng().random_range(0..valid_goals.len());
+            let index = rand::thread_rng().gen_range(0..valid_goals.len());
             Ok(valid_goals[index].clone())
         };
 
-        if rand::thread_rng().random::<f64>() < self.epsilon {
+        if rand::thread_rng().r#gen::<f64>() < self.epsilon {
             return choose_random_goal();
         }
 
@@ -343,31 +343,30 @@ impl Brain {
     /// The main entry point for the agent's AI logic for a single simulation tick.
     pub fn tick(
         &self,
-        brain_component: &BrainComponent, // Takes an immutable reference
+        brain_component: &mut BrainComponent, // Takes a mutable reference
         world_view: &dyn EntityFinder,
         world: &mut World, // Bevy World for component lookups
         entity: Entity,
         high_level_state: &HighLevelState,
         visible_tiles: &[(Position, Tile)],
     ) -> Result<Option<(BrainStateUpdate, BrainAction)>, SimulationError> {
-        let mut brain_component = brain_component.clone();
         let inventory = world.get::<Inventory>(entity).ok_or_else(|| SimulationError::ComponentNotFound("Inventory".to_string()))?;
 
         self.update_q_table_based_on_previous_action(
-            &mut brain_component,
+            brain_component,
             inventory,
             high_level_state,
         )?;
 
         self.update_internal_state(
-            &mut brain_component,
+            brain_component,
             world_view,
             world,
             entity,
             visible_tiles,
         );
         self.update_goal_and_plan(
-            &mut brain_component,
+            brain_component,
             inventory,
             world,
             entity,
@@ -375,7 +374,7 @@ impl Brain {
         )?;
 
         let action = self.choose_and_execute_action(
-            &mut brain_component,
+            brain_component,
             world_view,
             world,
             entity,
@@ -950,7 +949,7 @@ impl Brain {
             }
         }
         if !unvisited.is_empty() {
-            let target_idx = rand::thread_rng().random_range(0..unvisited.len());
+            let target_idx = rand::thread_rng().gen_range(0..unvisited.len());
             let target_pos = unvisited[target_idx];
             if let Some(player_pos) = world.get::<Position>(entity) {
                 if let Some(path) = pathfinding::find_path(

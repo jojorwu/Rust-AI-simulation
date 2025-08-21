@@ -48,7 +48,7 @@ pub fn brain_system(
 
         // 3. Tick the brain to get a state update and a potential action.
         let result = brain.tick(
-            &brain_comp,
+            &mut brain_comp,
             &world_view,
             world,
             entity,
