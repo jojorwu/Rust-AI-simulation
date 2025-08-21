@@ -1,4 +1,3 @@
-use crate::brain::{HighLevelState, Goal};
 use crate::components::BrainComponent;
 use crate::events::Event;
 use crate::BrainResource;

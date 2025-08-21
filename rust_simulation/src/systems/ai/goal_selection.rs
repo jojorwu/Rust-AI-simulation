@@ -1,4 +1,3 @@
-use crate::brain::Brain;
 use crate::components::{BrainComponent, Health, Inventory};
 use crate::{BrainResource, IsDay};
 use bevy_ecs::prelude::*;

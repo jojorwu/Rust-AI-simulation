@@ -1,4 +1,4 @@
-use crate::brain::{BrainAction, Goal, RelationshipStatus};
+use crate::brain::{BrainAction, Goal};
 use crate::components::{
     BrainComponent, Position, Velocity, WantsToAttack, WantsToBuild, WantsToCraft, WantsToGather,
     WantsToStoreItem, Chest,

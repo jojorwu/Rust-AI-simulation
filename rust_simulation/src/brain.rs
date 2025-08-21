@@ -188,10 +188,8 @@ impl Brain {
             return Ok(Goal::Flee);
         }
 
-        let mut rng = rand::thread_rng();
-
-        if rng.random::<f64>() < self.epsilon {
-            let index = rng.random_range(0..valid_goals.len());
+        if rand::thread_rng().random::<f64>() < self.epsilon {
+            let index = rand::thread_rng().random_range(0..valid_goals.len());
             return Ok(valid_goals[index].clone());
         }
 
@@ -215,11 +213,11 @@ impl Brain {
                 .map(|(goal, _)| goal.clone())
                 .map(Ok)
                 .unwrap_or_else(|| {
-                    let index = rng.random_range(0..valid_goals.len());
+                    let index = rand::thread_rng().random_range(0..valid_goals.len());
                     Ok(valid_goals[index].clone())
                 })
         } else {
-            let index = rng.random_range(0..valid_goals.len());
+            let index = rand::thread_rng().random_range(0..valid_goals.len());
             Ok(valid_goals[index].clone())
         }
     }
