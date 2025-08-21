@@ -6,6 +6,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -74,6 +75,7 @@ pub struct BrainComponent {
     pub prev_goal: Option<Goal>,
     pub home_base: Option<Position>,
     pub goal_q_table: HashMap<HighLevelState, HashMap<Goal, f64>>,
+    pub exploration_frontier: VecDeque<Position>,
 
     // Fields from Brain
     pub goals: Vec<Goal>,
@@ -112,6 +114,7 @@ impl BrainComponent {
             prev_goal: None,
             home_base: None,
             goal_q_table: HashMap::new(),
+            exploration_frontier: VecDeque::new(),
             goals,
             recipe_manager,
             learning_rate,
@@ -163,8 +166,9 @@ impl BrainComponent {
             return Ok(Goal::Flee);
         }
 
-        if rand::thread_rng().random::<f64>() < self.epsilon {
-            let index = rand::thread_rng().random_range(0..valid_goals.len());
+        let mut rng = rand::rng();
+        if rng.random::<f64>() < self.epsilon {
+            let index = rng.random_range(0..valid_goals.len());
             return Ok(valid_goals[index].clone());
         }
 
@@ -188,11 +192,11 @@ impl BrainComponent {
                 .map(|(goal, _)| goal.clone())
                 .map(Ok)
                 .unwrap_or_else(|| {
-                    let index = rand::thread_rng().random_range(0..valid_goals.len());
+                    let index = rng.random_range(0..valid_goals.len());
                     Ok(valid_goals[index].clone())
                 })
         } else {
-            let index = rand::thread_rng().random_range(0..valid_goals.len());
+            let index = rng.random_range(0..valid_goals.len());
             Ok(valid_goals[index].clone())
         }
     }

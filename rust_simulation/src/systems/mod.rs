@@ -7,4 +7,5 @@ pub mod gathering;
 pub mod movement;
 pub mod pickup;
 pub mod storage;
+pub mod visibility_system;
 pub mod ai;

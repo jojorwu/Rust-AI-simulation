@@ -185,7 +185,7 @@ impl Map {
         persistence: f64,
         lacunarity: f64,
     ) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let seed = rng.random::<u32>();
 
         let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
