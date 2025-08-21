@@ -83,7 +83,7 @@ pub struct BrainStateUpdate {
 }
 
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct InventorySummary {
     /// Whether the agent has any wood.
     pub has_wood: bool,
@@ -97,7 +97,7 @@ pub struct InventorySummary {
 
 /// Represents the high-level state of the agent and its environment.
 /// This is used as the input to the Q-learning model for goal selection.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct HighLevelState {
     /// A summary of the agent's inventory.
     pub inventory_summary: InventorySummary,
@@ -230,8 +230,7 @@ impl Brain {
             return Ok(valid_goals[index].clone());
         }
 
-        let state_key_str = serde_json::to_string(state)?;
-        if let Some(q_values) = brain_component.goal_q_table.get(&state_key_str) {
+        if let Some(q_values) = brain_component.goal_q_table.get(state) {
             q_values
                 .iter()
                 .filter(|(g, _)| self.is_goal_valid(brain_component, world, g))
@@ -651,17 +650,15 @@ impl Brain {
         reward: f64,
         new_state: &HighLevelState,
     ) -> Result<(), SimulationError> {
-        let prev_state_key = serde_json::to_string(prev_state)?;
-        let new_state_key = serde_json::to_string(new_state)?;
         let old_q_value = brain_component
             .goal_q_table
-            .get(&prev_state_key)
+            .get(prev_state)
             .and_then(|q| q.get(goal))
             .cloned()
             .unwrap_or(0.0);
         let max_future_q = brain_component
             .goal_q_table
-            .get(&new_state_key)
+            .get(new_state)
             .map(|q| {
                 q.values()
                     .cloned()
@@ -673,7 +670,7 @@ impl Brain {
             + self.learning_rate * (reward + self.discount_factor * max_future_q - old_q_value);
         brain_component
             .goal_q_table
-            .entry(prev_state_key)
+            .entry(prev_state.clone())
             .or_default()
             .insert(goal.clone(), new_q_value);
         Ok(())

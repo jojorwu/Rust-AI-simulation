@@ -3,8 +3,6 @@ use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::env;
-use std::fs;
 use std::hash::{Hash, Hasher};
 
 #[derive(Component, Debug, Clone, Copy, Eq)]
@@ -71,7 +69,7 @@ pub struct BrainComponent {
     pub prev_state: Option<HighLevelState>,
     pub prev_goal: Option<Goal>,
     pub home_base: Option<Position>,
-    pub goal_q_table: HashMap<String, HashMap<Goal, f64>>,
+    pub goal_q_table: HashMap<HighLevelState, HashMap<Goal, f64>>,
 }
 
 impl Default for BrainComponent {
@@ -82,14 +80,6 @@ impl Default for BrainComponent {
 
 impl BrainComponent {
     pub fn new() -> Self {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let q_table_path = std::path::Path::new(&manifest_dir).join("../q_table.json");
-        let goal_q_table = if let Ok(file) = fs::read_to_string(q_table_path) {
-            serde_json::from_str(&file).unwrap_or_default()
-        } else {
-            HashMap::new()
-        };
-
         BrainComponent {
             mental_map: vec![
                 vec![None; crate::config::WIDTH as usize];
@@ -104,7 +94,7 @@ impl BrainComponent {
             prev_state: None,
             prev_goal: None,
             home_base: None,
-            goal_q_table,
+            goal_q_table: HashMap::new(),
         }
     }
 }
