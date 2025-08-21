@@ -224,11 +224,11 @@ impl Brain {
         }
 
         let choose_random_goal = || {
-            let index = rand::thread_rng().gen_range(0..valid_goals.len());
+            let index = rand::thread_rng().random_range(0..valid_goals.len());
             Ok(valid_goals[index].clone())
         };
 
-        if rand::thread_rng().gen::<f64>() < self.epsilon {
+        if rand::thread_rng().random::<f64>() < self.epsilon {
             return choose_random_goal();
         }
 
@@ -345,7 +345,7 @@ impl Brain {
         &self,
         brain_component: &BrainComponent, // Takes an immutable reference
         world_view: &dyn EntityFinder,
-        world: &World, // Bevy World for component lookups
+        world: &mut World, // Bevy World for component lookups
         entity: Entity,
         high_level_state: &HighLevelState,
         visible_tiles: &[(Position, Tile)],
@@ -568,7 +568,7 @@ impl Brain {
         &self,
         brain_component: &mut BrainComponent,
         world_view: &dyn EntityFinder,
-        world: &World,
+        world: &mut World,
         entity: Entity,
     ) -> Result<Option<BrainAction>, SimulationError> {
         self._choose_action_for_goal(brain_component, world_view, world, entity)
@@ -579,7 +579,7 @@ impl Brain {
         &self,
         brain_component: &mut BrainComponent,
         world_view: &dyn EntityFinder,
-        world: &World,
+        world: &mut World,
         entity: Entity,
     ) -> Result<Option<BrainAction>, SimulationError> {
         if let Some(action) = self.follow_path(brain_component, world, entity) {
@@ -950,7 +950,7 @@ impl Brain {
             }
         }
         if !unvisited.is_empty() {
-            let target_idx = rand::thread_rng().gen_range(0..unvisited.len());
+            let target_idx = rand::thread_rng().random_range(0..unvisited.len());
             let target_pos = unvisited[target_idx];
             if let Some(player_pos) = world.get::<Position>(entity) {
                 if let Some(path) = pathfinding::find_path(
@@ -969,7 +969,7 @@ impl Brain {
     fn execute_stockpile_goal(
         &self,
         brain_component: &mut BrainComponent,
-        world: &World,
+        world: &mut World,
         entity: Entity,
         resource: &str,
     ) -> Result<Option<BrainAction>, SimulationError> {
@@ -1006,7 +1006,7 @@ impl Brain {
     }
 
     /// Finds the closest chest to a given position.
-    fn find_closest_chest(&self, world: &World, pos: &Position) -> Option<(Entity, Position)> {
+    fn find_closest_chest(&self, world: &mut World, pos: &Position) -> Option<(Entity, Position)> {
         world.query::<(Entity, &Position, &Chest)>()
             .iter(world)
             .map(|(e, p, _c)| (e, *p))

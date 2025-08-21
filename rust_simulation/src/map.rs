@@ -57,7 +57,7 @@ impl MapChunk {
 }
 
 /// Represents a biome type with its associated properties.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Biome {
     pub name: String,
     pub tile_type: char,
@@ -185,7 +185,7 @@ impl Map {
         persistence: f64,
         lacunarity: f64,
     ) {
-        let seed = rand::thread_rng().gen::<u32>();
+        let seed = rand::thread_rng().random::<u32>();
 
         let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
         base_fbm.octaves = octaves as usize;
@@ -219,7 +219,7 @@ impl Map {
                     }
                 }
 
-                if biome_name == "plains" && tile_char == '.' && rand::thread_rng().gen_range(0..100) < 5 {
+                if biome_name == "plains" && tile_char == '.' && rand::thread_rng().random_range(0..100) < 5 {
                     tile_char = 'f';
                 }
 

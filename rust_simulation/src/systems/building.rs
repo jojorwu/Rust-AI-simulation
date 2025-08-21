@@ -1,6 +1,6 @@
 use crate::components::{Chest, Inventory, Position, WantsToBuild};
 use crate::events::Event;
-use crate::lib::RecipeManagerResource;
+use crate::RecipeManagerResource;
 use crate::map::{Map, CHUNK_SIZE};
 use bevy_ecs::prelude::*;
 

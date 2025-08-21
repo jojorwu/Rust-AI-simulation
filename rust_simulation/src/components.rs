@@ -63,7 +63,7 @@ pub struct WantsToStoreItem {
 pub struct BrainComponent {
     pub mental_map: Vec<Vec<Option<MemoryTile>>>,
     pub known_resources: HashMap<String, HashSet<Position>>,
-    pub player_memories: HashMap<u32, PlayerMemory>,
+    pub player_memories: HashMap<Entity, PlayerMemory>,
     pub current_goal: Option<Goal>,
     pub goal_stack: Vec<Goal>,
     pub current_path: Option<Vec<(u32, u32)>>,

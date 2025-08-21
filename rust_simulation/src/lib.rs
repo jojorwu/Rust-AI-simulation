@@ -21,6 +21,7 @@ pub mod renderer;
 pub mod world;
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::schedule::ScheduleLabel;
 use std::sync::Arc;
 
 use brain::Brain;
@@ -100,12 +101,24 @@ pub fn setup_world(
     Ok(world)
 }
 
+#[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MySchedule {
+    Main,
+    Test,
+}
+
+fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCount>) {
+    tick_count.0 += 1;
+    is_day.0 = (tick_count.0 % (DAY_LENGTH + NIGHT_LENGTH)) < DAY_LENGTH;
+}
+
 /// Creates the main schedule for the simulation.
 pub fn create_schedule() -> Schedule {
-    let mut schedule = Schedule::new();
+    let mut schedule = Schedule::new(MySchedule::Main);
 
     // Add systems to the schedule
     // Note: These systems need to be refactored to be Bevy systems.
+    schedule.add_systems(update_day_night);
     schedule.add_systems((
         // -- Perception --
         // visibility::visibility_system,
@@ -129,6 +142,47 @@ pub fn create_schedule() -> Schedule {
     schedule
 }
 
+pub struct Game {
+    pub world: World,
+    schedule: Schedule,
+    pub road_manager: road_manager::RoadManager,
+}
+
+impl Game {
+    pub fn new(
+        biomes_path: &str,
+        resources_path: &str,
+        items_path: &str,
+        recipes_path: &str,
+    ) -> Result<Self, SimulationError> {
+        let world = setup_world(biomes_path, resources_path, items_path, recipes_path)?;
+        let schedule = create_schedule();
+        let road_manager = road_manager::RoadManager::new();
+        Ok(Game {
+            world,
+            schedule,
+            road_manager,
+        })
+    }
+
+    pub fn tick(&mut self) -> Result<(), SimulationError> {
+        self.schedule.run(&mut self.world);
+        Ok(())
+    }
+
+    pub fn is_day(&self) -> bool {
+        self.world.get_resource::<IsDay>().unwrap().0
+    }
+
+    pub fn tick_count(&self) -> u32 {
+        self.world.get_resource::<TickCount>().unwrap().0
+    }
+
+    pub fn new_generation(&mut self) -> Result<(), SimulationError> {
+        Ok(())
+    }
+}
+
 
 // --- Tests ---
 
@@ -150,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_world_setup() -> Result<(), SimulationError> {
-        let world = create_test_world()?;
+        let mut world = create_test_world()?;
         assert_eq!(world.query::<&Player>().iter(&world).count(), NUM_PLAYERS as usize);
 
         let map = world.get_resource::<Map>().unwrap();
@@ -166,31 +220,32 @@ mod tests {
     #[test]
     fn test_day_night_cycle() {
         let mut world = create_test_world().unwrap();
-        let mut schedule = Schedule::new();
-
-        // System to update the day/night cycle
-        fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCount>) {
-            tick_count.0 += 1;
-            is_day.0 = (tick_count.0 % (DAY_LENGTH + NIGHT_LENGTH)) < DAY_LENGTH;
-        }
+        let mut schedule = Schedule::new(MySchedule::Test);
 
         schedule.add_systems(update_day_night);
 
-        world.get_resource_mut::<TickCount>().unwrap().0 = 0;
+        // Initial state
+        assert!(world.get_resource::<IsDay>().unwrap().0);
+        assert_eq!(world.get_resource::<TickCount>().unwrap().0, 0);
+
+        // Test day -> day
         schedule.run(&mut world);
         assert!(world.get_resource::<IsDay>().unwrap().0);
+        assert_eq!(world.get_resource::<TickCount>().unwrap().0, 1);
 
+        // Test day -> night transition
         world.get_resource_mut::<TickCount>().unwrap().0 = DAY_LENGTH - 1;
-        schedule.run(&mut world);
-        assert!(world.get_resource::<IsDay>().unwrap().0);
-
         schedule.run(&mut world); // Tick becomes DAY_LENGTH
         assert!(!world.get_resource::<IsDay>().unwrap().0);
+        assert_eq!(world.get_resource::<TickCount>().unwrap().0, DAY_LENGTH);
 
-        world.get_resource_mut::<TickCount>().unwrap().0 = DAY_LENGTH + NIGHT_LENGTH -1;
+        // Test night -> night
         schedule.run(&mut world);
         assert!(!world.get_resource::<IsDay>().unwrap().0);
+        assert_eq!(world.get_resource::<TickCount>().unwrap().0, DAY_LENGTH + 1);
 
+        // Test night -> day transition
+        world.get_resource_mut::<TickCount>().unwrap().0 = DAY_LENGTH + NIGHT_LENGTH - 1;
         schedule.run(&mut world); // Tick becomes DAY_LENGTH + NIGHT_LENGTH
         assert!(world.get_resource::<IsDay>().unwrap().0);
     }

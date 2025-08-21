@@ -64,7 +64,7 @@ fn main() -> Result<(), SimulationError> {
     for episode in 0..EPISODES {
         for _step in 0..MAX_STEPS_PER_EPISODE {
             game.tick()?;
-            renderer.render(&game);
+            renderer.render(&mut game);
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         if (episode + 1) % 200 == 0 {

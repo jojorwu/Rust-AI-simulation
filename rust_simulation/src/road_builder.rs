@@ -1,5 +1,6 @@
 use crate::config::RoadConfig;
 use crate::errors::SimulationError;
+use crate::map::{Map, Tile};
 use crate::road::*;
 use crate::Game;
 use std::collections::HashMap;
@@ -22,6 +23,8 @@ fn _generate_roads_from_config(game: &mut Game) -> Result<(), SimulationError> {
     city_locations.insert("CityD".to_string(), (90, 85));
     city_locations.insert("Old_Mine".to_string(), (50, 90));
 
+    let map = game.world.get_resource_mut::<Map>().unwrap();
+
     for setting in road_config.road_settings {
         let start_pos = city_locations
             .get(&setting.start_point)
@@ -43,14 +46,13 @@ fn _generate_roads_from_config(game: &mut Game) -> Result<(), SimulationError> {
 
         for point in &road.path {
             if point.x >= 0.0
-                && point.x < game.parallel_state.map.width as f32
+                && point.x < map.width as f32
                 && point.y >= 0.0
-                && point.y < game.parallel_state.map.height as f32
+                && point.y < map.height as f32
             {
-                let x = point.x as usize;
-                let y = point.y as usize;
-                let tile = &mut game.parallel_state.map.grid[y][x];
-                tile.tile_type = '=';
+                let x = point.x as u32;
+                let y = point.y as u32;
+                map.set_tile(x, y, Tile::new('=', "road".to_string()));
             }
         }
         game.road_manager.add_road(road);

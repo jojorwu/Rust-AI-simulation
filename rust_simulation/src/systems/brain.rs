@@ -33,6 +33,7 @@ pub fn brain_system(
     brain_res: Res<BrainResource>,
     map: Res<Map>,
     is_day: Res<IsDay>,
+    world: &mut World,
 ) {
     let brain = &brain_res.0;
     let world_view = WorldView { map: &map };
@@ -49,6 +50,7 @@ pub fn brain_system(
         let result = brain.tick(
             &brain_comp,
             &world_view,
+            world,
             entity,
             &high_level_state,
             &visible_tiles,

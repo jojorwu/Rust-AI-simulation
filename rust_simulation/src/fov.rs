@@ -93,11 +93,11 @@ fn scan(row: i32, mut start_slope: f32, end_slope: f32, context: &mut ScanContex
 }
 
 fn is_opaque(pos: Position, map: &Map) -> bool {
-    if pos.x >= map.width || pos.y >= map.height {
-        return true;
+    if let Some(tile) = map.get_tile(pos.x, pos.y) {
+        matches!(tile.tile_type, '#' | 'f' | 'T')
+    } else {
+        true
     }
-    let tile_type = map.grid[pos.y as usize][pos.x as usize].tile_type;
-    matches!(tile_type, '#' | 'f' | 'T')
 }
 
 fn transform_octant(x: i32, y: i32, octant: u8) -> (i32, i32) {
