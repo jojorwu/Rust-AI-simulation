@@ -289,6 +289,8 @@ mod tests {
 
     #[test]
     fn test_goal_selection_flee_on_low_health() {
+        use components::intents::IntendsToFlee;
+
         let mut world = create_test_world().unwrap();
         let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
 
@@ -301,9 +303,34 @@ mod tests {
         schedule.add_systems(goal_selection::goal_selection_system);
         schedule.run(&mut world);
 
-        // Check that the agent chose to flee
-        let brain = world.get::<BrainComponent>(player_entity).unwrap();
-        // The goal stack should contain Flee, which is then popped into current_goal
-        assert!(matches!(brain.current_goal, Some(brain::Goal::Flee)), "Agent did not choose to Flee on low health");
+        // Check that the agent now intends to flee
+        let player_has_flee_intent = world.get::<IntendsToFlee>(player_entity).is_some();
+        assert!(player_has_flee_intent, "Agent should have IntendsToFlee component on low health");
+    }
+
+    #[test]
+    fn test_craft_action_flow() {
+        use components::intents::IntendsToCraft;
+        use components::WantsToCraft;
+
+        let mut world = create_test_world().unwrap();
+        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+
+        // Manually add the intent
+        world.entity_mut(player_entity).insert(IntendsToCraft("stone_axe".to_string()));
+
+        // Run the craft action system
+        let mut schedule = Schedule::new(MySchedule::Test);
+        schedule.add_systems(actions::craft::craft_action_system);
+        schedule.run(&mut world);
+
+        // Check that the agent now wants to craft the item
+        let wants_to_craft = world.get::<WantsToCraft>(player_entity);
+        assert!(wants_to_craft.is_some(), "Player should have WantsToCraft component");
+        assert_eq!(wants_to_craft.unwrap().item_name, "stone_axe");
+
+        // Check that the intent component was removed
+        let intent_was_removed = world.get::<IntendsToCraft>(player_entity).is_none();
+        assert!(intent_was_removed, "IntendsToCraft component should be removed after system runs");
     }
 }

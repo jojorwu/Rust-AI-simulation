@@ -10,6 +10,8 @@ use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+pub mod intents;
+
 #[derive(Component, Debug, Clone, Copy, Eq)]
 pub struct Position {
     pub x: u32,

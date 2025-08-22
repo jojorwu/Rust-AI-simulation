@@ -1,25 +1,28 @@
 use bevy_ecs::prelude::*;
-use crate::brain::{BrainAction, Goal};
-use crate::components::{BrainComponent, Position};
+use crate::brain::BrainAction;
+use crate::components::{intents::IntendsToExplore, BrainComponent, Position};
 use crate::errors::SimulationError;
 use crate::pathfinding;
 use super::{apply_brain_action, follow_path};
 
 pub fn explore_action_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut BrainComponent, &Position)>,
+    mut query: Query<(Entity, &mut BrainComponent, &Position), With<IntendsToExplore>>,
 ) {
     for (entity, mut brain_component, position) in query.iter_mut() {
-        if let Some(Goal::Explore) = &brain_component.current_goal {
-            if let Some(action) = follow_path(&mut brain_component, position) {
-                apply_brain_action(&mut commands, entity, action);
-                continue;
-            }
+        if let Some(action) = follow_path(&mut brain_component, position) {
+            apply_brain_action(&mut commands, entity, action);
+            continue;
+        }
 
-            let result = execute_explore_goal(&mut brain_component, position);
-             if let Ok(Some(action)) = result {
-                apply_brain_action(&mut commands, entity, action);
-            }
+        let result = execute_explore_goal(&mut brain_component, position);
+        if let Ok(Some(action)) = result {
+            apply_brain_action(&mut commands, entity, action);
+        }
+
+        // If the goal was set to None, it means exploration is done.
+        if brain_component.current_goal.is_none() {
+            commands.entity(entity).remove::<IntendsToExplore>();
         }
     }
 }
@@ -32,13 +35,9 @@ fn execute_explore_goal(
         return Ok(None);
     }
 
-    // Get the next destination from the frontier
     if let Some(target_pos) = brain_component.exploration_frontier.pop_front() {
-        // If the target is already explored (e.g., seen while pathing), get a new one.
         if brain_component.mental_map[target_pos.y as usize][target_pos.x as usize].is_some() {
-            // This could be recursive, but a simple loop is safer to avoid stack overflow.
-            // For now, we'll just try again on the next tick by returning Ok(None).
-            brain_component.exploration_frontier.push_back(target_pos); // Add it back to try later
+            brain_component.exploration_frontier.push_back(target_pos);
             return Ok(None);
         }
 
@@ -49,8 +48,6 @@ fn execute_explore_goal(
         ) {
             brain_component.current_path = Some(path);
         } else {
-            // Could not find a path to the frontier, maybe it's unreachable.
-            // Add it back to the end of the queue to try later.
             brain_component.exploration_frontier.push_back(target_pos);
         }
     } else {

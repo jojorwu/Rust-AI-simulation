@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
-use crate::brain::{BrainAction, Goal};
-use crate::components::{BrainComponent, Position, WantsToStoreItem, Chest};
+use crate::brain::BrainAction;
+use crate::components::{intents::IntendsToStockpile, BrainComponent, Position, WantsToStoreItem, Chest};
 use crate::errors::SimulationError;
 use crate::pathfinding;
 use super::{apply_brain_action, follow_path};
@@ -8,20 +8,26 @@ use super::{apply_brain_action, follow_path};
 
 pub fn stockpile_action_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut BrainComponent, &Position)>,
+    mut query: Query<(Entity, &mut BrainComponent, &Position, &IntendsToStockpile)>,
     chest_query: Query<(Entity, &Position, &Chest)>,
 ) {
-    for (entity, mut brain_component, position) in query.iter_mut() {
-        if let Some(Goal::Stockpile(resource_name)) = brain_component.current_goal.clone() {
-            if let Some(action) = follow_path(&mut brain_component, position) {
-                apply_brain_action(&mut commands, entity, action);
-                continue;
-            }
+    for (entity, mut brain_component, position, intent) in query.iter_mut() {
+        let resource_name = &intent.0;
 
-            let result = execute_stockpile_goal(&mut brain_component, &chest_query, position, &resource_name);
-            if let Ok(Some(action)) = result {
-                apply_brain_action(&mut commands, entity, action);
-            }
+        if let Some(action) = follow_path(&mut brain_component, position) {
+            apply_brain_action(&mut commands, entity, action);
+            continue;
+        }
+
+        let result = execute_stockpile_goal(&mut brain_component, &chest_query, position, resource_name);
+        if let Ok(Some(action)) = result {
+            apply_brain_action(&mut commands, entity, action);
+            // The intent is to *start* stockpiling, which is now done.
+            // The goal is completed by the storage system.
+            commands.entity(entity).remove::<IntendsToStockpile>();
+        } else if brain_component.current_goal.is_none() {
+            // Goal was impossible (e.g., no chest), so remove intent.
+            commands.entity(entity).remove::<IntendsToStockpile>();
         }
     }
 }
