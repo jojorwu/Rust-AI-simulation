@@ -143,8 +143,8 @@ fn choose_goal(
         return Ok(Goal::Flee);
     }
 
-    if rng.random::<f64>() < brain.epsilon {
-        let index = rng.random_range(0..valid_goals.len());
+    if rng.r#gen::<f64>() < brain.epsilon {
+        let index = rng.r#gen_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
@@ -168,11 +168,11 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = rng.random_range(0..valid_goals.len());
+                let index = rng.r#gen_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = rng.random_range(0..valid_goals.len());
+        let index = rng.r#gen_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
 }

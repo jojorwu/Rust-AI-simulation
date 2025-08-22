@@ -1,16 +1,12 @@
-use crate::components::ai::MentalMap;
+use crate::{
+    components::{ai::MentalMap, Inventory, Position},
+    recipes::RecipeManager,
+};
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{Receiver, Sender};
-use std::collections::VecDeque;
-
-use crate::recipes::RecipeManager;
-use std::collections::HashMap;
-use std::sync::Arc;
-use crate::components::Inventory;
+use std::{collections::{HashMap, VecDeque}, sync::Arc};
 
 // --- Task Data Payloads ---
-// These structs are used to package up the data needed for a task.
-// They are not sent over a channel, but moved directly into the async task closure.
 
 pub struct PathfindingTask {
     pub entity: Entity,
@@ -26,26 +22,37 @@ pub struct CraftingTask {
     pub recipe_manager: Arc<RecipeManager>,
 }
 
+pub struct GatheringTask {
+    pub agent_entity: Entity,
+    pub resource_entity: Entity,
+    pub resource_name: String,
+    pub resource_quantity: u32,
+}
+
+pub struct BuildingTask {
+    pub builder_entity: Entity,
+    pub position: Position,
+    pub inventory: Inventory,
+    pub structure_name: String,
+    pub recipe_manager: Arc<RecipeManager>,
+}
 
 // --- Result Definitions ---
 
-/// The result of an asynchronous task.
-/// This is sent from a background thread to the main thread.
 #[derive(Debug)]
 pub enum AsyncResult {
     Pathfinding(PathfindingResult),
     Crafting(CraftingResult),
-    // Other results like Crafting, Gathering, etc., will be added here.
+    Gathering(GatheringResult),
+    Building(BuildingResult),
 }
 
-/// The result of a pathfinding calculation.
 #[derive(Debug)]
 pub struct PathfindingResult {
     pub entity: Entity,
     pub path: Option<VecDeque<(u32, u32)>>,
 }
 
-/// The result of a crafting calculation.
 #[derive(Debug)]
 pub struct CraftingResult {
     pub entity: Entity,
@@ -54,10 +61,26 @@ pub struct CraftingResult {
     pub success: bool,
 }
 
+#[derive(Debug)]
+pub struct GatheringResult {
+    pub agent_entity: Entity,
+    pub resource_entity: Entity,
+    pub resource_name: String,
+    pub gathered_amount: u32,
+    pub despawn_resource: bool,
+}
+
+#[derive(Debug)]
+pub struct BuildingResult {
+    pub builder_entity: Entity,
+    pub position: Position,
+    pub structure_name: String,
+    pub required_resources: HashMap<String, u32>,
+    pub success: bool,
+}
 
 // --- Channel Resource ---
 
-/// A Bevy resource that holds the MPSC channel for receiving asynchronous results.
 #[derive(Resource)]
 pub struct AsyncResultChannel {
     pub sender: Sender<AsyncResult>,

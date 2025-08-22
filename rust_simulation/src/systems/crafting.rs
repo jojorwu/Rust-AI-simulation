@@ -4,7 +4,6 @@ use crate::RecipeManagerResource;
 use bevy_ecs::prelude::*;
 use rayon::spawn;
 
-/// This system dispatches crafting tasks to a background thread pool.
 pub fn crafting_dispatcher_system(
     mut commands: Commands,
     query: Query<(Entity, &Inventory, &WantsToCraft)>,
@@ -12,7 +11,6 @@ pub fn crafting_dispatcher_system(
     channel: Res<AsyncResultChannel>,
 ) {
     for (entity, inventory, wants_to_craft) in query.iter() {
-        // The request is being handled, so remove it immediately.
         commands.entity(entity).remove::<WantsToCraft>();
 
         let task = crate::async_task::CraftingTask {
@@ -33,7 +31,6 @@ pub fn crafting_dispatcher_system(
     }
 }
 
-/// This worker function runs on a background thread to check if crafting is possible.
 fn craft_worker(task: crate::async_task::CraftingTask) -> CraftingResult {
     let required_resources =
         task.recipe_manager

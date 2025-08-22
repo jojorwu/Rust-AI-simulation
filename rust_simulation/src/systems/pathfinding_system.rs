@@ -2,7 +2,6 @@ use crate::async_task::{AsyncResult, AsyncResultChannel, PathfindingResult};
 use crate::components::{ai::MentalMap, path::PathRequest};
 use crate::pathfinding;
 use bevy_ecs::prelude::*;
-use log::debug;
 use rayon::spawn;
 
 pub fn pathfinding_system(
@@ -13,11 +12,6 @@ pub fn pathfinding_system(
     for (entity, request, mental_map) in query.iter() {
         // The request is being handled, so remove it immediately.
         commands.entity(entity).remove::<PathRequest>();
-
-        debug!(
-            "Spawning pathfinding task for {:?} from {:?} to {:?}",
-            entity, request.start, request.goal
-        );
 
         let sender = channel.sender.clone();
         let start = request.start;
