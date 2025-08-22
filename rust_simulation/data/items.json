@@ -9,6 +9,7 @@
     "stackable": false,
     "tool": true,
     "improves_gathering": ["wood", "stone"],
+    "tier": 1,
     "properties": {
       "damage": 5.0,
       "efficiency": 3.0,
@@ -19,6 +20,7 @@
     "name": "stone_pickaxe",
     "stackable": false,
     "tool": true,
+    "tier": 1,
     "properties": {
       "damage": 3.0,
       "efficiency": 4.0,
@@ -29,6 +31,7 @@
     "name": "metal_pickaxe",
     "stackable": false,
     "tool": true,
+    "tier": 2,
     "properties": {
       "damage": 5.0,
       "efficiency": 6.0,
@@ -39,6 +42,7 @@
     "name": "iron_axe",
     "stackable": false,
     "tool": true,
+    "tier": 2,
     "properties": {
       "damage": 8.0,
       "efficiency": 5.0,

@@ -214,14 +214,24 @@ fn plan_goal(
     match goal {
         Goal::GatherResource(resource) => {
             // Find the best tool in inventory for this resource.
-            let best_tool = inventory.items.keys().find(|item_name| {
-                if let Some(item_def) = brain.item_registry.get_item(item_name) {
-                    if let Some(improves) = &item_def.improves_gathering {
-                        return improves.contains(resource);
-                    }
-                }
-                false
-            });
+            let best_tool = inventory
+                .items
+                .keys()
+                .filter_map(|item_name| {
+                    brain
+                        .item_registry
+                        .get_item(item_name)
+                        .and_then(|item_def| {
+                            if let Some(improves) = &item_def.improves_gathering {
+                                if improves.contains(resource) {
+                                    return Some((item_name, item_def.tier));
+                                }
+                            }
+                            None
+                        })
+                })
+                .max_by_key(|&(_, tier)| tier)
+                .map(|(name, _)| name);
 
             // If we found a best tool and it's not equipped, plan to equip it.
             if let Some(tool) = best_tool {

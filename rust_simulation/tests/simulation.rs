@@ -5,7 +5,6 @@ use bevy_ecs::schedule::apply_deferred;
 use common::create_test_world;
 use rust_simulation::{
     components::{
-        ai::*,
         intents::*,
         path::*,
         BrainComponent, Health, Inventory, Position, Resource as ResourceComponent, WantsToCraft, Equipped,
@@ -162,7 +161,7 @@ fn test_pathfinding_flow() {
     let mut world = create_test_world().unwrap();
     let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
 
-    let mut map = world.get_resource_mut::<rust_simulation::map::Map>().unwrap();
+    let map = world.get_resource_mut::<rust_simulation::map::Map>().unwrap();
     map.set_tile(1, 0, rust_simulation::map::Tile::new('.', "grassland".to_string()));
     drop(map);
 

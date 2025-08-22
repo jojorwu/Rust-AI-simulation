@@ -33,7 +33,7 @@ pub fn throwing_system(
         inventory.remove_item(&wants_to_throw.item_name, 1);
 
         // 3. Determine if the throw hits.
-        let (target_entity, target_pos, mut target_health) =
+        let (_target_entity, target_pos, mut target_health) =
             if let Ok(result) = target_query.get_mut(wants_to_throw.target) {
                 result
             } else {
