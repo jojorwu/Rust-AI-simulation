@@ -147,6 +147,7 @@ pub fn create_schedule() -> Schedule {
             actions::flee::flee_action_system,
             actions::explore::explore_action_system,
             actions::stockpile::stockpile_action_system,
+            actions::equip::equip_action_system,
             systems::gathering::gathering_movement_system,
             systems::ai::pathfinding_failure::handle_pathfinding_failure_system,
         )
@@ -184,6 +185,7 @@ pub fn create_schedule() -> Schedule {
             building::building_system,
             storage::storage_system,
             combat::combat_system,
+            equip::equip_system,
         )
             .in_set(SimulationSet::SyncActions),
     );

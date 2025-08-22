@@ -52,7 +52,7 @@ pub fn goal_selection_system(
                 &mut rng,
             ) {
                 if let Ok(mut plan) =
-                    plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
+                    plan_goal(&brain, inventory, known_resources, &new_high_level_goal, equipped)
                 {
                     plan.reverse();
                     brain.goal_stack = plan;
@@ -73,6 +73,9 @@ pub fn goal_selection_system(
                             }
                             Goal::Attack(target) => {
                                 commands.entity(entity).insert(IntendsToAttack(*target));
+                            }
+                            Goal::Equip(tool) => {
+                                commands.entity(entity).insert(IntendsToEquip(tool.clone()));
                             }
                             Goal::Flee => {
                                 commands.entity(entity).insert(IntendsToFlee);
@@ -98,7 +101,7 @@ use crate::brain::ResourceLevel;
 /// Constructs the high-level state of an agent from its components.
 use crate::components::Equipped;
 
-fn get_high_level_state(
+pub fn get_high_level_state(
     health: &Health,
     inventory: &Inventory,
     player_memories: &PlayerMemories,
@@ -211,9 +214,17 @@ fn plan_goal(
     inventory: &Inventory,
     known_resources: &KnownResources,
     goal: &Goal,
+    equipped: &Equipped,
 ) -> Result<Vec<Goal>, SimulationError> {
     let mut plan = Vec::new();
     match goal {
+        Goal::GatherResource(resource) => {
+            // If gathering wood and we have an axe, plan to equip it first.
+            if resource == "wood" && inventory.has_item("stone_axe", 1) && equipped.tool.as_deref() != Some("stone_axe") {
+                plan.push(Goal::Equip("stone_axe".to_string()));
+            }
+            plan.push(goal.clone());
+        }
         Goal::CraftItem(item_name) => {
             let required = brain
                 .recipe_manager

@@ -44,6 +44,8 @@ pub enum Goal {
     Build(String),
     /// Attack a specific entity.
     Attack(Entity),
+    /// Equip a specific tool.
+    Equip(String),
     /// Flee from a threat.
     Flee,
     /// Explore the map to find resources.

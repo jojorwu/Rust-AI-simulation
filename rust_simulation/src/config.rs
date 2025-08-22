@@ -33,6 +33,11 @@ pub const EPSILON: f64 = 1.0;
 pub const GOAL_REWARD: f64 = 10.0;
 pub const GOAL_PENALTY: f64 = -0.1;
 pub const BUILD_GOAL_BONUS: f64 = 10.0;
+pub const GATHER_REWARD: f64 = 1.0;
+pub const GATHER_IRON_ORE_REWARD: f64 = 5.0;
+pub const CRAFT_REWARD: f64 = 5.0;
+pub const CRAFT_STONE_AXE_REWARD: f64 = 10.0;
+pub const EQUIP_TOOL_REWARD: f64 = 2.0;
 
 // --- AI ---
 pub const FLEE_HEALTH_THRESHOLD: u32 = 25;

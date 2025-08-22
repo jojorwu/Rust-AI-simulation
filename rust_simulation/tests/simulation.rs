@@ -8,7 +8,7 @@ use rust_simulation::{
         ai::*,
         intents::*,
         path::*,
-        BrainComponent, Health, Inventory, Position, Resource as ResourceComponent, WantsToCraft,
+        BrainComponent, Health, Inventory, Position, Resource as ResourceComponent, WantsToCraft, Equipped,
     },
     Player,
     config::{DAY_LENGTH, NUM_PLAYERS},
@@ -117,6 +117,44 @@ fn test_pathfinding_failure_triggers_goal_reset() {
         brain.current_goal.is_none(),
         "Goal should be reset on pathfinding failure"
     );
+}
+
+#[test]
+fn test_equip_flow() {
+    let mut world = create_test_world().unwrap();
+    let player_entity = world
+        .query_filtered::<Entity, With<Player>>()
+        .iter(&world)
+        .next()
+        .unwrap();
+
+    // Give player a tool
+    let mut inventory = world.get_mut::<Inventory>(player_entity).unwrap();
+    inventory.add_item("stone_axe", 1);
+    drop(inventory);
+
+    // Add the desire to equip
+    world.entity_mut(player_entity).insert(WantsToEquip("stone_axe".to_string()));
+
+    // Run the system
+    let mut schedule = Schedule::new(MySchedule::Test);
+    schedule.add_systems(systems::equip::equip_system);
+    schedule.run(&mut world);
+
+    // Check that the tool is equipped and removed from inventory
+    let equipped = world.get::<Equipped>(player_entity).unwrap();
+    assert_eq!(equipped.tool.as_deref(), Some("stone_axe"));
+
+    let inventory = world.get::<Inventory>(player_entity).unwrap();
+    assert!(!inventory.has_item("stone_axe", 1));
+
+    // Check that the event was fired
+    let events = world.get_resource::<Events<rust_simulation::events::Event>>().unwrap();
+    let mut reader = events.get_reader();
+    let event_fired = reader.read(events).any(|event| {
+        matches!(event, rust_simulation::events::Event::ToolEquipped { entity, tool_name } if *entity == player_entity && tool_name == "stone_axe")
+    });
+    assert!(event_fired, "ToolEquipped event was not fired");
 }
 
 #[test]
