@@ -9,8 +9,6 @@ pub mod stockpile;
 
 use bevy_ecs::prelude::*;
 use crate::brain::BrainAction;
-use crate::components::{Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
-
 pub fn apply_brain_action(commands: &mut Commands, entity: Entity, action: BrainAction) {
     match action {
         BrainAction::Move(vel) => {

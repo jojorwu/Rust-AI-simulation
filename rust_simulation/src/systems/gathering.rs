@@ -1,7 +1,8 @@
 use crate::components::{
+    ai::KnownResources,
     intents::IntendsToGather,
     path::{CurrentPath, PathRequest},
-    BrainComponent, Inventory, Position, Resource as ResourceComponent,
+    Inventory, Position, Resource as ResourceComponent,
 };
 use crate::map::Map;
 use bevy_ecs::prelude::*;
@@ -12,7 +13,7 @@ pub fn gathering_system(
     mut gatherer_query: Query<
         (
             Entity,
-            &BrainComponent,
+            &KnownResources,
             &Position,
             &mut Inventory,
             &IntendsToGather,
@@ -22,12 +23,12 @@ pub fn gathering_system(
     mut resource_query: Query<&mut ResourceComponent>,
     map: Res<Map>,
 ) {
-    for (entity, brain, position, mut inventory, intent) in gatherer_query.iter_mut() {
+    for (entity, known_resources, position, mut inventory, intent) in gatherer_query.iter_mut() {
         let resource_name = &intent.0;
 
         // 1. Find the closest known resource of the desired type from the agent's brain.
         let target_pos =
-            if let Some(known_positions) = brain.known_resources.get(resource_name) {
+            if let Some(known_positions) = known_resources.0.get(resource_name) {
                 known_positions
                     .iter()
                     .min_by_key(|pos| pos.x.abs_diff(position.x) + pos.y.abs_diff(position.y))

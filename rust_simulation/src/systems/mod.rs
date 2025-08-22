@@ -1,4 +1,3 @@
-pub mod brain_event_handler;
 pub mod building;
 pub mod combat;
 pub mod crafting;

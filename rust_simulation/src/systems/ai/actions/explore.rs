@@ -1,17 +1,33 @@
-use bevy_ecs::prelude::*;
 use crate::components::{
-    intents::IntendsToExplore, path::{CurrentPath, PathRequest}, BrainComponent, Position
+    ai::{ExplorationFrontier, MentalMap},
+    intents::IntendsToExplore,
+    path::{CurrentPath, PathRequest},
+    BrainComponent, Position,
 };
+use bevy_ecs::prelude::*;
 
 pub fn explore_action_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut BrainComponent, &Position), (With<IntendsToExplore>, Without<CurrentPath>, Without<PathRequest>)>,
+    mut query: Query<
+        (
+            Entity,
+            &mut BrainComponent,
+            &Position,
+            &mut ExplorationFrontier,
+            &MentalMap,
+        ),
+        (
+            With<IntendsToExplore>,
+            Without<CurrentPath>,
+            Without<PathRequest>,
+        ),
+    >,
 ) {
-    for (entity, mut brain, position) in query.iter_mut() {
+    for (entity, mut brain, position, mut exploration_frontier, mental_map) in query.iter_mut() {
         // Get the next destination from the frontier
-        if let Some(target_pos) = brain.exploration_frontier.pop_front() {
+        if let Some(target_pos) = exploration_frontier.0.pop_front() {
             // If the target has become visible since being added to the frontier, skip it.
-            if brain.mental_map[target_pos.y as usize][target_pos.x as usize].is_some() {
+            if mental_map.0[target_pos.y as usize][target_pos.x as usize].is_some() {
                 // Try the next one on the next tick.
                 continue;
             }

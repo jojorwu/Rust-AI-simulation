@@ -1,4 +1,4 @@
-use crate::components::{path::PathRequest, BrainComponent};
+use crate::components::{ai::MentalMap, path::PathRequest};
 use crate::pathfinding;
 use crate::pathfinding_async::{PathfindingResult, PathfindingResultChannel};
 use bevy_ecs::prelude::*;
@@ -7,10 +7,10 @@ use rayon::spawn;
 
 pub fn pathfinding_system(
     mut commands: Commands,
-    query: Query<(Entity, &PathRequest, &BrainComponent)>,
+    query: Query<(Entity, &PathRequest, &MentalMap)>,
     channel: Res<PathfindingResultChannel>,
 ) {
-    for (entity, request, brain) in query.iter() {
+    for (entity, request, mental_map) in query.iter() {
         // The request is being handled, so remove it immediately.
         commands.entity(entity).remove::<PathRequest>();
 
@@ -23,10 +23,10 @@ pub fn pathfinding_system(
         let start = request.start;
         let goal = request.goal;
         // The mental map must be cloned to be sent to the background thread.
-        let mental_map = brain.mental_map.clone();
+        let mental_map_clone = mental_map.0.clone();
 
         spawn(move || {
-            let path = pathfinding::find_path(start, goal, &mental_map);
+            let path = pathfinding::find_path(start, goal, &mental_map_clone);
 
             let result = PathfindingResult {
                 entity,

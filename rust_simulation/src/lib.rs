@@ -23,9 +23,13 @@ pub mod world;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::{apply_deferred, ScheduleLabel};
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-use components::{BrainComponent, Inventory, Position, Health};
+use components::{
+    ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
+    BrainComponent, Health, Inventory, Position,
+};
 use config::*;
 use errors::SimulationError;
 use item::ItemRegistry;
@@ -89,6 +93,11 @@ pub fn setup_world(
                 DISCOUNT_FACTOR,
                 EPSILON,
             ),
+            MentalMap(vec![vec![None; WIDTH as usize]; HEIGHT as usize]),
+            KnownResources(HashMap::new()),
+            PlayerMemories(HashMap::new()),
+            GoalQTable(HashMap::new()),
+            ExplorationFrontier(VecDeque::new()),
         ));
     }
 
@@ -221,15 +230,15 @@ mod tests {
         let mut schedule = create_schedule();
         schedule.run(&mut world);
 
-        let mut player_query = world.query::<(Entity, &BrainComponent)>();
-        let (_, brain) = player_query.iter(&world).next().unwrap();
+        let mut player_query = world.query::<(Entity, &MentalMap, &ExplorationFrontier)>();
+        let (_, mental_map, exploration_frontier) = player_query.iter(&world).next().unwrap();
 
         // Check that the mental map has been updated
-        let is_mental_map_updated = brain.mental_map.iter().any(|row| row.iter().any(|tile| tile.is_some()));
+        let is_mental_map_updated = mental_map.0.iter().any(|row| row.iter().any(|tile| tile.is_some()));
         assert!(is_mental_map_updated, "Mental map was not updated after running visibility system");
 
         // Check that the exploration frontier has been populated
-        assert!(!brain.exploration_frontier.is_empty(), "Exploration frontier is empty after running visibility system");
+        assert!(!exploration_frontier.0.is_empty(), "Exploration frontier is empty after running visibility system");
 
 
         Ok(())
@@ -272,12 +281,12 @@ mod tests {
     fn test_visibility_system_populates_memory() {
         let mut world = create_test_world().unwrap();
 
-        let player_entity = world.query::<(Entity, &BrainComponent)>().iter(&world).next().unwrap().0;
+        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
 
-        let brain = world.get::<BrainComponent>(player_entity).unwrap();
-        let is_mental_map_empty = brain.mental_map.iter().all(|row| row.iter().all(|tile| tile.is_none()));
+        let (mental_map, exploration_frontier) = world.query::<(&MentalMap, &ExplorationFrontier)>().iter(&world).next().unwrap();
+        let is_mental_map_empty = mental_map.0.iter().all(|row| row.iter().all(|tile| tile.is_none()));
         assert!(is_mental_map_empty, "Mental map should be empty at the start");
-        assert!(brain.exploration_frontier.is_empty(), "Exploration frontier should be empty at the start");
+        assert!(exploration_frontier.0.is_empty(), "Exploration frontier should be empty at the start");
 
         // Run the visibility system
         let mut schedule = Schedule::new(MySchedule::Test);
@@ -285,10 +294,10 @@ mod tests {
         schedule.run(&mut world);
 
         // Ensure map and frontier are now populated
-        let brain = world.get::<BrainComponent>(player_entity).unwrap();
-        let is_mental_map_updated = brain.mental_map.iter().any(|row| row.iter().any(|tile| tile.is_some()));
+        let (mental_map, exploration_frontier) = world.query::<(&MentalMap, &ExplorationFrontier)>().iter(&world).next().unwrap();
+        let is_mental_map_updated = mental_map.0.iter().any(|row| row.iter().any(|tile| tile.is_some()));
         assert!(is_mental_map_updated, "Mental map was not updated after running visibility system");
-        assert!(!brain.exploration_frontier.is_empty(), "Exploration frontier is empty after running visibility system");
+        assert!(!exploration_frontier.0.is_empty(), "Exploration frontier is empty after running visibility system");
     }
 
     #[test]
@@ -364,9 +373,9 @@ mod tests {
 
         // 1. Get a valid goal from the frontier
         let goal_pos = {
-            let brain = world.get::<BrainComponent>(player_entity).unwrap();
-            assert!(!brain.exploration_frontier.is_empty(), "Frontier should not be empty after visibility run");
-            brain.exploration_frontier.front().unwrap().clone()
+            let exploration_frontier = world.query::<&ExplorationFrontier>().iter(&world).next().unwrap();
+            assert!(!exploration_frontier.0.is_empty(), "Frontier should not be empty after visibility run");
+            exploration_frontier.0.front().unwrap().clone()
         };
 
         // 2. Add a PathRequest to that goal
