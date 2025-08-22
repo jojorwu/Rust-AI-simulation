@@ -93,7 +93,7 @@ pub fn setup_world(
                 DISCOUNT_FACTOR,
                 EPSILON,
             ),
-            MentalMap(vec![vec![None; WIDTH as usize]; HEIGHT as usize]),
+            MentalMap(Arc::new(vec![vec![None; WIDTH as usize]; HEIGHT as usize])),
             KnownResources(HashMap::new()),
             PlayerMemories(HashMap::new()),
             GoalQTable(HashMap::new()),

@@ -19,10 +19,12 @@ pub fn visibility_system(
         let visible_tiles = fov::field_of_view(pos, VISION_RADIUS, &map);
         let old_frontier_size = exploration_frontier.0.len();
 
+        let mut_map = std::sync::Arc::make_mut(&mut mental_map.0);
+
         for visible_pos in &visible_tiles {
-            if mental_map.0[visible_pos.y as usize][visible_pos.x as usize].is_none() {
+            if mut_map[visible_pos.y as usize][visible_pos.x as usize].is_none() {
                 if let Some(tile) = map.get_tile(visible_pos.x, visible_pos.y) {
-                    mental_map.0[visible_pos.y as usize][visible_pos.x as usize] =
+                    mut_map[visible_pos.y as usize][visible_pos.x as usize] =
                         Some(MemoryTile { tile });
                 }
 
@@ -41,7 +43,7 @@ pub fn visibility_system(
                         {
                             let nx = neighbor_x as u32;
                             let ny = neighbor_y as u32;
-                            if mental_map.0[ny as usize][nx as usize].is_none() {
+                            if mut_map[ny as usize][nx as usize].is_none() {
                                 let frontier_pos = Position { x: nx, y: ny };
                                 if !exploration_frontier.0.contains(&frontier_pos) {
                                     exploration_frontier.0.push_back(frontier_pos);
@@ -55,7 +57,7 @@ pub fn visibility_system(
 
         let mut new_frontier = VecDeque::new();
         for p in exploration_frontier.0.iter() {
-            if mental_map.0[p.y as usize][p.x as usize].is_none() {
+            if mut_map[p.y as usize][p.x as usize].is_none() {
                 new_frontier.push_back(*p);
             }
         }

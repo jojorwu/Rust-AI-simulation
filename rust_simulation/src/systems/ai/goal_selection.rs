@@ -4,8 +4,9 @@ use crate::components::{
     intents::*,
     BrainComponent, Health, Inventory,
 };
+use crate::config;
 use crate::errors::SimulationError;
-use crate::{IsDay, config};
+use crate::IsDay;
 use bevy_ecs::prelude::*;
 use log::info;
 use rand::Rng;
@@ -24,6 +25,8 @@ pub fn goal_selection_system(
     )>,
     is_day: Res<IsDay>,
 ) {
+    let mut rng = rand::thread_rng();
+
     for (
         entity,
         mut brain,
@@ -44,6 +47,7 @@ pub fn goal_selection_system(
                 known_resources,
                 goal_q_table,
                 is_day.0,
+                &mut rng,
             ) {
                 if let Ok(mut plan) =
                     plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
@@ -122,6 +126,7 @@ fn choose_goal(
     known_resources: &KnownResources,
     goal_q_table: &GoalQTable,
     is_night: bool,
+    rng: &mut impl Rng,
 ) -> Result<Goal, SimulationError> {
     const FLEE_HEALTH_THRESHOLD: u32 = 25;
     if state.health_level < FLEE_HEALTH_THRESHOLD {
@@ -138,8 +143,8 @@ fn choose_goal(
         return Ok(Goal::Flee);
     }
 
-    if rand::random::<f64>() < brain.epsilon {
-        let index = rand::thread_rng().gen_range(0..valid_goals.len());
+    if rng.random::<f64>() < brain.epsilon {
+        let index = rng.random_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
@@ -163,11 +168,11 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = rand::thread_rng().gen_range(0..valid_goals.len());
+                let index = rng.random_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = rand::thread_rng().gen_range(0..valid_goals.len());
+        let index = rng.random_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
 }

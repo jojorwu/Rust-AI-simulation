@@ -3,7 +3,6 @@ use crate::components::{Inventory, WantsToCraft};
 use crate::RecipeManagerResource;
 use bevy_ecs::prelude::*;
 use rayon::spawn;
-use std::collections::HashMap;
 
 /// This system dispatches crafting tasks to a background thread pool.
 pub fn crafting_dispatcher_system(
