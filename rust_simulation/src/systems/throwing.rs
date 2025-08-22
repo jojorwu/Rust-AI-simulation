@@ -10,10 +10,8 @@ use bevy_ecs::prelude::*;
 /// can be called directly from tests for deterministic outcomes.
 pub fn resolve_throw(
     commands: &mut Commands,
-    _thrower_entity: Entity,
     thrower_pos: &Position,
     item_name: &str,
-    _target_entity: Entity,
     target_pos: &Position,
     target_health: &mut Health,
     hit_chance: f32,
@@ -74,13 +72,11 @@ pub fn throwing_system(
             continue;
         }
 
-        if let Ok((target_entity, target_pos, mut target_health)) = target_query.get_mut(wants_to_throw.target) {
+        if let Ok((_, target_pos, mut target_health)) = target_query.get_mut(wants_to_throw.target) {
             resolve_throw(
                 &mut commands,
-                thrower_entity,
                 thrower_pos,
                 &wants_to_throw.item_name,
-                target_entity,
                 target_pos,
                 &mut target_health,
                 rand::random::<f32>(),

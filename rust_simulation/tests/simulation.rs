@@ -2,7 +2,7 @@ mod common;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::apply_deferred;
-use common::create_test_world;
+use common::{create_test_world, run_schedule_until};
 use rust_simulation::{
     components::{
         intents::*,
@@ -185,15 +185,8 @@ fn test_pathfinding_flow() {
     schedule.add_systems(systems::async_result_collection_system::async_result_collection_system);
     schedule.add_systems(apply_deferred);
 
-    let mut path_found = false;
-    for _ in 0..10 {
-        schedule.run(&mut world);
-        if world.get::<CurrentPath>(player_entity).is_some() {
-            path_found = true;
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    let path_found =
+        run_schedule_until(&mut world, schedule, |w| w.get::<CurrentPath>(player_entity).is_some(), 10);
     assert!(path_found, "Path was not found after timeout");
 }
 
@@ -221,16 +214,16 @@ fn test_async_crafting_flow() {
     schedule.add_systems(systems::crafting::crafting_dispatcher_system);
     schedule.add_systems(systems::async_result_collection_system::async_result_collection_system);
 
-    let mut craft_complete = false;
-    for _ in 0..10 {
-        schedule.run(&mut world);
-        let inventory = world.get::<Inventory>(player_entity).unwrap();
-        if inventory.has_item(consts::STONE_AXE, 1) {
-            craft_complete = true;
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    let craft_complete = run_schedule_until(
+        &mut world,
+        schedule,
+        |w| {
+            w.get::<Inventory>(player_entity)
+                .unwrap()
+                .has_item(consts::STONE_AXE, 1)
+        },
+        10,
+    );
     assert!(craft_complete, "Player should have a stone axe after crafting");
 }
 
@@ -259,15 +252,15 @@ fn test_async_gathering_flow() {
     schedule.add_systems(systems::gathering::gathering_dispatcher_system);
     schedule.add_systems(systems::async_result_collection_system::async_result_collection_system);
 
-    let mut gather_complete = false;
-    for _ in 0..10 {
-        schedule.run(&mut world);
-        let inventory = world.get::<Inventory>(player_entity).unwrap();
-        if inventory.has_item(consts::WOOD, 1) {
-            gather_complete = true;
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    let gather_complete = run_schedule_until(
+        &mut world,
+        schedule,
+        |w| {
+            w.get::<Inventory>(player_entity)
+                .unwrap()
+                .has_item(consts::WOOD, 1)
+        },
+        10,
+    );
     assert!(gather_complete, "Player should have wood after gathering");
 }
