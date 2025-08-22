@@ -11,7 +11,7 @@ pub mod fov;
 pub mod item;
 pub mod map;
 pub mod pathfinding;
-pub mod pathfinding_async;
+pub mod async_task;
 pub mod player;
 pub mod recipes;
 pub mod road;
@@ -75,7 +75,7 @@ pub fn setup_world(
     world.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
     world.insert_resource(IsDay(true));
     world.insert_resource(TickCount(0));
-    world.init_resource::<pathfinding_async::PathfindingResultChannel>();
+    world.init_resource::<async_task::AsyncResultChannel>();
 
     // Initialize events
     world.init_resource::<Events<events::Event>>();
@@ -113,6 +113,16 @@ pub enum MySchedule {
     Test,
 }
 
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+enum SimulationSet {
+    AI,
+    AsyncDispatch,
+    ResultCollection,
+    Physics,
+    SyncActions,
+    Finalize,
+}
+
 fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCount>) {
     tick_count.0 += 1;
     is_day.0 = (tick_count.0 % (DAY_LENGTH + NIGHT_LENGTH)) < DAY_LENGTH;
@@ -122,30 +132,71 @@ fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCount>
 pub fn create_schedule() -> Schedule {
     let mut schedule = Schedule::new(MySchedule::Main);
 
-    // Add systems to the schedule
-    // Note: These systems need to be refactored to be Bevy systems.
-    schedule
-        .add_systems(update_day_night)
-        .add_systems(systems::visibility_system::visibility_system)
-        .add_systems(q_learning::update_q_table_system)
-        .add_systems(goal_selection::goal_selection_system)
-        .add_systems(actions::craft::craft_action_system)
-        .add_systems(actions::attack::attack_action_system)
-        .add_systems(actions::flee::flee_action_system)
-        .add_systems(actions::explore::explore_action_system)
-        .add_systems(actions::stockpile::stockpile_action_system)
-        .add_systems(systems::pathfinding_system::pathfinding_system)
-        .add_systems(systems::path_collection_system::path_collection_system)
-        .add_systems(apply_deferred)
-        .add_systems(systems::path_movement_system::path_movement_system)
-        .add_systems(apply_deferred) // Flush Velocity commands
-        .add_systems(movement::movement_system)
-        .add_systems(gathering::gathering_system)
-        .add_systems(crafting::crafting_system)
-        .add_systems(building::building_system)
-        .add_systems(storage::storage_system)
-        .add_systems(combat::combat_system)
-        .add_systems(death::death_system);
+    // Configure the sets to run in a specific order.
+    schedule.configure_sets(
+        (
+            SimulationSet::AI,
+            SimulationSet::AsyncDispatch,
+            SimulationSet::ResultCollection,
+            SimulationSet::Physics,
+            SimulationSet::SyncActions,
+            SimulationSet::Finalize,
+        )
+            .chain(),
+    );
+
+    // Add systems to their sets
+    schedule.add_systems(
+        (
+            update_day_night,
+            systems::visibility_system::visibility_system,
+            q_learning::update_q_table_system,
+            goal_selection::goal_selection_system,
+            actions::craft::craft_action_system,
+            actions::attack::attack_action_system,
+            actions::flee::flee_action_system,
+            actions::explore::explore_action_system,
+            actions::stockpile::stockpile_action_system,
+        )
+            .in_set(SimulationSet::AI),
+    );
+
+    schedule.add_systems(
+        (
+            systems::pathfinding_system::pathfinding_system,
+            crafting::crafting_dispatcher_system,
+        )
+            .in_set(SimulationSet::AsyncDispatch),
+    );
+
+    schedule.add_systems(
+        (
+            systems::async_result_collection_system::async_result_collection_system,
+            apply_deferred, // Apply results before they are used
+        )
+            .in_set(SimulationSet::ResultCollection),
+    );
+
+    schedule.add_systems(
+        (
+            systems::path_movement_system::path_movement_system,
+            apply_deferred, // Flush Velocity commands
+            movement::movement_system,
+        )
+            .in_set(SimulationSet::Physics),
+    );
+
+    schedule.add_systems(
+        (
+            gathering::gathering_system,
+            building::building_system,
+            storage::storage_system,
+            combat::combat_system,
+        )
+            .in_set(SimulationSet::SyncActions),
+    );
+
+    schedule.add_systems(death::death_system.in_set(SimulationSet::Finalize));
 
     schedule
 }
@@ -350,6 +401,49 @@ mod tests {
     }
 
     #[test]
+    fn test_async_crafting_flow() {
+        use components::WantsToCraft;
+
+        let mut world = create_test_world().unwrap();
+        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+
+        // Give player resources
+        let mut inventory = world.get_mut::<Inventory>(player_entity).unwrap();
+        inventory.add_item("wood", 10);
+        inventory.add_item("stone", 10);
+        drop(inventory); // Release mutable borrow
+
+        // Add the desire to craft
+        world.entity_mut(player_entity).insert(WantsToCraft { item_name: "stone_axe".to_string() });
+
+        // Setup schedule
+        let mut schedule = Schedule::new(MySchedule::Test);
+        schedule.add_systems(crafting::crafting_dispatcher_system);
+        schedule.add_systems(systems::async_result_collection_system::async_result_collection_system);
+
+        // Tick until the craft is complete (or timeout)
+        let mut craft_complete = false;
+        for _ in 0..10 {
+            schedule.run(&mut world);
+            let inventory = world.get::<Inventory>(player_entity).unwrap();
+            if inventory.has_item("stone_axe", 1) {
+                craft_complete = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        assert!(craft_complete, "Player should have a stone axe after crafting");
+
+        // Check that resources were consumed
+        let inventory = world.get::<Inventory>(player_entity).unwrap();
+        let recipe_manager = world.get_resource::<RecipeManagerResource>().unwrap();
+        let required = recipe_manager.0.get_required_resources("stone_axe", 1);
+        assert_eq!(inventory.get_quantity("wood"), 10 - required.get("wood").unwrap_or(&0));
+        assert_eq!(inventory.get_quantity("stone"), 10 - required.get("stone").unwrap_or(&0));
+    }
+
+    #[test]
     fn test_pathfinding_flow() {
         use crate::map;
         use crate::systems::movement::movement_system;
@@ -389,7 +483,9 @@ mod tests {
         // 2. Run the systems
         let mut schedule = Schedule::new(MySchedule::Test);
         schedule.add_systems(systems::pathfinding_system::pathfinding_system);
-        schedule.add_systems(systems::path_collection_system::path_collection_system);
+        schedule.add_systems(
+            systems::async_result_collection_system::async_result_collection_system,
+        );
         schedule.add_systems(apply_deferred);
         schedule.add_systems(systems::path_movement_system::path_movement_system);
         schedule.add_systems(movement_system);
