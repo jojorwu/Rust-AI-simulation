@@ -8,4 +8,6 @@ pub mod movement;
 pub mod pickup;
 pub mod storage;
 pub mod visibility_system;
+pub mod pathfinding_system;
+pub mod path_movement_system;
 pub mod ai;

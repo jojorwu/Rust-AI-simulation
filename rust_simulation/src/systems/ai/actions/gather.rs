@@ -1,73 +1,50 @@
 use bevy_ecs::prelude::*;
-use crate::brain::BrainAction;
-use crate::components::{intents::IntendsToGather, BrainComponent, Position, WantsToGather};
-use crate::errors::SimulationError;
+use crate::components::{
+    intents::IntendsToGather, path::{CurrentPath, PathRequest}, BrainComponent, Position, WantsToGather
+};
 use crate::map::Map;
-use crate::pathfinding;
-use super::{apply_brain_action, follow_path};
 
 pub fn gather_action_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut BrainComponent, &Position, &IntendsToGather)>,
+    // This query now finds entities that intend to gather, but are not currently pathing.
+    query: Query<(Entity, &BrainComponent, &Position, &IntendsToGather), (Without<CurrentPath>, Without<PathRequest>)>,
     map: Res<Map>,
 ) {
-    for (entity, mut brain_component, position, intent) in query.iter_mut() {
+    for (entity, brain, position, intent) in query.iter() {
         let resource_name = &intent.0;
 
-        if let Some(action) = follow_path(&mut brain_component, position) {
-            apply_brain_action(&mut commands, entity, action);
-            continue;
-        }
-
-        let result = execute_gather_goal(&mut brain_component, &map, resource_name, position);
-        if let Ok(Some(action)) = result {
-            apply_brain_action(&mut commands, entity, action);
-            // The goal is not complete until the gathering is done,
-            // but the intent to *start* gathering is complete.
-            // The `gathering_system` will eventually complete the `current_goal`.
-            commands.entity(entity).remove::<IntendsToGather>();
+        // Find the closest known resource of the desired type.
+        let target_pos = if let Some(known_positions) = brain.known_resources.get(resource_name) {
+            known_positions
+                .iter()
+                .min_by_key(|pos| pos.x.abs_diff(position.x) + pos.y.abs_diff(position.y))
         } else {
-            // If execute_gather_goal returns Ok(None) or an Error, it means we can't
-            // currently pursue this. Remove the intent to allow for replanning.
-            commands.entity(entity).remove::<IntendsToGather>();
-            brain_component.current_goal = None;
-        }
-    }
-}
+            None // We don't know where any of this resource is.
+        };
 
-fn execute_gather_goal(
-    brain_component: &mut BrainComponent,
-    map: &Map,
-    resource_name: &str,
-    player_pos: &Position,
-) -> Result<Option<BrainAction>, SimulationError> {
-    if let Some(known_positions) = brain_component.known_resources.get(resource_name) {
-        let mut sorted_positions: Vec<_> = known_positions.iter().collect();
-        sorted_positions
-            .sort_by_key(|pos| pos.x.abs_diff(player_pos.x) + pos.y.abs_diff(player_pos.y));
-        if let Some(target_pos) = sorted_positions.first() {
-            let (dx, dy) = (
-                (player_pos.x as i32 - target_pos.x as i32).abs(),
-                (player_pos.y as i32 - target_pos.y as i32).abs(),
-            );
-            if dx <= 1 && dy <= 1 {
+        if let Some(target_pos) = target_pos {
+            let is_adjacent = (position.x.abs_diff(target_pos.x) <= 1) && (position.y.abs_diff(target_pos.y) <= 1);
+
+            if is_adjacent {
+                // If adjacent, find the actual resource entity and add WantsToGather.
                 if let Some(target_entity) = map.get_entities_at(target_pos.x, target_pos.y).and_then(|v| v.first().copied()) {
-                    return Ok(Some(BrainAction::Gather(WantsToGather {
-                        target: target_entity,
-                    })));
+                    commands.entity(entity).insert(WantsToGather { target: target_entity });
                 }
-            } else if brain_component.current_path.is_none() {
-                if let Some(path) = pathfinding::find_path(
-                    (player_pos.x, player_pos.y),
-                    (target_pos.x, target_pos.y),
-                    &brain_component.mental_map,
-                ) {
-                    brain_component.current_path = Some(path);
-                    return Ok(None); // Pathing, no immediate action
-                }
+                // Whether we found the entity or not, the intent is handled.
+                commands.entity(entity).remove::<IntendsToGather>();
+            } else {
+                // If not adjacent, request a path.
+                commands.entity(entity).insert(PathRequest {
+                    start: (position.x, position.y),
+                    goal: (target_pos.x, target_pos.y),
+                });
+                // The intent remains until we are adjacent.
             }
+        } else {
+            // Cannot find resource, so the goal is impossible. Remove intent.
+            commands.entity(entity).remove::<IntendsToGather>();
+            // In a real scenario, we might want to trigger another goal like Explore.
+            // For now, the goal selection will just run again next tick.
         }
     }
-    // If we reach here, we can't find the resource, so the goal is impossible.
-    Ok(None)
 }

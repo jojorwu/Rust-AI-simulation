@@ -2,12 +2,15 @@ use crate::components::{Position, Velocity};
 use crate::map::Map;
 use bevy_ecs::prelude::*;
 
+use log::debug;
+
 pub fn movement_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Position, &Velocity)>,
     map: Res<Map>,
 ) {
     for (entity, mut pos, vel) in query.iter_mut() {
+        debug!("Movement system running for entity {:?} with velocity {:?}", entity, vel);
         // Store the old position before updating.
         let old_pos = *pos;
 

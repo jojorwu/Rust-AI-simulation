@@ -21,7 +21,7 @@ pub mod renderer;
 pub mod world;
 
 use bevy_ecs::prelude::*;
-use bevy_ecs::schedule::ScheduleLabel;
+use bevy_ecs::schedule::{apply_deferred, ScheduleLabel};
 use std::sync::Arc;
 
 use components::{BrainComponent, Inventory, Position, Health};
@@ -125,6 +125,9 @@ pub fn create_schedule() -> Schedule {
         .add_systems(actions::flee::flee_action_system)
         .add_systems(actions::explore::explore_action_system)
         .add_systems(actions::stockpile::stockpile_action_system)
+        .add_systems(systems::pathfinding_system::pathfinding_system)
+        .add_systems(apply_deferred)
+        .add_systems(systems::path_movement_system::path_movement_system)
         .add_systems(gathering::gathering_system)
         .add_systems(crafting::crafting_system)
         .add_systems(building::building_system)
@@ -332,5 +335,63 @@ mod tests {
         // Check that the intent component was removed
         let intent_was_removed = world.get::<IntendsToCraft>(player_entity).is_none();
         assert!(intent_was_removed, "IntendsToCraft component should be removed after system runs");
+    }
+
+    #[test]
+    fn test_pathfinding_flow() {
+        use crate::map;
+        use crate::systems::movement::movement_system;
+        use components::path::{PathRequest, CurrentPath};
+
+        let mut world = create_test_world().unwrap();
+
+        // Manually make the area around the player walkable for a deterministic test.
+        let map = world.get_resource_mut::<Map>().unwrap();
+        for y in 0..10 {
+            for x in 0..10 {
+                map.set_tile(x, y, map::Tile::new('.', "plains".to_string()));
+            }
+        }
+        drop(map);
+
+        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+
+        // Run visibility once to populate the mental map
+        let mut vis_schedule = Schedule::new(MySchedule::Test);
+        vis_schedule.add_systems(systems::visibility_system::visibility_system);
+        vis_schedule.run(&mut world);
+
+        // 1. Get a valid goal from the frontier
+        let goal_pos = {
+            let brain = world.get::<BrainComponent>(player_entity).unwrap();
+            assert!(!brain.exploration_frontier.is_empty(), "Frontier should not be empty after visibility run");
+            brain.exploration_frontier.front().unwrap().clone()
+        };
+
+        // 2. Add a PathRequest to that goal
+        world.entity_mut(player_entity).insert(PathRequest {
+            start: (0, 0),
+            goal: (goal_pos.x, goal_pos.y),
+        });
+
+        // 2. Run the systems
+        let mut schedule = Schedule::new(MySchedule::Test);
+        schedule.add_systems(systems::pathfinding_system::pathfinding_system);
+        schedule.add_systems(apply_deferred);
+        schedule.add_systems(systems::path_movement_system::path_movement_system);
+        schedule.add_systems(movement_system);
+
+        // Tick 1: Path is requested and found. Velocity { dx: 0, dy: 0 } is added and removed.
+        let initial_pos = *world.get::<Position>(player_entity).unwrap();
+        schedule.run(&mut world);
+
+        assert!(world.get::<PathRequest>(player_entity).is_none(), "PathRequest should be removed");
+        assert!(world.get::<CurrentPath>(player_entity).is_some(), "CurrentPath should be added");
+        assert_eq!(world.get::<Position>(player_entity).unwrap(), &initial_pos, "Position should not change on first tick");
+
+        // Tick 2: Agent takes the first real step.
+        schedule.run(&mut world);
+        let new_pos = world.get::<Position>(player_entity).unwrap();
+        assert_ne!(&initial_pos, new_pos, "Position should change on second tick");
     }
 }

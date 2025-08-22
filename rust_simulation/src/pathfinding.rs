@@ -108,14 +108,20 @@ fn get_neighbors(
             && new_y < mental_map.len() as i32
         {
             let new_pos = (new_x as u32, new_y as u32);
-            if let Some(Some(memory_tile)) = mental_map
+
+            let tile_is_known_impassable = if let Some(Some(memory_tile)) = mental_map
                 .get(new_y as usize)
                 .and_then(|row| row.get(new_x as usize))
             {
-                if memory_tile.tile.tile_type == '.' || memory_tile.tile.tile_type == 'S' {
-                    // Allow walking on empty ground and sand
-                    neighbors.push(new_pos);
-                }
+                // Tile is known, check if it's a wall type
+                matches!(memory_tile.tile.tile_type, '#' | 'T' | 'M')
+            } else {
+                // Tile is None (unknown), so it's not known to be impassable.
+                false
+            };
+
+            if !tile_is_known_impassable {
+                neighbors.push(new_pos);
             }
         }
     }

@@ -11,6 +11,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 pub mod intents;
+pub mod path;
 
 #[derive(Component, Debug, Clone, Copy, Eq)]
 pub struct Position {
@@ -71,7 +72,6 @@ pub struct BrainComponent {
     pub player_memories: HashMap<Entity, PlayerMemory>,
     pub current_goal: Option<Goal>,
     pub goal_stack: Vec<Goal>,
-    pub current_path: Option<Vec<(u32, u32)>>,
     pub goal_commitment_ticks: u32,
     pub prev_state: Option<HighLevelState>,
     pub prev_goal: Option<Goal>,
@@ -110,7 +110,6 @@ impl BrainComponent {
             player_memories: HashMap::new(),
             current_goal: None,
             goal_stack: Vec::new(),
-            current_path: None,
             goal_commitment_ticks: 0,
             prev_state: None,
             prev_goal: None,
