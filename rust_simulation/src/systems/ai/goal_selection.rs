@@ -22,6 +22,7 @@ pub fn goal_selection_system(
         &KnownResources,
         &PlayerMemories,
         &GoalQTable,
+        &Equipped,
     )>,
     is_day: Res<IsDay>,
 ) {
@@ -35,11 +36,12 @@ pub fn goal_selection_system(
         known_resources,
         player_memories,
         goal_q_table,
+        equipped,
     ) in query.iter_mut()
     {
         if brain.current_goal.is_none() && brain.goal_commitment_ticks == 0 {
             let high_level_state =
-                get_high_level_state(health, inventory, player_memories, is_day.0);
+                get_high_level_state(health, inventory, player_memories, equipped, is_day.0);
 
             if let Ok(new_high_level_goal) = choose_goal(
                 &high_level_state,
@@ -91,11 +93,16 @@ pub fn goal_selection_system(
     }
 }
 
+use crate::brain::ResourceLevel;
+
 /// Constructs the high-level state of an agent from its components.
+use crate::components::Equipped;
+
 fn get_high_level_state(
     health: &Health,
     inventory: &Inventory,
     player_memories: &PlayerMemories,
+    equipped: &Equipped,
     is_day: bool,
 ) -> HighLevelState {
     let num_hostile_players = player_memories
@@ -104,15 +111,26 @@ fn get_high_level_state(
         .filter(|m| m.relationship == crate::brain::RelationshipStatus::Hostile)
         .count() as u32;
 
+    let get_resource_level = |quantity: u32| {
+        if quantity == 0 {
+            ResourceLevel::None
+        } else if quantity < config::RESOURCE_LEVEL_LOW_THRESHOLD {
+            ResourceLevel::Low
+        } else {
+            ResourceLevel::High
+        }
+    };
+
     let inventory_summary = InventorySummary {
-        has_wood: inventory.has_item("wood", 1),
-        has_stone: inventory.has_item("stone", 1),
-        has_iron_ore: inventory.has_item("iron_ore", 1),
+        wood_level: get_resource_level(inventory.get_quantity("wood")),
+        stone_level: get_resource_level(inventory.get_quantity("stone")),
+        iron_ore_level: get_resource_level(inventory.get_quantity("iron_ore")),
         has_stone_axe: inventory.has_item("stone_axe", 1),
     };
 
     HighLevelState {
         inventory_summary,
+        equipped_tool: equipped.tool.clone(),
         num_hostile_players,
         health_level: health.current as u32,
         is_night: !is_day,
@@ -128,8 +146,7 @@ fn choose_goal(
     is_night: bool,
     rng: &mut impl Rng,
 ) -> Result<Goal, SimulationError> {
-    const FLEE_HEALTH_THRESHOLD: u32 = 25;
-    if state.health_level < FLEE_HEALTH_THRESHOLD {
+    if state.health_level < config::FLEE_HEALTH_THRESHOLD {
         return Ok(Goal::Flee);
     }
 

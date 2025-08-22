@@ -140,6 +140,11 @@ pub struct Inventory {
     pub items: HashMap<String, u32>,
 }
 
+#[derive(Component, Debug, Clone)]
+pub struct Equipped {
+    pub tool: Option<String>,
+}
+
 impl Default for Inventory {
     fn default() -> Self {
         Self::new()

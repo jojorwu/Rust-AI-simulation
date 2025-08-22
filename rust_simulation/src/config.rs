@@ -33,6 +33,11 @@ pub const EPSILON: f64 = 1.0;
 pub const GOAL_REWARD: f64 = 10.0;
 pub const GOAL_PENALTY: f64 = -0.1;
 pub const BUILD_GOAL_BONUS: f64 = 10.0;
+
+// --- AI ---
+pub const FLEE_HEALTH_THRESHOLD: u32 = 25;
+pub const RESOURCE_LEVEL_LOW_THRESHOLD: u32 = 10;
+pub const RESOURCE_LEVEL_HIGH_THRESHOLD: u32 = 50;
 pub const GATHER_GOAL_THRESHOLD: u32 = 10;
 pub const GOAL_COMMITMENT_TICKS: u32 = 10;
 pub const THREAT_GOAL_COMMITMENT_TICKS: u32 = 5;

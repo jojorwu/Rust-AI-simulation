@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
-    BrainComponent, Health, Inventory, Position,
+    BrainComponent, Health, Inventory, Position, Equipped,
 };
 use config::*;
 use errors::SimulationError;
@@ -82,6 +82,7 @@ pub fn setup_world(
             Position { x: 0, y: 0 },
             Health { current: 100, max: 100 },
             Inventory::new(),
+            Equipped { tool: None },
             BrainComponent::new(
                 Arc::clone(&recipe_manager),
                 LEARNING_RATE,
