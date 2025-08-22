@@ -138,6 +138,8 @@ pub fn create_schedule() -> Schedule {
         .add_systems(systems::path_collection_system::path_collection_system)
         .add_systems(apply_deferred)
         .add_systems(systems::path_movement_system::path_movement_system)
+        .add_systems(apply_deferred) // Flush Velocity commands
+        .add_systems(movement::movement_system)
         .add_systems(gathering::gathering_system)
         .add_systems(crafting::crafting_system)
         .add_systems(building::building_system)
@@ -281,7 +283,7 @@ mod tests {
     fn test_visibility_system_populates_memory() {
         let mut world = create_test_world().unwrap();
 
-        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+        let _player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
 
         let (mental_map, exploration_frontier) = world.query::<(&MentalMap, &ExplorationFrontier)>().iter(&world).next().unwrap();
         let is_mental_map_empty = mental_map.0.iter().all(|row| row.iter().all(|tile| tile.is_none()));

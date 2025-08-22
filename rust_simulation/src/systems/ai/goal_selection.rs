@@ -8,7 +8,7 @@ use crate::errors::SimulationError;
 use crate::{IsDay, config};
 use bevy_ecs::prelude::*;
 use log::info;
-use rand::{Rng, thread_rng};
+use rand::Rng;
 use std::collections::HashMap;
 
 pub fn goal_selection_system(
@@ -138,9 +138,8 @@ fn choose_goal(
         return Ok(Goal::Flee);
     }
 
-    let mut rng = rand::thread_rng();
-    if rng.r#gen::<f64>() < brain.epsilon {
-        let index = rng.gen_range(0..valid_goals.len());
+    if rand::random::<f64>() < brain.epsilon {
+        let index = rand::thread_rng().gen_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
@@ -164,11 +163,11 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = rng.gen_range(0..valid_goals.len());
+                let index = rand::thread_rng().gen_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = rng.gen_range(0..valid_goals.len());
+        let index = rand::thread_rng().gen_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
 }

@@ -9,9 +9,7 @@ pub fn movement_system(
     mut query: Query<(Entity, &mut Position, &Velocity)>,
     map: Res<Map>,
 ) {
-    println!("--- movement_system running ---");
     for (entity, mut pos, vel) in query.iter_mut() {
-        println!("Moving entity {:?} with velocity {:?}", entity, vel);
         debug!("Movement system running for entity {:?} with velocity {:?}", entity, vel);
         // Store the old position before updating.
         let old_pos = *pos;
