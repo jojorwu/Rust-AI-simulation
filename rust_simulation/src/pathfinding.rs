@@ -1,6 +1,7 @@
-use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::cmp::Ordering;
 use super::brain::MemoryTile;
+use log::debug;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Node {
@@ -24,10 +25,14 @@ impl PartialOrd for Node {
 }
 
 fn heuristic(a: (u32, u32), b: (u32, u32)) -> u32 {
-    (a.0 as i32 - b.0 as i32).abs() as u32 + (a.1 as i32 - b.1 as i32).abs() as u32
+    (a.0 as i32 - b.0 as i32).unsigned_abs() + (a.1 as i32 - b.1 as i32).unsigned_abs()
 }
 
-pub fn find_path(start: (u32, u32), goal: (u32, u32), mental_map: &Vec<Vec<Option<MemoryTile>>>) -> Option<Vec<(u32, u32)>> {
+pub fn find_path(
+    start: (u32, u32),
+    goal: (u32, u32),
+    mental_map: &[Vec<Option<MemoryTile>>],
+) -> Option<Vec<(u32, u32)>> {
     let mut open_list = BinaryHeap::new();
     let mut closed_list = HashSet::new();
     let mut g_costs = HashMap::new();
@@ -52,6 +57,7 @@ pub fn find_path(start: (u32, u32), goal: (u32, u32), mental_map: &Vec<Vec<Optio
                 current = node.parent;
             }
             path.reverse();
+            debug!("Path found from {:?} to {:?}: {:?}", start, goal, path);
             return Some(path);
         }
 
@@ -79,10 +85,14 @@ pub fn find_path(start: (u32, u32), goal: (u32, u32), mental_map: &Vec<Vec<Optio
         }
     }
 
+    debug!("No path found from {:?} to {:?}", start, goal);
     None // No path found
 }
 
-fn get_neighbors(position: (u32, u32), mental_map: &Vec<Vec<Option<MemoryTile>>>) -> Vec<(u32, u32)> {
+fn get_neighbors(
+    position: (u32, u32),
+    mental_map: &[Vec<Option<MemoryTile>>],
+) -> Vec<(u32, u32)> {
     let mut neighbors = Vec::new();
     let (x, y) = position;
 
@@ -92,12 +102,26 @@ fn get_neighbors(position: (u32, u32), mental_map: &Vec<Vec<Option<MemoryTile>>>
         let new_x = x as i32 + dx;
         let new_y = y as i32 + dy;
 
-        if new_x >= 0 && new_x < mental_map[0].len() as i32 && new_y >= 0 && new_y < mental_map.len() as i32 {
+        if new_x >= 0
+            && new_x < mental_map[0].len() as i32
+            && new_y >= 0
+            && new_y < mental_map.len() as i32
+        {
             let new_pos = (new_x as u32, new_y as u32);
-            if let Some(Some(memory_tile)) = mental_map.get(new_y as usize).and_then(|row| row.get(new_x as usize)) {
-                if memory_tile.tile.tile_type == '.' || memory_tile.tile.tile_type == 'S' { // Allow walking on empty ground and sand
-                    neighbors.push(new_pos);
-                }
+
+            let tile_is_known_impassable = if let Some(Some(memory_tile)) = mental_map
+                .get(new_y as usize)
+                .and_then(|row| row.get(new_x as usize))
+            {
+                // Tile is known, check if it's a wall type
+                matches!(memory_tile.tile.tile_type, '#' | 'T' | 'M')
+            } else {
+                // Tile is None (unknown), so it's not known to be impassable.
+                false
+            };
+
+            if !tile_is_known_impassable {
+                neighbors.push(new_pos);
             }
         }
     }

@@ -1,43 +1,30 @@
-use noise::{NoiseFn, Fbm, Perlin};
-use rand::Rng;
-use serde::{Serialize, Deserialize};
-use std::fs;
-use std::error::Error;
-use super::player::Player;
-use std::collections::HashMap;
-use super::ecs::Entity;
+//! This module handles the representation of the game world, divided into chunks for concurrent access.
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+use bevy_ecs::prelude::*;
+use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
+use rand::Rng;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs;
+use std::sync::{Arc, Mutex};
+
+use crate::errors::SimulationError;
+
+pub const CHUNK_SIZE: u32 = 16;
+
+/// Represents the visibility state of a tile from a player's perspective.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TileState {
     Unseen,
     Explored,
     Visible,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MentalMap {
-    pub width: u32,
-    pub height: u32,
-    pub grid: Vec<Vec<TileState>>,
-}
-
-impl MentalMap {
-    pub fn new(width: u32, height: u32) -> Self {
-        MentalMap {
-            width,
-            height,
-            grid: vec![vec![TileState::Unseen; width as usize]; height as usize],
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Represents a single tile on the game map.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Tile {
     pub tile_type: char,
     pub biome: String,
-    pub lock_id: Option<u32>,
-    pub remaining_resources: Option<u32>,
-    pub depletion_episode: Option<u32>,
     pub original_tile_type: char,
     pub health: Option<f64>,
 }
@@ -47,102 +34,179 @@ impl Tile {
         Tile {
             tile_type,
             biome,
-            lock_id: None,
-            remaining_resources: None,
-            depletion_episode: None,
             original_tile_type: tile_type,
             health: None,
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+/// A chunk of the map, containing its own tiles and a spatial map for entities.
+#[derive(Debug, Clone)]
+pub struct MapChunk {
+    pub tiles: Vec<Vec<Tile>>,
+    pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
+}
+
+impl MapChunk {
+    pub fn new() -> Self {
+        MapChunk {
+            tiles: vec![vec![Tile::new(' ', "none".to_string()); CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+            spatial_map: HashMap::new(),
+        }
+    }
+}
+
+/// Represents a biome type with its associated properties.
+#[derive(Debug, Deserialize, Clone)]
 pub struct Biome {
     pub name: String,
     pub tile_type: char,
     pub height_range: [f64; 2],
 }
 
+/// Represents a resource that can be found in the world.
 #[derive(Debug, Deserialize, Clone)]
-pub struct Resource {
+pub struct ResourceDef {
     pub name: String,
     pub biomes: Vec<String>,
     pub density: f64,
 }
 
+/// The main map resource, containing a grid of map chunks.
+#[derive(Resource, Clone)]
 pub struct Map {
     pub width: u32,
     pub height: u32,
-    pub grid: Vec<Vec<Tile>>,
+    pub chunks: Vec<Vec<Arc<Mutex<MapChunk>>>>,
     pub biomes: Vec<Biome>,
-    pub resources: Vec<Resource>,
-    pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
+    pub resources: Vec<ResourceDef>,
 }
 
 impl Map {
-    pub fn display_observer_map(&self, world: &super::ecs::World) {
-        println!("\n--- Observer Map ---");
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let entity_on_tile = self.spatial_map.get(&(x, y)).and_then(|v| v.first());
-
-                if let Some(&entity) = entity_on_tile {
-                    if world.get_component::<Player>(entity).is_some() {
-                        print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
-                    } else {
-                        print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
-                    }
-                } else {
-                    let tile_char = self.grid[y as usize][x as usize].tile_type;
-                    match tile_char {
-                        '.' => print!("\x1b[32m. \x1b[0m"),   // Green
-                        'f' => print!("\x1b[93mf \x1b[0m"),   // Bright Yellow
-                        'M' => print!("\x1b[97mM \x1b[0m"),   // Bright White
-                        'T' => print!("\x1b[32m T\x1b[0m"),  // Dark Green
-                        '~' => print!("\x1b[34m~ \x1b[0m"),   // Blue
-                        '#' => print!("\x1b[90m# \x1b[0m"),   // Dim White
-                        'O' => print!("\x1b[36mO \x1b[0m"),   // Cyan
-                        _ => print!("{} ", tile_char),
-                    }
-                }
-            }
-            println!();
-        }
-    }
-
-    pub fn new(width: u32, height: u32, biomes_path: &str, resources_path: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        width: u32,
+        height: u32,
+        biomes_path: &str,
+        resources_path: &str,
+    ) -> Result<Self, SimulationError> {
         let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
 
         let resources_data = fs::read_to_string(resources_path)?;
-        let resources: Vec<Resource> = serde_json::from_str(&resources_data)?;
+        let resources: Vec<ResourceDef> = serde_json::from_str(&resources_data)?;
 
-        let grid = vec![vec![Tile::new(' ', "none".to_string()); width as usize]; height as usize];
+        let chunks_x = (width as f32 / CHUNK_SIZE as f32).ceil() as usize;
+        let chunks_y = (height as f32 / CHUNK_SIZE as f32).ceil() as usize;
 
-        Ok(Map {
+        let chunks = (0..chunks_y)
+            .map(|_| {
+                (0..chunks_x)
+                    .map(|_| Arc::new(Mutex::new(MapChunk::new())))
+                    .collect()
+            })
+            .collect();
+
+        let mut map = Map {
             width,
             height,
-            grid,
+            chunks,
             biomes,
             resources,
-            spatial_map: HashMap::new(),
-        })
+        };
+
+        map.generate_island_map(25.0, 5, 0.5, 2.0);
+        Ok(map)
     }
 
-    pub fn generate_island_map(&mut self, scale: f64, octaves: i32, persistence: f64, lacunarity: f64) {
-        let seed = rand::thread_rng().r#gen::<u32>();
-        let mut fbm: Fbm<Perlin> = Fbm::new(seed);
-        fbm.octaves = octaves as usize;
-        fbm.persistence = persistence;
-        fbm.lacunarity = lacunarity;
+    pub fn get_chunk_index(&self, x: u32, y: u32) -> Option<(usize, usize)> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        Some(((x / CHUNK_SIZE) as usize, (y / CHUNK_SIZE) as usize))
+    }
 
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let nx = 2.0 * x as f64 / self.width as f64 - 1.0;
-                let ny = 2.0 * y as f64 / self.height as f64 - 1.0;
+    pub fn get_tile(&self, x: u32, y: u32) -> Option<Tile> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = (x % CHUNK_SIZE) as usize;
+        let local_y = (y % CHUNK_SIZE) as usize;
+        chunk.tiles.get(local_y)?.get(local_x).cloned()
+    }
+
+    pub fn set_tile(&self, x: u32, y: u32, tile: Tile) -> Option<()> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = (x % CHUNK_SIZE) as usize;
+        let local_y = (y % CHUNK_SIZE) as usize;
+        if let Some(t) = chunk.tiles.get_mut(local_y)?.get_mut(local_x) {
+            *t = tile;
+        }
+        Some(())
+    }
+
+    pub fn add_entity_to_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = x % CHUNK_SIZE;
+        let local_y = y % CHUNK_SIZE;
+        chunk.spatial_map.entry((local_x, local_y)).or_default().push(entity);
+        Some(())
+    }
+
+    pub fn remove_entity_from_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = x % CHUNK_SIZE;
+        let local_y = y % CHUNK_SIZE;
+        if let Some(entities) = chunk.spatial_map.get_mut(&(local_x, local_y)) {
+            entities.retain(|&e| e != entity);
+        }
+        Some(())
+    }
+
+    pub fn get_entities_at(&self, x: u32, y: u32) -> Option<Vec<Entity>> {
+        let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let local_x = x % CHUNK_SIZE;
+        let local_y = y % CHUNK_SIZE;
+        chunk.spatial_map.get(&(local_x, local_y)).cloned()
+    }
+
+
+    pub fn is_walkable(&self, x: u32, y: u32) -> bool {
+        self.get_tile(x, y)
+            .map_or(false, |tile| matches!(tile.tile_type, '.' | ',' | 'f'))
+    }
+
+    fn generate_island_map(
+        &mut self,
+        scale: f64,
+        octaves: i32,
+        persistence: f64,
+        lacunarity: f64,
+    ) {
+        let mut rng = rand::rng();
+        let seed = rng.random::<u32>();
+
+        let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
+        base_fbm.octaves = octaves as usize;
+        base_fbm.persistence = persistence;
+        base_fbm.lacunarity = lacunarity;
+
+        let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed.wrapping_add(1));
+
+        for y_abs in 0..self.height {
+            for x_abs in 0..self.width {
+                let nx = 2.0 * x_abs as f64 / self.width as f64 - 1.0;
+                let ny = 2.0 * y_abs as f64 / self.height as f64 - 1.0;
                 let dist = 1.0 - (1.0 - nx.powi(2)) * (1.0 - ny.powi(2));
-                let noise_val = fbm.get([x as f64 / scale, y as f64 / scale]);
-                let island_val = (noise_val + 1.0) / 2.0;
+
+                let pos = [x_abs as f64 / scale, y_abs as f64 / scale];
+                let base_noise = base_fbm.get(pos);
+                let mountain_pos = [x_abs as f64 / (scale * 2.5), y_abs as f64 / (scale * 2.5)];
+                let mountain_noise = ridged_multi.get(mountain_pos);
+                let combined_noise = base_noise + (mountain_noise.powi(2) * 0.6);
+                let island_val = (combined_noise.clamp(-1.0, 1.5) + 1.0) / 2.5;
                 let height = island_val * (1.0 - dist);
 
                 let mut tile_char = ' ';
@@ -156,57 +220,11 @@ impl Map {
                     }
                 }
 
-                if biome_name == "plains" && tile_char == '.' && rand::thread_rng().gen_range(0..100) < 5 {
+                if biome_name == "plains" && tile_char == '.' && rng.random_range(0..100) < 5 {
                     tile_char = 'f';
                 }
 
-                self.grid[y as usize][x as usize] = Tile::new(tile_char, biome_name);
-            }
-        }
-    }
-
-    pub fn display(&self, world: &super::ecs::World) {
-        // For multi-player, we'd need to specify which player's map to show.
-        // For now, we'll just find the first entity with a Player component.
-        let player_entity = (0..world.entities.len()).find(|&e| world.get_component::<Player>(e).is_some());
-
-        if let Some(player_entity) = player_entity {
-            if let Some(player) = world.get_component::<Player>(player_entity) {
-                let mental_map = &player.mental_map;
-
-                for y in 0..self.height {
-                    for x in 0..self.width {
-                        let tile_state = mental_map.grid[y as usize][x as usize];
-                        match tile_state {
-                            TileState::Unseen => print!("  "), // Two spaces for alignment
-                            TileState::Explored => {
-                                print!("\x1b[90m{} \x1b[0m", self.grid[y as usize][x as usize].tile_type); // Dim gray color
-                            }
-                            TileState::Visible => {
-                                let entity_on_tile = self.spatial_map.get(&(x, y)).and_then(|v| v.first());
-
-                                if let Some(&entity) = entity_on_tile {
-                                    if world.get_component::<Player>(entity).is_some() {
-                                        print!("\x1b[91mP \x1b[0m"); // Bright Red 'P'
-                                    } else {
-                                        print!("\x1b[33mE \x1b[0m"); // Yellow 'E'
-                                    }
-                                } else {
-                                    print!("\x1b[97m{} \x1b[0m", self.grid[y as usize][x as usize].tile_type); // Bright White
-                                }
-                            }
-                        }
-                    }
-                    println!();
-                }
-            }
-        } else {
-            // Fallback if no player is found (e.g., during setup or for debugging)
-            for y in 0..self.height {
-                for x in 0..self.width {
-                    print!("{} ", self.grid[y as usize][x as usize].tile_type);
-                }
-                println!();
+                self.set_tile(x_abs, y_abs, Tile::new(tile_char, biome_name));
             }
         }
     }

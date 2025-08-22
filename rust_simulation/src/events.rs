@@ -1,25 +1,16 @@
-use crate::ecs::Entity;
+use crate::brain::{Goal, HighLevelState};
+use crate::components::Position;
+use bevy_ecs::prelude::*;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Event)]
 pub enum Event {
     EntityDied(Entity),
-}
-
-#[derive(Default)]
-pub struct EventBus {
-    events: Vec<Event>,
-}
-
-impl EventBus {
-    pub fn new() -> Self {
-        EventBus { events: Vec::new() }
-    }
-
-    pub fn publish(&mut self, event: Event) {
-        self.events.push(event);
-    }
-
-    pub fn take_events(&mut self) -> Vec<Event> {
-        std::mem::take(&mut self.events)
-    }
+    FoundationBuilt { builder: Entity, position: Position },
+    GoalCompleted {
+        entity: Entity,
+        prev_state: HighLevelState,
+        goal: Goal,
+        new_state: HighLevelState,
+        reward: f64,
+    },
 }
