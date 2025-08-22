@@ -122,10 +122,10 @@ pub fn get_high_level_state(
     };
 
     let inventory_summary = InventorySummary {
-        wood_level: get_resource_level(inventory.get_quantity("wood")),
-        stone_level: get_resource_level(inventory.get_quantity("stone")),
-        iron_ore_level: get_resource_level(inventory.get_quantity("iron_ore")),
-        has_stone_axe: inventory.has_item("stone_axe", 1),
+        wood_level: get_resource_level(inventory.get_quantity(crate::consts::WOOD)),
+        stone_level: get_resource_level(inventory.get_quantity(crate::consts::STONE)),
+        iron_ore_level: get_resource_level(inventory.get_quantity(crate::consts::IRON_ORE)),
+        has_stone_axe: inventory.has_item(crate::consts::STONE_AXE, 1),
     };
 
     HighLevelState {
@@ -149,14 +149,22 @@ fn choose_goal(
         return Ok(Goal::Flee);
     }
 
-    let valid_goals: Vec<_> = brain
-        .goals
-        .iter()
+    // Dynamically generate goals
+    let mut possible_goals = vec![
+        Goal::GatherResource(crate::consts::WOOD.to_string()),
+        Goal::GatherResource(crate::consts::STONE.to_string()),
+        Goal::Explore,
+    ];
+    for recipe_name in brain.recipe_manager.recipes.keys() {
+        possible_goals.push(Goal::CraftItem(recipe_name.clone()));
+    }
+
+    let valid_goals: Vec<_> = possible_goals
+        .into_iter()
         .filter(|g| is_goal_valid(g, known_resources))
-        .cloned()
         .collect();
     if valid_goals.is_empty() {
-        return Ok(Goal::Flee);
+        return Ok(Goal::Explore); // Explore if no other valid goals
     }
 
     if rng.r#gen::<f64>() < brain.epsilon {
@@ -224,7 +232,7 @@ fn plan_goal(
                         .and_then(|item_def| {
                             if let Some(improves) = &item_def.improves_gathering {
                                 if improves.contains(resource) {
-                                    return Some((item_name, item_def.tier));
+                                    return Some((item_name.as_str(), item_def.tier));
                                 }
                             }
                             None
@@ -234,9 +242,9 @@ fn plan_goal(
                 .map(|(name, _)| name);
 
             // If we found a best tool and it's not equipped, plan to equip it.
-            if let Some(tool) = best_tool {
-                if equipped.tool.as_deref() != Some(tool) {
-                    plan.push(Goal::Equip(tool.clone()));
+            if let Some(tool_name) = best_tool {
+                if equipped.tool.as_deref() != Some(tool_name) {
+                    plan.push(Goal::Equip(tool_name.to_string()));
                 }
             }
             plan.push(goal.clone());

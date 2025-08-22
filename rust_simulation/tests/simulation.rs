@@ -7,13 +7,14 @@ use rust_simulation::{
     components::{
         intents::*,
         path::*,
-        BrainComponent, Health, Inventory, Position, Resource as ResourceComponent, WantsToCraft, Equipped,
+        BrainComponent, Equipped, Health, Inventory, Position, Resource as ResourceComponent,
+        WantsToCraft,
     },
-    Player,
     config::{DAY_LENGTH, NUM_PLAYERS},
+    consts,
     errors::SimulationError,
     systems::{self, ai::goal_selection},
-    IsDay, MySchedule, TickCount,
+    IsDay, MySchedule, Player, TickCount,
 };
 
 #[test]
@@ -71,7 +72,7 @@ fn test_craft_action_flow() {
 
     world
         .entity_mut(player_entity)
-        .insert(IntendsToCraft("stone_axe".to_string()));
+        .insert(IntendsToCraft(consts::STONE_AXE.to_string()));
 
     let mut schedule = Schedule::new(MySchedule::Test);
     schedule.add_systems(systems::ai::actions::craft::craft_action_system);
@@ -127,31 +128,30 @@ fn test_equip_flow() {
         .next()
         .unwrap();
 
-    // Give player a tool
     let mut inventory = world.get_mut::<Inventory>(player_entity).unwrap();
-    inventory.add_item("stone_axe", 1);
+    inventory.add_item(consts::STONE_AXE, 1);
     drop(inventory);
 
-    // Add the desire to equip
-    world.entity_mut(player_entity).insert(WantsToEquip("stone_axe".to_string()));
+    world
+        .entity_mut(player_entity)
+        .insert(WantsToEquip(consts::STONE_AXE.to_string()));
 
-    // Run the system
     let mut schedule = Schedule::new(MySchedule::Test);
     schedule.add_systems(systems::equip::equip_system);
     schedule.run(&mut world);
 
-    // Check that the tool is equipped and removed from inventory
     let equipped = world.get::<Equipped>(player_entity).unwrap();
-    assert_eq!(equipped.tool.as_deref(), Some("stone_axe"));
+    assert_eq!(equipped.tool.as_deref(), Some(consts::STONE_AXE));
 
     let inventory = world.get::<Inventory>(player_entity).unwrap();
-    assert!(!inventory.has_item("stone_axe", 1));
+    assert!(!inventory.has_item(consts::STONE_AXE, 1));
 
-    // Check that the event was fired
-    let events = world.get_resource::<Events<rust_simulation::events::Event>>().unwrap();
+    let events = world
+        .get_resource::<Events<rust_simulation::events::Event>>()
+        .unwrap();
     let mut reader = events.get_reader();
     let event_fired = reader.read(events).any(|event| {
-        matches!(event, rust_simulation::events::Event::ToolEquipped { entity, tool_name } if *entity == player_entity && tool_name == "stone_axe")
+        matches!(event, rust_simulation::events::Event::ToolEquipped { entity, tool_name } if *entity == player_entity && tool_name == consts::STONE_AXE)
     });
     assert!(event_fired, "ToolEquipped event was not fired");
 }
@@ -159,10 +159,20 @@ fn test_equip_flow() {
 #[test]
 fn test_pathfinding_flow() {
     let mut world = create_test_world().unwrap();
-    let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+    let player_entity = world
+        .query_filtered::<Entity, With<Player>>()
+        .iter(&world)
+        .next()
+        .unwrap();
 
-    let map = world.get_resource_mut::<rust_simulation::map::Map>().unwrap();
-    map.set_tile(1, 0, rust_simulation::map::Tile::new('.', "grassland".to_string()));
+    let map = world
+        .get_resource_mut::<rust_simulation::map::Map>()
+        .unwrap();
+    map.set_tile(
+        1,
+        0,
+        rust_simulation::map::Tile::new('.', "grassland".to_string()),
+    );
     drop(map);
 
     world.entity_mut(player_entity).insert(PathRequest {
@@ -190,14 +200,22 @@ fn test_pathfinding_flow() {
 #[test]
 fn test_async_crafting_flow() {
     let mut world = create_test_world().unwrap();
-    let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+    let player_entity = world
+        .query_filtered::<Entity, With<Player>>()
+        .iter(&world)
+        .next()
+        .unwrap();
 
     let mut inventory = world.get_mut::<Inventory>(player_entity).unwrap();
-    inventory.add_item("wood", 10);
-    inventory.add_item("stone", 10);
+    inventory.add_item(consts::WOOD, 10);
+    inventory.add_item(consts::STONE, 10);
     drop(inventory);
 
-    world.entity_mut(player_entity).insert(WantsToCraft { item_name: "stone_axe".to_string() });
+    world
+        .entity_mut(player_entity)
+        .insert(WantsToCraft {
+            item_name: consts::STONE_AXE.to_string(),
+        });
 
     let mut schedule = Schedule::new(MySchedule::Test);
     schedule.add_systems(systems::crafting::crafting_dispatcher_system);
@@ -207,7 +225,7 @@ fn test_async_crafting_flow() {
     for _ in 0..10 {
         schedule.run(&mut world);
         let inventory = world.get::<Inventory>(player_entity).unwrap();
-        if inventory.has_item("stone_axe", 1) {
+        if inventory.has_item(consts::STONE_AXE, 1) {
             craft_complete = true;
             break;
         }
@@ -219,14 +237,23 @@ fn test_async_crafting_flow() {
 #[test]
 fn test_async_gathering_flow() {
     let mut world = create_test_world().unwrap();
-    let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+    let player_entity = world
+        .query_filtered::<Entity, With<Player>>()
+        .iter(&world)
+        .next()
+        .unwrap();
 
     world.spawn((
         Position { x: 1, y: 0 },
-        ResourceComponent { name: "wood".to_string(), quantity: 5 }
+        ResourceComponent {
+            name: consts::WOOD.to_string(),
+            quantity: 5,
+        },
     ));
 
-    world.entity_mut(player_entity).insert(IntendsToGather("wood".to_string()));
+    world
+        .entity_mut(player_entity)
+        .insert(IntendsToGather(consts::WOOD.to_string()));
 
     let mut schedule = Schedule::new(MySchedule::Test);
     schedule.add_systems(systems::gathering::gathering_dispatcher_system);
@@ -236,7 +263,7 @@ fn test_async_gathering_flow() {
     for _ in 0..10 {
         schedule.run(&mut world);
         let inventory = world.get::<Inventory>(player_entity).unwrap();
-        if inventory.has_item("wood", 1) {
+        if inventory.has_item(consts::WOOD, 1) {
             gather_complete = true;
             break;
         }

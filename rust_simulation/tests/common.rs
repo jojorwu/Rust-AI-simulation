@@ -1,4 +1,4 @@
-use bevy_ecs::prelude::World;
+use bevy_ecs::{prelude::*, schedule::Schedule};
 use rust_simulation::errors::SimulationError;
 use rust_simulation::setup_world;
 use std::env;

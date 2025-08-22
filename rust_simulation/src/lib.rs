@@ -6,6 +6,7 @@ pub mod async_task;
 pub mod brain;
 pub mod components;
 pub mod config;
+pub mod consts;
 pub mod errors;
 pub mod events;
 pub mod fov;

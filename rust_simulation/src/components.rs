@@ -73,7 +73,6 @@ pub struct BrainComponent {
     pub home_base: Option<Position>,
 
     // Fields from Brain
-    pub goals: Vec<Goal>,
     pub recipe_manager: Arc<RecipeManager>,
     pub item_registry: Arc<crate::item::ItemRegistry>,
     pub learning_rate: f64,
@@ -91,13 +90,6 @@ impl BrainComponent {
         discount_factor: f64,
         epsilon: f64,
     ) -> Self {
-        let goals = vec![
-            Goal::GatherResource("wood".to_string()),
-            Goal::GatherResource("stone".to_string()),
-            Goal::CraftItem("stone_axe".to_string()),
-            Goal::Build("foundation".to_string()),
-            Goal::Stockpile("wood".to_string()),
-        ];
         BrainComponent {
             current_goal: None,
             goal_stack: Vec::new(),
@@ -106,7 +98,6 @@ impl BrainComponent {
             prev_state: None,
             prev_goal: None,
             home_base: None,
-            goals,
             recipe_manager,
             item_registry,
             learning_rate,
