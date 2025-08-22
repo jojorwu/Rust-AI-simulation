@@ -44,8 +44,6 @@ pub enum Goal {
     Build(String),
     /// Attack a specific entity.
     Attack(Entity),
-    /// Equip a specific tool.
-    Equip(String),
     /// Flee from a threat.
     Flee,
     /// Explore the map to find resources.
@@ -67,20 +65,16 @@ pub enum BrainAction {
     Store(WantsToStoreItem),
 }
 
-/// Represents the amount of a resource an agent has.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum ResourceLevel {
-    None,
-    Low,
-    High,
-}
-
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct InventorySummary {
-    pub wood_level: ResourceLevel,
-    pub stone_level: ResourceLevel,
-    pub iron_ore_level: ResourceLevel,
+    /// Whether the agent has any wood.
+    pub has_wood: bool,
+    /// Whether the agent has any stone.
+    pub has_stone: bool,
+    /// Whether the agent has any iron ore.
+    pub has_iron_ore: bool,
+    /// Whether the agent has a stone axe.
     pub has_stone_axe: bool,
 }
 
@@ -90,8 +84,6 @@ pub struct InventorySummary {
 pub struct HighLevelState {
     /// A summary of the agent's inventory.
     pub inventory_summary: InventorySummary,
-    /// The agent's currently equipped tool.
-    pub equipped_tool: Option<String>,
     /// The number of hostile players the agent is aware of.
     pub num_hostile_players: u32,
     /// The agent's current health level.

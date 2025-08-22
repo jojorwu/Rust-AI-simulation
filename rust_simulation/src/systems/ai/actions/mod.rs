@@ -3,7 +3,6 @@ pub mod craft;
 pub mod explore;
 pub mod flee;
 pub mod stockpile;
-pub mod equip;
 
 // This module will contain the individual action systems
 // and shared helper functions.

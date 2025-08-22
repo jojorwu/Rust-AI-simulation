@@ -2,11 +2,10 @@ use crate::brain::{Goal, HighLevelState, MemoryTile, PlayerMemory};
 use crate::components::Position;
 use bevy_ecs::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
 
 /// A component representing the agent's memory of the map layout.
 #[derive(Component, Clone)]
-pub struct MentalMap(pub Arc<Vec<Vec<Option<MemoryTile>>>>);
+pub struct MentalMap(pub Vec<Vec<Option<MemoryTile>>>);
 
 /// A component representing the agent's knowledge of resource locations.
 #[derive(Component, Clone)]

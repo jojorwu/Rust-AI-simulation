@@ -15,11 +15,3 @@ pub struct PathRequest {
 pub struct CurrentPath {
     pub nodes: VecDeque<(u32, u32)>,
 }
-
-/// A component that indicates that a pathfinding request has failed.
-#[derive(Component)]
-pub struct PathfindingFailure;
-
-/// A marker component that indicates a pathfinding request is in progress.
-#[derive(Component)]
-pub struct PathfindingInProgress;

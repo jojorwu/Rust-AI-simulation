@@ -6,7 +6,6 @@ pub mod async_task;
 pub mod brain;
 pub mod components;
 pub mod config;
-pub mod consts;
 pub mod errors;
 pub mod events;
 pub mod fov;
@@ -29,13 +28,13 @@ use std::sync::Arc;
 
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
-    BrainComponent, Health, Inventory, Position, Equipped,
+    BrainComponent, Health, Inventory, Position,
 };
 use config::*;
 use errors::SimulationError;
 use item::ItemRegistry;
 use map::Map;
-pub use player::Player;
+use player::Player;
 use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
 use systems::*;
@@ -70,7 +69,7 @@ pub fn setup_world(
     let recipe_manager = Arc::new(RecipeManager::new(recipes_path)?);
 
     world.insert_resource(map);
-    world.insert_resource(ItemRegistryResource(Arc::clone(&item_registry)));
+    world.insert_resource(ItemRegistryResource(item_registry));
     world.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
     world.insert_resource(IsDay(true));
     world.insert_resource(TickCount(0));
@@ -83,15 +82,13 @@ pub fn setup_world(
             Position { x: 0, y: 0 },
             Health { current: 100, max: 100 },
             Inventory::new(),
-            Equipped { tool: None },
             BrainComponent::new(
                 Arc::clone(&recipe_manager),
-                Arc::clone(&item_registry),
                 LEARNING_RATE,
                 DISCOUNT_FACTOR,
                 EPSILON,
             ),
-            MentalMap(Arc::new(vec![vec![None; WIDTH as usize]; HEIGHT as usize])),
+            MentalMap(vec![vec![None; WIDTH as usize]; HEIGHT as usize]),
             KnownResources(HashMap::new()),
             PlayerMemories(HashMap::new()),
             GoalQTable(HashMap::new()),
@@ -108,17 +105,7 @@ pub enum MySchedule {
     Test,
 }
 
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-enum SimulationSet {
-    AI,
-    AsyncDispatch,
-    ResultCollection,
-    Physics,
-    SyncActions,
-    Finalize,
-}
-
-pub fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCount>) {
+fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCount>) {
     tick_count.0 += 1;
     is_day.0 = (tick_count.0 % (DAY_LENGTH + NIGHT_LENGTH)) < DAY_LENGTH;
 }
@@ -126,74 +113,28 @@ pub fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCo
 pub fn create_schedule() -> Schedule {
     let mut schedule = Schedule::new(MySchedule::Main);
 
-    schedule.configure_sets(
-        (
-            SimulationSet::AI,
-            SimulationSet::AsyncDispatch,
-            SimulationSet::ResultCollection,
-            SimulationSet::Physics,
-            SimulationSet::SyncActions,
-            SimulationSet::Finalize,
-        )
-            .chain(),
-    );
-
-    schedule.add_systems(
-        (
-            update_day_night,
-            systems::visibility_system::visibility_system,
-            q_learning::update_q_table_system,
-            goal_selection::goal_selection_system,
-            actions::craft::craft_action_system,
-            actions::attack::attack_action_system,
-            actions::flee::flee_action_system,
-            actions::explore::explore_action_system,
-            actions::stockpile::stockpile_action_system,
-            actions::equip::equip_action_system,
-            systems::gathering::gathering_movement_system,
-            systems::ai::pathfinding_failure::handle_pathfinding_failure_system,
-        )
-            .in_set(SimulationSet::AI),
-    );
-
-    schedule.add_systems(
-        (
-            systems::pathfinding_system::pathfinding_dispatcher_system,
-            crafting::crafting_dispatcher_system,
-            systems::gathering::gathering_dispatcher_system,
-        )
-            .in_set(SimulationSet::AsyncDispatch),
-    );
-
-    schedule.add_systems(
-        (
-            systems::async_result_collection_system::async_result_collection_system,
-            apply_deferred,
-        )
-            .in_set(SimulationSet::ResultCollection),
-    );
-
-    schedule.add_systems(
-        (
-            systems::path_movement_system::path_movement_system,
-            apply_deferred,
-            movement::movement_system,
-        )
-            .in_set(SimulationSet::Physics),
-    );
-
-    schedule.add_systems(
-        (
-            building::building_system,
-            storage::storage_system,
-            combat::combat_system,
-            equip::equip_system,
-            throwing::throwing_system,
-        )
-            .in_set(SimulationSet::SyncActions),
-    );
-
-    schedule.add_systems(death::death_system.in_set(SimulationSet::Finalize));
+    schedule
+        .add_systems(update_day_night)
+        .add_systems(systems::visibility_system::visibility_system)
+        .add_systems(q_learning::update_q_table_system)
+        .add_systems(goal_selection::goal_selection_system)
+        .add_systems(actions::craft::craft_action_system)
+        .add_systems(actions::attack::attack_action_system)
+        .add_systems(actions::flee::flee_action_system)
+        .add_systems(actions::explore::explore_action_system)
+        .add_systems(actions::stockpile::stockpile_action_system)
+        .add_systems(systems::pathfinding_system::pathfinding_system)
+        .add_systems(systems::async_result_collection_system::async_result_collection_system)
+        .add_systems(apply_deferred)
+        .add_systems(systems::path_movement_system::path_movement_system)
+        .add_systems(apply_deferred)
+        .add_systems(movement::movement_system)
+        .add_systems(gathering::gathering_system)
+        .add_systems(crafting::crafting_system)
+        .add_systems(building::building_system)
+        .add_systems(storage::storage_system)
+        .add_systems(combat::combat_system)
+        .add_systems(death::death_system);
 
     schedule
 }
@@ -240,3 +181,54 @@ impl Game {
 }
 
 
+// --- Tests ---
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use crate::components::path::{PathRequest, CurrentPath};
+
+    fn create_test_world() -> Result<World, SimulationError> {
+        let _ = env_logger::try_init();
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+            .map_err(|e| SimulationError::EnvVarError(e.to_string()))?;
+        setup_world(
+            &format!("{manifest_dir}/data/biomes.json"),
+            &format!("{manifest_dir}/data/resources.json"),
+            &format!("{manifest_dir}/data/items.json"),
+            &format!("{manifest_dir}/data/recipes.json"),
+        )
+    }
+
+    #[test]
+    fn test_pathfinding_flow() {
+        let mut world = create_test_world().unwrap();
+        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
+
+        let mut map = world.get_resource_mut::<Map>().unwrap();
+        map.set_tile(1, 0, crate::map::Tile::new('.', "grassland".to_string()));
+        drop(map);
+
+        world.entity_mut(player_entity).insert(PathRequest {
+            start: (0, 0),
+            goal: (1, 0),
+        });
+
+        let mut schedule = Schedule::new(MySchedule::Test);
+        schedule.add_systems(systems::pathfinding_system::pathfinding_system);
+        schedule.add_systems(systems::async_result_collection_system::async_result_collection_system);
+        schedule.add_systems(apply_deferred);
+
+        let mut path_found = false;
+        for _ in 0..10 {
+            schedule.run(&mut world);
+            if world.get::<CurrentPath>(player_entity).is_some() {
+                path_found = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(path_found, "Path was not found after timeout");
+    }
+}

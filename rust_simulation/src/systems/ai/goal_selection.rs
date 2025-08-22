@@ -2,11 +2,10 @@ use crate::brain::{Goal, HighLevelState, InventorySummary};
 use crate::components::{
     ai::{GoalQTable, KnownResources, PlayerMemories},
     intents::*,
-    BrainComponent, Equipped, Health, Inventory,
+    BrainComponent, Health, Inventory,
 };
-use crate::config;
 use crate::errors::SimulationError;
-use crate::IsDay;
+use crate::{IsDay, config};
 use bevy_ecs::prelude::*;
 use log::info;
 use rand::Rng;
@@ -22,12 +21,9 @@ pub fn goal_selection_system(
         &KnownResources,
         &PlayerMemories,
         &GoalQTable,
-        &Equipped,
     )>,
     is_day: Res<IsDay>,
 ) {
-    let mut rng = rand::thread_rng();
-
     for (
         entity,
         mut brain,
@@ -36,12 +32,11 @@ pub fn goal_selection_system(
         known_resources,
         player_memories,
         goal_q_table,
-        equipped,
     ) in query.iter_mut()
     {
         if brain.current_goal.is_none() && brain.goal_commitment_ticks == 0 {
             let high_level_state =
-                get_high_level_state(health, inventory, player_memories, equipped, is_day.0);
+                get_high_level_state(health, inventory, player_memories, is_day.0);
 
             if let Ok(new_high_level_goal) = choose_goal(
                 &high_level_state,
@@ -49,10 +44,9 @@ pub fn goal_selection_system(
                 known_resources,
                 goal_q_table,
                 is_day.0,
-                &mut rng,
             ) {
                 if let Ok(mut plan) =
-                    plan_goal(&brain, inventory, known_resources, &new_high_level_goal, equipped)
+                    plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
                 {
                     plan.reverse();
                     brain.goal_stack = plan;
@@ -60,6 +54,7 @@ pub fn goal_selection_system(
                     if let Some(goal) = &brain.current_goal {
                         info!("Entity {:?} selected new goal: {:?}", entity, goal);
 
+                        // Add the corresponding intent component
                         match goal {
                             Goal::GatherResource(res) => {
                                 commands.entity(entity).insert(IntendsToGather(res.clone()));
@@ -73,9 +68,6 @@ pub fn goal_selection_system(
                             Goal::Attack(target) => {
                                 commands.entity(entity).insert(IntendsToAttack(*target));
                             }
-                            Goal::Equip(tool) => {
-                                commands.entity(entity).insert(IntendsToEquip(tool.clone()));
-                            }
                             Goal::Flee => {
                                 commands.entity(entity).insert(IntendsToFlee);
                             }
@@ -87,7 +79,6 @@ pub fn goal_selection_system(
                             }
                         }
 
-                        brain.state_at_goal_start = Some(high_level_state);
                         brain.goal_commitment_ticks = config::GOAL_COMMITMENT_TICKS;
                     }
                 }
@@ -96,13 +87,11 @@ pub fn goal_selection_system(
     }
 }
 
-use crate::brain::ResourceLevel;
-
-pub fn get_high_level_state(
+/// Constructs the high-level state of an agent from its components.
+fn get_high_level_state(
     health: &Health,
     inventory: &Inventory,
     player_memories: &PlayerMemories,
-    equipped: &Equipped,
     is_day: bool,
 ) -> HighLevelState {
     let num_hostile_players = player_memories
@@ -111,64 +100,46 @@ pub fn get_high_level_state(
         .filter(|m| m.relationship == crate::brain::RelationshipStatus::Hostile)
         .count() as u32;
 
-    let get_resource_level = |quantity: u32| {
-        if quantity == 0 {
-            ResourceLevel::None
-        } else if quantity < config::RESOURCE_LEVEL_LOW_THRESHOLD {
-            ResourceLevel::Low
-        } else {
-            ResourceLevel::High
-        }
-    };
-
     let inventory_summary = InventorySummary {
-        wood_level: get_resource_level(inventory.get_quantity(crate::consts::WOOD)),
-        stone_level: get_resource_level(inventory.get_quantity(crate::consts::STONE)),
-        iron_ore_level: get_resource_level(inventory.get_quantity(crate::consts::IRON_ORE)),
-        has_stone_axe: inventory.has_item(crate::consts::STONE_AXE, 1),
+        has_wood: inventory.has_item("wood", 1),
+        has_stone: inventory.has_item("stone", 1),
+        has_iron_ore: inventory.has_item("iron_ore", 1),
+        has_stone_axe: inventory.has_item("stone_axe", 1),
     };
 
     HighLevelState {
         inventory_summary,
-        equipped_tool: equipped.tool.clone(),
         num_hostile_players,
         health_level: health.current as u32,
         is_night: !is_day,
     }
 }
 
+/// Chooses a high-level goal for the agent based on the current state.
 fn choose_goal(
     state: &HighLevelState,
     brain: &BrainComponent,
     known_resources: &KnownResources,
     goal_q_table: &GoalQTable,
     is_night: bool,
-    rng: &mut impl Rng,
 ) -> Result<Goal, SimulationError> {
-    if state.health_level < config::FLEE_HEALTH_THRESHOLD {
+    const FLEE_HEALTH_THRESHOLD: u32 = 25;
+    if state.health_level < FLEE_HEALTH_THRESHOLD {
         return Ok(Goal::Flee);
     }
 
-    // Dynamically generate goals
-    let mut possible_goals = vec![
-        Goal::GatherResource(crate::consts::WOOD.to_string()),
-        Goal::GatherResource(crate::consts::STONE.to_string()),
-        Goal::Explore,
-    ];
-    for recipe_name in brain.recipe_manager.recipes.keys() {
-        possible_goals.push(Goal::CraftItem(recipe_name.clone()));
-    }
-
-    let valid_goals: Vec<_> = possible_goals
-        .into_iter()
+    let valid_goals: Vec<_> = brain
+        .goals
+        .iter()
         .filter(|g| is_goal_valid(g, known_resources))
+        .cloned()
         .collect();
     if valid_goals.is_empty() {
-        return Ok(Goal::Explore); // Explore if no other valid goals
+        return Ok(Goal::Flee);
     }
 
-    if rng.r#gen::<f64>() < brain.epsilon {
-        let index = rng.r#gen_range(0..valid_goals.len());
+    if rand::random::<f64>() < brain.epsilon {
+        let index = rand::thread_rng().gen_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
@@ -192,15 +163,16 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = rng.r#gen_range(0..valid_goals.len());
+                let index = rand::thread_rng().gen_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = rng.r#gen_range(0..valid_goals.len());
+        let index = rand::thread_rng().gen_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
 }
 
+/// Checks if a goal is currently valid.
 fn is_goal_valid(goal: &Goal, known_resources: &KnownResources) -> bool {
     match goal {
         Goal::GatherResource(resource_name) => known_resources
@@ -211,44 +183,15 @@ fn is_goal_valid(goal: &Goal, known_resources: &KnownResources) -> bool {
     }
 }
 
+/// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
 fn plan_goal(
     brain: &BrainComponent,
     inventory: &Inventory,
     known_resources: &KnownResources,
     goal: &Goal,
-    equipped: &Equipped,
 ) -> Result<Vec<Goal>, SimulationError> {
     let mut plan = Vec::new();
     match goal {
-        Goal::GatherResource(resource) => {
-            // Find the best tool in inventory for this resource.
-            let best_tool = inventory
-                .items
-                .keys()
-                .filter_map(|item_name| {
-                    brain
-                        .item_registry
-                        .get_item(item_name)
-                        .and_then(|item_def| {
-                            if let Some(improves) = &item_def.improves_gathering {
-                                if improves.contains(resource) {
-                                    return Some((item_name.as_str(), item_def.tier));
-                                }
-                            }
-                            None
-                        })
-                })
-                .max_by_key(|&(_, tier)| tier)
-                .map(|(name, _)| name);
-
-            // If we found a best tool and it's not equipped, plan to equip it.
-            if let Some(tool_name) = best_tool {
-                if equipped.tool.as_deref() != Some(tool_name) {
-                    plan.push(Goal::Equip(tool_name.to_string()));
-                }
-            }
-            plan.push(goal.clone());
-        }
         Goal::CraftItem(item_name) => {
             let required = brain
                 .recipe_manager
@@ -285,6 +228,7 @@ fn plan_goal(
     Ok(plan)
 }
 
+/// Plans the gathering of resources required for a crafting recipe.
 fn plan_resource_gathering(
     inventory: &Inventory,
     known_resources: &KnownResources,

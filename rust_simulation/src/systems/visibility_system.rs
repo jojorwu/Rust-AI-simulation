@@ -6,22 +6,23 @@ use crate::components::{
 use crate::fov;
 use crate::map::Map;
 use bevy_ecs::prelude::*;
-use std::sync::Arc;
+use log::debug;
+use std::collections::VecDeque;
 
-const VISION_RADIUS: i32 = 8;
+const VISION_RADIUS: i32 = 8; // TODO: Move to config.rs
 
 pub fn visibility_system(
     map: Res<Map>,
-    mut query: Query<(&Position, &mut MentalMap, &mut ExplorationFrontier)>,
+    mut query: Query<(Entity, &Position, &mut MentalMap, &mut ExplorationFrontier)>,
 ) {
-    for (pos, mut mental_map, mut exploration_frontier) in query.iter_mut() {
+    for (entity, pos, mut mental_map, mut exploration_frontier) in query.iter_mut() {
         let visible_tiles = fov::field_of_view(pos, VISION_RADIUS, &map);
-        let mut_map = Arc::make_mut(&mut mental_map.0);
+        let old_frontier_size = exploration_frontier.0.len();
 
         for visible_pos in &visible_tiles {
-            if mut_map[visible_pos.y as usize][visible_pos.x as usize].is_none() {
+            if mental_map.0[visible_pos.y as usize][visible_pos.x as usize].is_none() {
                 if let Some(tile) = map.get_tile(visible_pos.x, visible_pos.y) {
-                    mut_map[visible_pos.y as usize][visible_pos.x as usize] =
+                    mental_map.0[visible_pos.y as usize][visible_pos.x as usize] =
                         Some(MemoryTile { tile });
                 }
 
@@ -40,7 +41,7 @@ pub fn visibility_system(
                         {
                             let nx = neighbor_x as u32;
                             let ny = neighbor_y as u32;
-                            if mut_map[ny as usize][nx as usize].is_none() {
+                            if mental_map.0[ny as usize][nx as usize].is_none() {
                                 let frontier_pos = Position { x: nx, y: ny };
                                 if !exploration_frontier.0.contains(&frontier_pos) {
                                     exploration_frontier.0.push_back(frontier_pos);
@@ -50,6 +51,25 @@ pub fn visibility_system(
                     }
                 }
             }
+        }
+
+        let mut new_frontier = VecDeque::new();
+        for p in exploration_frontier.0.iter() {
+            if mental_map.0[p.y as usize][p.x as usize].is_none() {
+                new_frontier.push_back(*p);
+            }
+        }
+        exploration_frontier.0 = new_frontier;
+
+        let new_frontiers = exploration_frontier.0.len() - old_frontier_size;
+        if new_frontiers > 0 {
+            debug!(
+                "Entity {:?} saw {} tiles, discovered {} new frontier tiles. Total frontier size: {}",
+                entity,
+                visible_tiles.len(),
+                new_frontiers,
+                exploration_frontier.0.len()
+            );
         }
     }
 }
