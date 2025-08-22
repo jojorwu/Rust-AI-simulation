@@ -1,15 +1,11 @@
 use crate::async_task::{AsyncResult, AsyncResultChannel};
-use crate::components::{path::CurrentPath, Inventory, Resource as ResourceComponent, Chest};
-use crate::events::Event;
-use crate::map::{Map, CHUNK_SIZE};
+use crate::components::{path::CurrentPath, Inventory, Resource as ResourceComponent};
 use bevy_ecs::prelude::*;
 
 pub fn async_result_collection_system(
     mut commands: Commands,
     mut inventory_query: Query<&mut Inventory>,
     mut resource_query: Query<&mut ResourceComponent>,
-    mut event_writer: EventWriter<Event>,
-    map: Res<Map>,
     channel: Res<AsyncResultChannel>,
 ) {
     while let Ok(result) = channel.receiver.try_recv() {
@@ -42,44 +38,6 @@ pub fn async_result_collection_system(
                 if gather_result.despawn_resource {
                     if let Some(mut entity_commands) = commands.get_entity(gather_result.resource_entity) {
                         entity_commands.despawn();
-                    }
-                }
-            }
-            AsyncResult::Building(build_result) => {
-                if build_result.success {
-                     if let Ok(mut inventory) = inventory_query.get_mut(build_result.builder_entity) {
-                        if inventory.remove_resources(&build_result.required_resources) {
-                             if let Some(tile) = map.get_tile(build_result.position.x, build_result.position.y) {
-                                if tile.tile_type == '.' {
-                                    if let Some((chunk_x, chunk_y)) = map.get_chunk_index(build_result.position.x, build_result.position.y) {
-                                        let mut chunk = map.chunks[chunk_y][chunk_x].lock().unwrap();
-                                        let local_x = (build_result.position.x % CHUNK_SIZE) as usize;
-                                        let local_y = (build_result.position.y % CHUNK_SIZE) as usize;
-                                        let tile = &mut chunk.tiles[local_y][local_x];
-
-                                        match build_result.structure_name.as_str() {
-                                            "chest" => {
-                                                commands.spawn((
-                                                    build_result.position,
-                                                    Chest { inventory: Inventory::new() },
-                                                ));
-                                                tile.tile_type = 'C';
-                                            }
-                                            "foundation" => {
-                                                tile.tile_type = 'B';
-                                                event_writer.send(Event::FoundationBuilt {
-                                                    builder: build_result.builder_entity,
-                                                    position: build_result.position,
-                                                });
-                                            }
-                                            "wall" => tile.tile_type = '#',
-                                            "doorway" => tile.tile_type = 'O',
-                                            _ => tile.tile_type = 'X',
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }

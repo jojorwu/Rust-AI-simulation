@@ -1,5 +1,5 @@
 use crate::{
-    components::{ai::MentalMap, Inventory, Position},
+    components::{ai::MentalMap, Inventory},
     recipes::RecipeManager,
 };
 use bevy_ecs::prelude::*;
@@ -29,14 +29,6 @@ pub struct GatheringTask {
     pub resource_quantity: u32,
 }
 
-pub struct BuildingTask {
-    pub builder_entity: Entity,
-    pub position: Position,
-    pub inventory: Inventory,
-    pub structure_name: String,
-    pub recipe_manager: Arc<RecipeManager>,
-}
-
 // --- Result Definitions ---
 
 #[derive(Debug)]
@@ -44,7 +36,6 @@ pub enum AsyncResult {
     Pathfinding(PathfindingResult),
     Crafting(CraftingResult),
     Gathering(GatheringResult),
-    Building(BuildingResult),
 }
 
 #[derive(Debug)]
@@ -68,15 +59,6 @@ pub struct GatheringResult {
     pub resource_name: String,
     pub gathered_amount: u32,
     pub despawn_resource: bool,
-}
-
-#[derive(Debug)]
-pub struct BuildingResult {
-    pub builder_entity: Entity,
-    pub position: Position,
-    pub structure_name: String,
-    pub required_resources: HashMap<String, u32>,
-    pub success: bool,
 }
 
 // --- Channel Resource ---

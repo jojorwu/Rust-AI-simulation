@@ -10,13 +10,11 @@ pub fn pathfinding_system(
     channel: Res<AsyncResultChannel>,
 ) {
     for (entity, request, mental_map) in query.iter() {
-        // The request is being handled, so remove it immediately.
         commands.entity(entity).remove::<PathRequest>();
 
         let sender = channel.sender.clone();
         let start = request.start;
         let goal = request.goal;
-        // The mental map must be cloned to be sent to the background thread.
         let mental_map_clone = mental_map.clone();
 
         spawn(move || {

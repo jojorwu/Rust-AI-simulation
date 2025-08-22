@@ -156,7 +156,6 @@ pub fn create_schedule() -> Schedule {
             systems::pathfinding_system::pathfinding_system,
             crafting::crafting_dispatcher_system,
             systems::gathering::gathering_dispatcher_system,
-            systems::building::building_dispatcher_system,
         )
             .in_set(SimulationSet::AsyncDispatch),
     );
@@ -180,6 +179,7 @@ pub fn create_schedule() -> Schedule {
 
     schedule.add_systems(
         (
+            building::building_system,
             storage::storage_system,
             combat::combat_system,
         )
@@ -240,7 +240,7 @@ mod tests {
     use super::*;
     use std::env;
     use crate::components::{WantsToCraft, Resource as ResourceComponent};
-    use crate::components::intents::{IntendsToCraft, IntendsToGather, IntendsToBuild};
+    use crate::components::intents::IntendsToGather;
     use crate::components::path::{PathRequest, CurrentPath};
 
 
@@ -343,40 +343,5 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert!(gather_complete, "Player should have wood after gathering");
-    }
-
-    #[test]
-    #[ignore = "This test is failing due to an unresolved issue with map state in the test environment."]
-    fn test_async_building_flow() {
-        let mut world = create_test_world().unwrap();
-        let player_entity = world.query_filtered::<Entity, With<Player>>().iter(&world).next().unwrap();
-
-        let mut map = world.get_resource_mut::<Map>().unwrap();
-        map.set_tile(0, 0, crate::map::Tile::new('.', "grassland".to_string()));
-        drop(map);
-
-        let mut inventory = world.get_mut::<Inventory>(player_entity).unwrap();
-        inventory.add_item("wood", 50);
-        drop(inventory);
-
-        world.entity_mut(player_entity).insert(IntendsToBuild("foundation".to_string()));
-
-        let mut schedule = Schedule::new(MySchedule::Test);
-        schedule.add_systems(building::building_dispatcher_system);
-        schedule.add_systems(systems::async_result_collection_system::async_result_collection_system);
-
-        let mut build_complete = false;
-        for _ in 0..10 {
-            schedule.run(&mut world);
-            let map = world.get_resource::<Map>().unwrap();
-            if let Some(tile) = map.get_tile(0, 0) {
-                if tile.tile_type == 'B' {
-                    build_complete = true;
-                    break;
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        assert!(build_complete, "Player should have built a foundation");
     }
 }
