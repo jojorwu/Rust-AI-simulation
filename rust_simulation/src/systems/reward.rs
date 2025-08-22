@@ -44,18 +44,18 @@ pub fn reward_system(
             _ => continue, // Ignore other events
         };
 
-        if let Ok((_brain, health, inventory, equipped, memories)) = query.get(entity) {
-            // A more advanced system would store the state when the goal is set to calculate a more accurate Q-value.
-            // For now, we just use the current state as both previous and new.
-            let current_state = get_high_level_state(health, inventory, memories, equipped, is_day.0);
+        if let Ok((brain, health, inventory, equipped, memories)) = query.get(entity) {
+            if let Some(prev_state) = &brain.state_at_goal_start {
+                let new_state = get_high_level_state(health, inventory, memories, equipped, is_day.0);
 
-            event_writer.send(Event::GoalCompleted {
-                entity,
-                prev_state: current_state.clone(),
-                goal,
-                new_state: current_state,
-                reward,
-            });
+                event_writer.send(Event::GoalCompleted {
+                    entity,
+                    prev_state: prev_state.clone(),
+                    goal,
+                    new_state,
+                    reward,
+                });
+            }
         }
     }
 }

@@ -11,6 +11,8 @@ pub struct Item {
     #[serde(default)]
     pub throw_damage: Option<u32>,
     #[serde(default)]
+    pub improves_gathering: Option<Vec<String>>,
+    #[serde(default)]
     pub properties: Option<HashMap<String, f64>>,
 }
 

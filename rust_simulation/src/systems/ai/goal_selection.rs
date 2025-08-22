@@ -2,7 +2,7 @@ use crate::brain::{Goal, HighLevelState, InventorySummary};
 use crate::components::{
     ai::{GoalQTable, KnownResources, PlayerMemories},
     intents::*,
-    BrainComponent, Health, Inventory,
+    BrainComponent, Equipped, Health, Inventory,
 };
 use crate::config;
 use crate::errors::SimulationError;
@@ -60,7 +60,6 @@ pub fn goal_selection_system(
                     if let Some(goal) = &brain.current_goal {
                         info!("Entity {:?} selected new goal: {:?}", entity, goal);
 
-                        // Add the corresponding intent component
                         match goal {
                             Goal::GatherResource(res) => {
                                 commands.entity(entity).insert(IntendsToGather(res.clone()));
@@ -88,6 +87,7 @@ pub fn goal_selection_system(
                             }
                         }
 
+                        brain.state_at_goal_start = Some(high_level_state);
                         brain.goal_commitment_ticks = config::GOAL_COMMITMENT_TICKS;
                     }
                 }
@@ -97,9 +97,6 @@ pub fn goal_selection_system(
 }
 
 use crate::brain::ResourceLevel;
-
-/// Constructs the high-level state of an agent from its components.
-use crate::components::Equipped;
 
 pub fn get_high_level_state(
     health: &Health,
@@ -140,7 +137,6 @@ pub fn get_high_level_state(
     }
 }
 
-/// Chooses a high-level goal for the agent based on the current state.
 fn choose_goal(
     state: &HighLevelState,
     brain: &BrainComponent,
@@ -197,7 +193,6 @@ fn choose_goal(
     }
 }
 
-/// Checks if a goal is currently valid.
 fn is_goal_valid(goal: &Goal, known_resources: &KnownResources) -> bool {
     match goal {
         Goal::GatherResource(resource_name) => known_resources
@@ -208,7 +203,6 @@ fn is_goal_valid(goal: &Goal, known_resources: &KnownResources) -> bool {
     }
 }
 
-/// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
 fn plan_goal(
     brain: &BrainComponent,
     inventory: &Inventory,
@@ -219,9 +213,21 @@ fn plan_goal(
     let mut plan = Vec::new();
     match goal {
         Goal::GatherResource(resource) => {
-            // If gathering wood and we have an axe, plan to equip it first.
-            if resource == "wood" && inventory.has_item("stone_axe", 1) && equipped.tool.as_deref() != Some("stone_axe") {
-                plan.push(Goal::Equip("stone_axe".to_string()));
+            // Find the best tool in inventory for this resource.
+            let best_tool = inventory.items.keys().find(|item_name| {
+                if let Some(item_def) = brain.item_registry.get_item(item_name) {
+                    if let Some(improves) = &item_def.improves_gathering {
+                        return improves.contains(resource);
+                    }
+                }
+                false
+            });
+
+            // If we found a best tool and it's not equipped, plan to equip it.
+            if let Some(tool) = best_tool {
+                if equipped.tool.as_deref() != Some(tool) {
+                    plan.push(Goal::Equip(tool.clone()));
+                }
             }
             plan.push(goal.clone());
         }
@@ -261,7 +267,6 @@ fn plan_goal(
     Ok(plan)
 }
 
-/// Plans the gathering of resources required for a crafting recipe.
 fn plan_resource_gathering(
     inventory: &Inventory,
     known_resources: &KnownResources,

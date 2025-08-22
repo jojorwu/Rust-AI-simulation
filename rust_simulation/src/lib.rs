@@ -69,7 +69,7 @@ pub fn setup_world(
     let recipe_manager = Arc::new(RecipeManager::new(recipes_path)?);
 
     world.insert_resource(map);
-    world.insert_resource(ItemRegistryResource(item_registry));
+    world.insert_resource(ItemRegistryResource(Arc::clone(&item_registry)));
     world.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
     world.insert_resource(IsDay(true));
     world.insert_resource(TickCount(0));
@@ -85,6 +85,7 @@ pub fn setup_world(
             Equipped { tool: None },
             BrainComponent::new(
                 Arc::clone(&recipe_manager),
+                Arc::clone(&item_registry),
                 LEARNING_RATE,
                 DISCOUNT_FACTOR,
                 EPSILON,

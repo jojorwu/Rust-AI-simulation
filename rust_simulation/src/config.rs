@@ -41,6 +41,8 @@ pub const EQUIP_TOOL_REWARD: f64 = 2.0;
 
 // --- AI ---
 pub const FLEE_HEALTH_THRESHOLD: u32 = 25;
+pub const THROW_RANGE: u32 = 5;
+pub const MISS_CHANCE: f32 = 0.2;
 pub const RESOURCE_LEVEL_LOW_THRESHOLD: u32 = 10;
 pub const RESOURCE_LEVEL_HIGH_THRESHOLD: u32 = 50;
 pub const GATHER_GOAL_THRESHOLD: u32 = 10;

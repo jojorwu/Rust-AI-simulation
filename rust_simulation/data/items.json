@@ -8,6 +8,7 @@
     "name": "stone_axe",
     "stackable": false,
     "tool": true,
+    "improves_gathering": ["wood", "stone"],
     "properties": {
       "damage": 5.0,
       "efficiency": 3.0,

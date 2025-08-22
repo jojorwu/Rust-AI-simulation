@@ -3,11 +3,9 @@ use crate::{
         intents::WantsToThrow, DroppedItem, Health, Inventory, Position,
     },
     ItemRegistryResource,
+    config,
 };
 use bevy_ecs::prelude::*;
-
-const THROW_RANGE: u32 = 5;
-const MISS_CHANCE: f32 = 0.2;
 
 pub fn throwing_system(
     mut commands: Commands,
@@ -45,7 +43,7 @@ pub fn throwing_system(
             };
 
         let distance = thrower_pos.x.abs_diff(target_pos.x) + thrower_pos.y.abs_diff(target_pos.y);
-        let hit = distance <= THROW_RANGE && rand::random::<f32>() > MISS_CHANCE;
+        let hit = distance <= config::THROW_RANGE && rand::random::<f32>() > config::MISS_CHANCE;
 
         if hit {
             // 4a. If it hits, apply damage.

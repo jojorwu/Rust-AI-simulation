@@ -67,6 +67,7 @@ pub struct BrainComponent {
     pub current_goal: Option<Goal>,
     pub goal_stack: Vec<Goal>,
     pub goal_commitment_ticks: u32,
+    pub state_at_goal_start: Option<HighLevelState>,
     pub prev_state: Option<HighLevelState>,
     pub prev_goal: Option<Goal>,
     pub home_base: Option<Position>,
@@ -74,14 +75,18 @@ pub struct BrainComponent {
     // Fields from Brain
     pub goals: Vec<Goal>,
     pub recipe_manager: Arc<RecipeManager>,
+    pub item_registry: Arc<crate::item::ItemRegistry>,
     pub learning_rate: f64,
     pub discount_factor: f64,
     pub epsilon: f64,
 }
 
+use crate::item::ItemRegistry;
+
 impl BrainComponent {
     pub fn new(
         recipe_manager: Arc<RecipeManager>,
+        item_registry: Arc<ItemRegistry>,
         learning_rate: f64,
         discount_factor: f64,
         epsilon: f64,
@@ -97,11 +102,13 @@ impl BrainComponent {
             current_goal: None,
             goal_stack: Vec::new(),
             goal_commitment_ticks: 0,
+            state_at_goal_start: None,
             prev_state: None,
             prev_goal: None,
             home_base: None,
             goals,
             recipe_manager,
+            item_registry,
             learning_rate,
             discount_factor,
             epsilon,
