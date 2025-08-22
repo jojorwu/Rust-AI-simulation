@@ -9,6 +9,8 @@ pub struct Item {
     pub stackable: bool,
     pub tool: bool,
     #[serde(default)]
+    pub throw_damage: Option<u32>,
+    #[serde(default)]
     pub properties: Option<HashMap<String, f64>>,
 }
 

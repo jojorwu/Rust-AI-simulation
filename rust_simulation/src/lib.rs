@@ -186,6 +186,7 @@ pub fn create_schedule() -> Schedule {
             storage::storage_system,
             combat::combat_system,
             equip::equip_system,
+            throwing::throwing_system,
         )
             .in_set(SimulationSet::SyncActions),
     );

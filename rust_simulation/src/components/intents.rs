@@ -31,3 +31,9 @@ pub struct WantsToEquip(pub String);
 
 #[derive(Component)]
 pub struct IntendsToEquip(pub String);
+
+#[derive(Component)]
+pub struct WantsToThrow {
+    pub target: Entity,
+    pub item_name: String,
+}

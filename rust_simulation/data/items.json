@@ -1,6 +1,6 @@
 [
   { "name": "wood", "stackable": true, "tool": false },
-  { "name": "stone", "stackable": true, "tool": false },
+  { "name": "stone", "stackable": true, "tool": false, "throw_damage": 5 },
   { "name": "sulfur", "stackable": true, "tool": false },
   { "name": "iron_ore", "stackable": true, "tool": false },
   { "name": "iron_bars", "stackable": true, "tool": false },

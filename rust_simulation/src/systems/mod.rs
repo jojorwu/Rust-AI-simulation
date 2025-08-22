@@ -8,6 +8,7 @@ pub mod movement;
 pub mod pickup;
 pub mod reward;
 pub mod storage;
+pub mod throwing;
 pub mod visibility_system;
 pub mod pathfinding_system;
 pub mod async_result_collection_system;
