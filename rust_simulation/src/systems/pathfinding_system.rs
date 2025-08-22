@@ -1,16 +1,19 @@
 use crate::async_task::{AsyncResult, AsyncResultChannel, PathfindingResult};
-use crate::components::{ai::MentalMap, path::PathRequest};
+use crate::components::{
+    ai::MentalMap,
+    path::{PathRequest, PathfindingInProgress},
+};
 use crate::pathfinding;
 use bevy_ecs::prelude::*;
 use rayon::spawn;
 
-pub fn pathfinding_system(
+pub fn pathfinding_dispatcher_system(
     mut commands: Commands,
-    query: Query<(Entity, &PathRequest, &MentalMap)>,
+    query: Query<(Entity, &PathRequest, &MentalMap), Without<PathfindingInProgress>>,
     channel: Res<AsyncResultChannel>,
 ) {
     for (entity, request, mental_map) in query.iter() {
-        commands.entity(entity).remove::<PathRequest>();
+        commands.entity(entity).insert(PathfindingInProgress);
 
         let sender = channel.sender.clone();
         let start = request.start;
