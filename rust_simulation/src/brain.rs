@@ -10,8 +10,7 @@
 
 use bevy_ecs::prelude::*;
 use crate::components::{
-    Velocity, WantsToGather, WantsToCraft, WantsToBuild,
-    WantsToAttack, WantsToStoreItem,
+    Velocity, WantsToCraft, WantsToAttack, WantsToStoreItem,
 };
 use serde::{Deserialize, Serialize};
 
@@ -58,12 +57,8 @@ pub enum Goal {
 pub enum BrainAction {
     /// Move in a specific direction.
     Move(Velocity),
-    /// Gather a resource from a target entity.
-    Gather(WantsToGather),
     /// Craft an item.
     Craft(WantsToCraft),
-    /// Build a structure.
-    Build(WantsToBuild),
     /// Attack a target entity.
     Attack(WantsToAttack),
     /// Store an item in a chest.

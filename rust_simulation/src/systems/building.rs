@@ -1,24 +1,25 @@
-use crate::components::{Chest, Inventory, Position, WantsToBuild};
+use crate::components::{intents::IntendsToBuild, Chest, Inventory, Position};
 use crate::events::Event;
-use crate::RecipeManagerResource;
 use crate::map::{Map, CHUNK_SIZE};
+use crate::RecipeManagerResource;
 use bevy_ecs::prelude::*;
 
 pub fn building_system(
     mut commands: Commands,
-    mut builder_query: Query<(Entity, &Position, &mut Inventory, &WantsToBuild)>,
+    mut builder_query: Query<(Entity, &Position, &mut Inventory, &IntendsToBuild)>,
     mut event_writer: EventWriter<Event>,
     map: Res<Map>,
     recipe_manager: Res<RecipeManagerResource>,
 ) {
     let recipe_manager = &recipe_manager.0;
 
-    for (builder_entity, pos, mut inventory, wants_to_build) in builder_query.iter_mut() {
-        let required = recipe_manager.get_required_resources(&wants_to_build.structure_name, 1);
+    for (builder_entity, pos, mut inventory, intends_to_build) in builder_query.iter_mut() {
+        let required =
+            recipe_manager.get_required_resources(&intends_to_build.0, 1);
 
         // Check if the builder has the required resources
         if !inventory.has_resources(&required) {
-            commands.entity(builder_entity).remove::<WantsToBuild>();
+            commands.entity(builder_entity).remove::<IntendsToBuild>();
             continue;
         }
 
@@ -29,10 +30,12 @@ pub fn building_system(
             let tile = &mut chunk.tiles[local_y][local_x];
 
             // Check if the tile is suitable for building (e.g., it's empty ground)
+            // For now, we assume the agent builds on the tile it is standing on.
+            // A more advanced system would allow targeting adjacent tiles.
             if tile.tile_type == '.' {
                 // Consume resources
                 if inventory.remove_resources(&required) {
-                    let built_structure = wants_to_build.structure_name.clone();
+                    let built_structure = intends_to_build.0.clone();
 
                     match built_structure.as_str() {
                         "chest" => {
@@ -61,6 +64,8 @@ pub fn building_system(
         }
 
         // Remove the intent to build, whether successful or not.
-        commands.entity(builder_entity).remove::<WantsToBuild>();
+        // In a more complex system, this might remain if, for example, the agent
+        // needed to move to a valid building location first.
+        commands.entity(builder_entity).remove::<IntendsToBuild>();
     }
 }
