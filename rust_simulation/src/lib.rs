@@ -11,6 +11,7 @@ pub mod fov;
 pub mod item;
 pub mod map;
 pub mod pathfinding;
+pub mod pathfinding_async;
 pub mod player;
 pub mod recipes;
 pub mod road;
@@ -70,6 +71,7 @@ pub fn setup_world(
     world.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
     world.insert_resource(IsDay(true));
     world.insert_resource(TickCount(0));
+    world.init_resource::<pathfinding_async::PathfindingResultChannel>();
 
     // Initialize events
     world.init_resource::<Events<events::Event>>();
@@ -124,6 +126,7 @@ pub fn create_schedule() -> Schedule {
         .add_systems(actions::explore::explore_action_system)
         .add_systems(actions::stockpile::stockpile_action_system)
         .add_systems(systems::pathfinding_system::pathfinding_system)
+        .add_systems(systems::path_collection_system::path_collection_system)
         .add_systems(apply_deferred)
         .add_systems(systems::path_movement_system::path_movement_system)
         .add_systems(gathering::gathering_system)
@@ -375,21 +378,34 @@ mod tests {
         // 2. Run the systems
         let mut schedule = Schedule::new(MySchedule::Test);
         schedule.add_systems(systems::pathfinding_system::pathfinding_system);
+        schedule.add_systems(systems::path_collection_system::path_collection_system);
         schedule.add_systems(apply_deferred);
         schedule.add_systems(systems::path_movement_system::path_movement_system);
         schedule.add_systems(movement_system);
 
-        // Tick 1: Path is requested and found. Velocity { dx: 0, dy: 0 } is added and removed.
+        // Tick until the path is found (or timeout)
+        let mut path_found = false;
+        for _ in 0..50 { // Increased timeout
+            schedule.run(&mut world);
+            if world.get::<CurrentPath>(player_entity).is_some() {
+                path_found = true;
+                break;
+            }
+            // Give the background thread some time to work.
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(path_found, "Path was not found after timeout");
+        assert!(world.get::<PathRequest>(player_entity).is_none(), "PathRequest should be removed");
+
+        // Now that the path is found, check movement.
+        // The first tick of movement should not change position due to deferred commands.
         let initial_pos = *world.get::<Position>(player_entity).unwrap();
         schedule.run(&mut world);
+        assert_eq!(world.get::<Position>(player_entity).unwrap(), &initial_pos, "Position should not change on first movement tick");
 
-        assert!(world.get::<PathRequest>(player_entity).is_none(), "PathRequest should be removed");
-        assert!(world.get::<CurrentPath>(player_entity).is_some(), "CurrentPath should be added");
-        assert_eq!(world.get::<Position>(player_entity).unwrap(), &initial_pos, "Position should not change on first tick");
-
-        // Tick 2: Agent takes the first real step.
+        // The second tick of movement should change the position.
         schedule.run(&mut world);
         let new_pos = world.get::<Position>(player_entity).unwrap();
-        assert_ne!(&initial_pos, new_pos, "Position should change on second tick");
+        assert_ne!(&initial_pos, new_pos, "Position should change on second movement tick");
     }
 }

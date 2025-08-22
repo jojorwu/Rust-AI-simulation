@@ -1,36 +1,41 @@
-use bevy_ecs::prelude::*;
-use crate::components::{
-    path::{PathRequest, CurrentPath},
-    BrainComponent,
-};
+use crate::components::{path::PathRequest, BrainComponent};
 use crate::pathfinding;
-use std::collections::VecDeque;
+use crate::pathfinding_async::{PathfindingResult, PathfindingResultChannel};
+use bevy_ecs::prelude::*;
 use log::debug;
+use rayon::spawn;
 
 pub fn pathfinding_system(
     mut commands: Commands,
-    // We query for BrainComponent to get access to the agent's mental_map
     query: Query<(Entity, &PathRequest, &BrainComponent)>,
+    channel: Res<PathfindingResultChannel>,
 ) {
     for (entity, request, brain) in query.iter() {
-        debug!("Processing path request for {:?} from {:?} to {:?}", entity, request.start, request.goal);
-        let path = pathfinding::find_path(
-            request.start,
-            request.goal,
-            &brain.mental_map,
+        // The request is being handled, so remove it immediately.
+        commands.entity(entity).remove::<PathRequest>();
+
+        debug!(
+            "Spawning pathfinding task for {:?} from {:?} to {:?}",
+            entity, request.start, request.goal
         );
 
-        if let Some(nodes) = path {
-            // Path found, add the CurrentPath component
-            debug!("Path found for {:?}, adding CurrentPath component.", entity);
-            commands.entity(entity).insert(CurrentPath {
-                nodes: VecDeque::from(nodes),
-            });
-        } else {
-            debug!("No path found for {:?}", entity);
-        }
+        let sender = channel.sender.clone();
+        let start = request.start;
+        let goal = request.goal;
+        // The mental map must be cloned to be sent to the background thread.
+        let mental_map = brain.mental_map.clone();
 
-        // Always remove the request component after processing
-        commands.entity(entity).remove::<PathRequest>();
+        spawn(move || {
+            let path = pathfinding::find_path(start, goal, &mental_map);
+
+            let result = PathfindingResult {
+                entity,
+                path: path.map(|p| p.into()),
+            };
+
+            if let Err(e) = sender.send(result) {
+                log::error!("Failed to send pathfinding result: {}", e);
+            }
+        });
     }
 }
