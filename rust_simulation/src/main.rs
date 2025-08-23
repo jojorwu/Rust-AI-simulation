@@ -7,6 +7,8 @@ use rust_simulation::{DataPaths, SimulationSet, add_simulation_systems, setup_si
 use std::env;
 use std::time::Duration;
 
+use rust_simulation::config::Config;
+
 fn main() -> Result<(), SimulationError> {
     let args: Vec<String> = env::args().collect();
 
@@ -31,6 +33,11 @@ fn main() -> Result<(), SimulationError> {
         return Ok(());
     }
 
+    // --- Load Config ---
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let config_path = format!("{manifest_dir}/data/config.toml");
+    let config = Config::load(&config_path)?;
+
     // --- Bevy App Setup ---
     let mut app = App::new();
 
@@ -39,11 +46,11 @@ fn main() -> Result<(), SimulationError> {
 
     // --- Simulation Setup ---
     // Insert resources
+    app.insert_resource(config); // Insert the config as a resource
     app.insert_resource(Time::<Fixed>::from_duration(Duration::from_millis(100)));
     app.init_resource::<RoadManager>();
 
     // Insert data paths resource
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
     app.insert_resource(DataPaths {
         biomes: format!("{manifest_dir}/data/biomes.json"),
         resources: format!("{manifest_dir}/data/resources.json"),

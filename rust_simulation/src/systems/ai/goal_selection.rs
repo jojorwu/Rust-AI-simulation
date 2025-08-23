@@ -4,8 +4,9 @@ use crate::components::{
     intents::*,
     BrainComponent, Health, Inventory,
 };
+use crate::config::Config;
 use crate::errors::SimulationError;
-use crate::{config, IsDay};
+use crate::IsDay;
 use bevy_ecs::prelude::*;
 use log::info;
 use rand::random;
@@ -23,6 +24,7 @@ pub fn goal_selection_system(
         &GoalQTable,
     )>,
     is_day: Res<IsDay>,
+    config: Res<Config>,
 ) {
     for (entity, mut brain, health, inventory, known_resources, player_memories, goal_q_table) in
         query.iter_mut()
@@ -37,6 +39,7 @@ pub fn goal_selection_system(
                 known_resources,
                 goal_q_table,
                 is_day.0,
+                &config,
             ) {
                 if let Ok(mut plan) =
                     plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
@@ -76,7 +79,7 @@ pub fn goal_selection_system(
                             }
                         }
 
-                        brain.goal_commitment_ticks = config::GOAL_COMMITMENT_TICKS;
+                        brain.goal_commitment_ticks = config.ai.goals.commitment_ticks;
                     }
                 }
             }
@@ -119,6 +122,7 @@ fn choose_goal(
     known_resources: &KnownResources,
     goal_q_table: &GoalQTable,
     is_night: bool,
+    config: &Config,
 ) -> Result<Goal, SimulationError> {
     const FLEE_HEALTH_THRESHOLD: u32 = 25;
     if state.health_level < FLEE_HEALTH_THRESHOLD {
@@ -147,7 +151,7 @@ fn choose_goal(
             .map(|(goal, q_value)| {
                 let effective_q_value = if is_night {
                     if let Goal::Build(_) = goal {
-                        *q_value + config::BUILD_GOAL_BONUS
+                        *q_value + config.ai.goals.build_bonus
                     } else {
                         *q_value
                     }

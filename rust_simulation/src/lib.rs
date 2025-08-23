@@ -68,8 +68,18 @@ pub struct DataPaths {
 
 // --- Simulation Setup ---
 
-pub fn setup_simulation(mut commands: Commands, paths: Res<DataPaths>) {
-    let map = Map::new(WIDTH, HEIGHT, &paths.biomes, &paths.resources).unwrap();
+pub fn setup_simulation(
+    mut commands: Commands,
+    paths: Res<DataPaths>,
+    config: Res<Config>,
+) {
+    let map = Map::new(
+        config.map_settings.width,
+        config.map_settings.height,
+        &paths.biomes,
+        &paths.resources,
+    )
+    .unwrap();
     let item_registry = Arc::new(ItemRegistry::new(&paths.items).unwrap());
     let recipe_manager = Arc::new(RecipeManager::new(&paths.recipes).unwrap());
 
@@ -81,9 +91,9 @@ pub fn setup_simulation(mut commands: Commands, paths: Res<DataPaths>) {
     commands.init_resource::<async_task::AsyncResultChannel>();
     commands.init_resource::<Events<events::Event>>();
 
-    for i in 0..NUM_PLAYERS {
+    for i in 0..config.player_settings.num_players {
         commands.spawn((
-            Player::new(i, WIDTH, HEIGHT),
+            Player::new(i, config.map_settings.width, config.map_settings.height),
             Position { x: 0, y: 0 },
             Health {
                 current: 100,
@@ -92,11 +102,14 @@ pub fn setup_simulation(mut commands: Commands, paths: Res<DataPaths>) {
             Inventory::new(),
             BrainComponent::new(
                 Arc::clone(&recipe_manager),
-                LEARNING_RATE,
-                DISCOUNT_FACTOR,
-                EPSILON,
+                config.ai.q_learning.learning_rate,
+                config.ai.q_learning.discount_factor,
+                config.ai.q_learning.epsilon,
             ),
-            MentalMap(vec![vec![None; WIDTH as usize]; HEIGHT as usize]),
+            MentalMap(vec![
+                vec![None; config.map_settings.width as usize];
+                config.map_settings.height as usize
+            ]),
             KnownResources(HashMap::new()),
             PlayerMemories(HashMap::new()),
             GoalQTable(HashMap::new()),
@@ -105,9 +118,15 @@ pub fn setup_simulation(mut commands: Commands, paths: Res<DataPaths>) {
     }
 }
 
-fn update_day_night(mut is_day: ResMut<IsDay>, mut tick_count: ResMut<TickCount>) {
+fn update_day_night(
+    mut is_day: ResMut<IsDay>,
+    mut tick_count: ResMut<TickCount>,
+    config: Res<Config>,
+) {
     tick_count.0 += 1;
-    is_day.0 = (tick_count.0 % (DAY_LENGTH + NIGHT_LENGTH)) < DAY_LENGTH;
+    let day_night_cycle = &config.day_night_cycle;
+    is_day.0 = (tick_count.0 % (day_night_cycle.day_length + day_night_cycle.night_length))
+        < day_night_cycle.day_length;
 }
 
 pub fn add_simulation_systems(app: &mut App) {

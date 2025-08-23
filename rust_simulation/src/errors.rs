@@ -12,6 +12,9 @@ pub enum SimulationError {
     #[error("Serialization error: {0}")]
     SerdeJson(#[from] serde_json::Error),
 
+    #[error("TOML deserialization error: {0}")]
+    TomlDe(#[from] toml::de::Error),
+
     #[error("Mutex lock failed: {0}")]
     MutexLockError(String),
 
