@@ -73,10 +73,13 @@ pub struct DataPaths {
 
 use std::fs;
 
+use crate::systems::monitoring::MemoryLimitReached;
+
 pub fn setup_simulation(
     mut commands: Commands,
     paths: Res<DataPaths>,
     config: Res<Config>,
+    memory_limit_reached: Res<MemoryLimitReached>,
 ) {
     let map = Map::new(
         config.map_settings.width,
@@ -103,6 +106,11 @@ pub fn setup_simulation(
     commands.insert_resource(TickCount(0));
     commands.init_resource::<async_task::AsyncResultChannel>();
     commands.init_resource::<Events<events::Event>>();
+
+    if memory_limit_reached.0 {
+        log::warn!("RAM limit reached, not spawning any agents.");
+        return;
+    }
 
     for i in 0..config.player_settings.num_players {
         let q_table = q_tables

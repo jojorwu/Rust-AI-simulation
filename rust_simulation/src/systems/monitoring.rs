@@ -3,6 +3,9 @@ use log::info;
 use sysinfo::System;
 use std::time::Duration;
 
+#[derive(Resource, Default)]
+pub struct MemoryLimitReached(pub bool);
+
 #[derive(Resource)]
 pub struct MonitoringState {
     pub sys: System,
@@ -21,14 +24,17 @@ struct MonitoringTimer(Timer);
 
 pub struct MonitoringPlugin;
 
+use crate::config::Config;
+
 impl Plugin for MonitoringPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MonitoringState>()
+            .init_resource::<MemoryLimitReached>()
             .insert_resource(MonitoringTimer(Timer::new(
                 Duration::from_secs(5),
                 TimerMode::Repeating,
             )))
-            .add_systems(FixedUpdate, memory_monitoring_system);
+            .add_systems(FixedUpdate, (memory_monitoring_system, memory_limiting_system));
     }
 }
 
@@ -46,5 +52,20 @@ fn memory_monitoring_system(
             used_memory / 1024 / 1024,
             total_memory / 1024 / 1024
         );
+    }
+}
+
+fn memory_limiting_system(
+    mut memory_limit_reached: ResMut<MemoryLimitReached>,
+    monitoring_state: Res<MonitoringState>,
+    config: Res<Config>,
+) {
+    if memory_limit_reached.0 {
+        return;
+    }
+    let used_memory_gb = monitoring_state.sys.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+    if used_memory_gb > config.performance.ram_limit_gb as f64 {
+        memory_limit_reached.0 = true;
+        info!("RAM limit reached! No new agents will be spawned.");
     }
 }
