@@ -1,9 +1,10 @@
 use crate::errors::SimulationError;
+use bevy::prelude::Reflect;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-#[derive(Resource, Deserialize, Serialize, Debug, Clone)]
+#[derive(Resource, Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct Config {
     pub map_settings: MapSettings,
     pub player_settings: PlayerSettings,
@@ -12,31 +13,31 @@ pub struct Config {
     pub ai: Ai,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct MapSettings {
     pub width: u32,
     pub height: u32,
     pub seed: Option<u32>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct PlayerSettings {
     pub num_players: u32,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct TrainingSettings {
     pub episodes: u32,
     pub max_steps_per_episode: u32,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct DayNightCycle {
     pub day_length: u32,
     pub night_length: u32,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct Ai {
     pub opportunistic_commitment_threshold: u32,
     pub valuable_resources: Vec<String>,
@@ -47,14 +48,14 @@ pub struct Ai {
     pub goals: Goals,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct QLearning {
     pub learning_rate: f64,
     pub discount_factor: f64,
     pub epsilon: f64,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct Goals {
     pub reward: f64,
     pub penalty: f64,

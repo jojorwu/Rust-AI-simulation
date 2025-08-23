@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::state::AppState;
 use bevy::input::prelude::ButtonInput;
 use bevy::prelude::*;
+use bevy::reflect::{Reflect, ReflectRef};
 
 pub struct SettingsPlugin;
 
@@ -11,9 +12,9 @@ impl Plugin for SettingsPlugin {
             .add_systems(
                 Update,
                 (
+                    settings_button_system,
                     text_input_system,
                     save_button_system,
-                    settings_button_system,
                 )
                     .run_if(in_state(AppState::Settings)),
             )
@@ -25,12 +26,14 @@ impl Plugin for SettingsPlugin {
 struct SettingsUi;
 
 #[derive(Component)]
-struct NumPlayersInput;
-
-#[derive(Component)]
 enum SettingsButtonAction {
     Back,
     Save,
+}
+
+#[derive(Component)]
+struct ConfigField {
+    path: String,
 }
 
 fn setup_settings_menu(mut commands: Commands, config: Res<Config>) {
@@ -57,34 +60,10 @@ fn setup_settings_menu(mut commands: Commands, config: Res<Config>) {
                     ..default()
                 },
             ));
-            // Num Players
-            parent
-                .spawn(NodeBundle {
-                    style: Style {
-                        margin: UiRect::all(Val::Px(10.0)),
-                        ..default()
-                    },
-                    ..default()
-                })
-                .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section(
-                        "Number of Players:",
-                        TextStyle {
-                            font_size: 20.0,
-                            ..default()
-                        },
-                    ));
-                    parent.spawn((
-                        TextBundle::from_section(
-                            config.player_settings.num_players.to_string(),
-                            TextStyle {
-                                font_size: 20.0,
-                                ..default()
-                            },
-                        ),
-                        NumPlayersInput,
-                    ));
-                });
+
+            // Dynamically create the UI
+            let config_reflect = config.as_reflect();
+            build_ui_for_struct(parent, config_reflect, "", 0);
 
             parent
                 .spawn((
@@ -105,6 +84,59 @@ fn setup_settings_menu(mut commands: Commands, config: Res<Config>) {
         });
 }
 
+fn build_ui_for_struct(
+    parent: &mut ChildBuilder,
+    value: &dyn Reflect,
+    path: &str,
+    depth: usize,
+) {
+    if let ReflectRef::Struct(s) = value.reflect_ref() {
+        for (i, field) in s.iter_fields().enumerate() {
+            let field_name = s.name_at(i).unwrap();
+            let new_path = if path.is_empty() {
+                field_name.to_string()
+            } else {
+                format!("{}.{}", path, field_name)
+            };
+
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        margin: UiRect::new(Val::Px(20.0 * depth as f32), Val::Px(0.0), Val::Px(10.0), Val::Px(0.0)),
+                        flex_direction: FlexDirection::Row,
+                        ..default()
+                    },
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        format!("{}:", field_name),
+                        TextStyle {
+                            font_size: 20.0,
+                            ..default()
+                        },
+                    ));
+
+                    if let ReflectRef::Struct(_) = field.reflect_ref() {
+                        build_ui_for_struct(parent, field, &new_path, depth + 1);
+                    } else {
+                        let field_value = format!("{:?}", field.as_any());
+                        parent.spawn((
+                            TextBundle::from_section(
+                                field_value,
+                                TextStyle {
+                                    font_size: 20.0,
+                                    ..default()
+                                },
+                            ),
+                            ConfigField { path: new_path },
+                        ));
+                    }
+                });
+        }
+    }
+}
+
 fn cleanup_settings_menu(mut commands: Commands, query: Query<Entity, With<SettingsUi>>) {
     for entity in query.iter() {
         commands.entity(entity).despawn_recursive();
@@ -114,15 +146,30 @@ fn cleanup_settings_menu(mut commands: Commands, query: Query<Entity, With<Setti
 fn text_input_system(
     mut char_evr: EventReader<ReceivedCharacter>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut q_text: Query<&mut Text, With<NumPlayersInput>>,
+    mut q_text: Query<(&mut Text, &ConfigField)>,
+    mut config: ResMut<Config>,
 ) {
-    if let Some(mut text) = q_text.iter_mut().next() {
+    for (mut text, config_field) in q_text.iter_mut() {
         if keys.just_pressed(KeyCode::Backspace) {
             text.sections[0].value.pop();
         }
         for ev in char_evr.read() {
-            if ev.char.chars().all(char::is_numeric) {
-                text.sections[0].value.push_str(&ev.char);
+            text.sections[0].value.push_str(&ev.char);
+        }
+
+        let field_path = &config_field.path;
+        let mut config_reflect = config.as_mut();
+        if let Some(field) = config_reflect.field_mut(field_path) {
+            if field.is::<u32>() {
+                if let Ok(value) = text.sections[0].value.parse::<u32>() {
+                    *field.downcast_mut::<u32>().unwrap() = value;
+                }
+            } else if field.is::<f64>() {
+                if let Ok(value) = text.sections[0].value.parse::<f64>() {
+                    *field.downcast_mut::<f64>().unwrap() = value;
+                }
+            } else if field.is::<String>() {
+                *field.downcast_mut::<String>().unwrap() = text.sections[0].value.clone();
             }
         }
     }
@@ -130,20 +177,13 @@ fn text_input_system(
 
 fn save_button_system(
     interaction_query: Query<(&Interaction, &SettingsButtonAction), (Changed<Interaction>, With<Button>)>,
-    q_text: Query<&Text, With<NumPlayersInput>>,
-    mut config: ResMut<Config>,
+    config: Res<Config>,
 ) {
     for (interaction, action) in interaction_query.iter() {
         if *interaction == Interaction::Pressed {
             if let SettingsButtonAction::Save = action {
-                if let Some(text) = q_text.iter().next() {
-                    if let Ok(num_players) = text.sections[0].value.parse() {
-                        config.player_settings.num_players = num_players;
-                        // Save to file
-                        let data = toml::to_string(&*config).unwrap();
-                        std::fs::write("data/config.toml", data).unwrap();
-                    }
-                }
+                let data = toml::to_string(&*config).unwrap();
+                std::fs::write("data/config.toml", data).unwrap();
             }
         }
     }
