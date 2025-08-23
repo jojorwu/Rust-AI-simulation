@@ -80,6 +80,7 @@ pub fn setup_simulation(
         config.map_settings.height,
         &paths.biomes,
         &paths.resources,
+        config.map_settings.seed,
     )
     .unwrap();
     let item_registry = Arc::new(ItemRegistry::new(&paths.items).unwrap());

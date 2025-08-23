@@ -2,7 +2,8 @@
 
 use bevy_ecs::prelude::*;
 use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -91,6 +92,7 @@ impl Map {
         height: u32,
         biomes_path: &str,
         resources_path: &str,
+        seed: Option<u32>,
     ) -> Result<Self, SimulationError> {
         let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
@@ -117,7 +119,7 @@ impl Map {
             resources,
         };
 
-        map.generate_island_map(25.0, 5, 0.5, 2.0);
+        map.generate_island_map(25.0, 5, 0.5, 2.0, seed);
         Ok(map)
     }
 
@@ -184,16 +186,23 @@ impl Map {
             .map_or(false, |tile| matches!(tile.tile_type, '.' | ',' | 'f'))
     }
 
-    fn generate_island_map(&mut self, scale: f64, octaves: i32, persistence: f64, lacunarity: f64) {
-        let mut rng = rand::rng();
-        let seed = rng.random::<u32>();
+    fn generate_island_map(
+        &mut self,
+        scale: f64,
+        octaves: i32,
+        persistence: f64,
+        lacunarity: f64,
+        seed: Option<u32>,
+    ) {
+        let seed_val = seed.unwrap_or_else(rand::random);
+        let mut rng = StdRng::seed_from_u64(seed_val as u64);
 
-        let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
+        let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed_val);
         base_fbm.octaves = octaves as usize;
         base_fbm.persistence = persistence;
         base_fbm.lacunarity = lacunarity;
 
-        let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed.wrapping_add(1));
+        let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed_val.wrapping_add(1));
 
         for y_abs in 0..self.height {
             for x_abs in 0..self.width {
@@ -220,7 +229,7 @@ impl Map {
                     }
                 }
 
-                if biome_name == "plains" && tile_char == '.' && rng.random_range(0..100) < 5 {
+                if biome_name == "plains" && tile_char == '.' && rng.gen_range(0..100) < 5 {
                     tile_char = 'f';
                 }
 

@@ -16,6 +16,7 @@ pub struct Config {
 pub struct MapSettings {
     pub width: u32,
     pub height: u32,
+    pub seed: Option<u32>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
