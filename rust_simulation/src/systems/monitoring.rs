@@ -34,7 +34,12 @@ impl Plugin for MonitoringPlugin {
                 Duration::from_secs(5),
                 TimerMode::Repeating,
             )))
-            .add_systems(FixedUpdate, (memory_monitoring_system, memory_limiting_system));
+            .add_systems(FixedUpdate, memory_monitoring_system)
+            .add_systems(
+                FixedUpdate,
+                memory_limiting_system
+                    .run_if(|config: Res<Config>| config.performance.enable_ram_limit),
+            );
     }
 }
 

@@ -70,6 +70,7 @@ pub struct Goals {
 pub struct PerformanceSettings {
     pub processor_cores: u32,
     pub ram_limit_gb: u32,
+    pub enable_ram_limit: bool,
 }
 
 impl Config {
