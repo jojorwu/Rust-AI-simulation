@@ -22,9 +22,12 @@ pub mod recipes;
 pub mod road;
 pub mod road_builder;
 pub mod road_manager;
+pub mod state;
 pub mod systems;
+pub mod ui;
 pub mod world;
 
+use crate::state::AppState;
 use components::{
     BrainComponent, Health, Inventory, Position,
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
@@ -169,7 +172,8 @@ pub fn add_simulation_systems(app: &mut App) {
             death::death_system,
         )
             .chain()
-            .in_set(SimulationSet::Logic),
+            .in_set(SimulationSet::Logic)
+            .run_if(in_state(AppState::InGame)),
     );
 }
 
