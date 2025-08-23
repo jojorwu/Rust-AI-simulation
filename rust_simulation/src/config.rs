@@ -11,6 +11,7 @@ pub struct Config {
     pub training_settings: TrainingSettings,
     pub day_night_cycle: DayNightCycle,
     pub ai: Ai,
+    pub performance: PerformanceSettings,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
@@ -63,6 +64,12 @@ pub struct Goals {
     pub gather_threshold: u32,
     pub commitment_ticks: u32,
     pub threat_commitment_ticks: u32,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct PerformanceSettings {
+    pub processor_cores: u32,
+    pub ram_limit_gb: u32,
 }
 
 impl Config {

@@ -39,6 +39,12 @@ fn main() -> Result<(), SimulationError> {
     let config_path = format!("{manifest_dir}/data/config.toml");
     let config = Config::load(&config_path)?;
 
+    // --- Setup Rayon Thread Pool ---
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(config.performance.processor_cores as usize)
+        .build_global()
+        .unwrap();
+
     // --- Bevy App Setup ---
     let mut app = App::new();
 
@@ -52,7 +58,8 @@ fn main() -> Result<(), SimulationError> {
         .register_type::<rust_simulation::config::DayNightCycle>()
         .register_type::<rust_simulation::config::Ai>()
         .register_type::<rust_simulation::config::QLearning>()
-        .register_type::<rust_simulation::config::Goals>();
+        .register_type::<rust_simulation::config::Goals>()
+        .register_type::<rust_simulation::config::PerformanceSettings>();
 
     // --- Simulation Setup ---
     // Insert resources
