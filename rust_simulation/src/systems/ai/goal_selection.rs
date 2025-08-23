@@ -8,7 +8,7 @@ use crate::errors::SimulationError;
 use crate::{IsDay, config};
 use bevy_ecs::prelude::*;
 use log::info;
-use rand::Rng;
+use rand::prelude::*;
 use std::collections::HashMap;
 
 pub fn goal_selection_system(

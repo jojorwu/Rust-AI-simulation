@@ -11,12 +11,12 @@ pub fn generate_roads(
     mut map: ResMut<Map>,
     mut road_manager: ResMut<RoadManager>,
 ){
-    _generate_roads_from_config(map, road_manager).unwrap()
+    _generate_roads_from_config(&mut map, &mut road_manager).unwrap()
 }
 
 fn _generate_roads_from_config(
-    mut map: ResMut<Map>,
-    mut road_manager: ResMut<RoadManager>,
+    map: &mut ResMut<Map>,
+    road_manager: &mut ResMut<RoadManager>,
 ) -> Result<(), SimulationError> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let road_config_path = format!("{manifest_dir}/data/road_config.json");

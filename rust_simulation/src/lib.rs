@@ -148,8 +148,7 @@ pub fn add_simulation_systems(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::path::{CurrentPath, PathRequest};
-    use std::env;
+    use crate::components::path::PathRequest;
 
     // TODO: Refactor this test to use a Bevy App and not rely on the old World/Schedule setup.
     fn create_test_world() -> Result<World, errors::SimulationError> {
@@ -166,7 +165,7 @@ mod tests {
             .next()
             .unwrap();
 
-        let mut map = world.get_resource_mut::<Map>().unwrap();
+        let map = world.get_resource_mut::<Map>().unwrap();
         map.set_tile(1, 0, crate::map::Tile::new('.', "grassland".to_string()));
         drop(map);
 
