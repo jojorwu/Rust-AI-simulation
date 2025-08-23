@@ -101,10 +101,10 @@ fn get_high_level_state(
         .count() as u32;
 
     let inventory_summary = InventorySummary {
-        has_wood: inventory.has_item("wood", 1),
-        has_stone: inventory.has_item("stone", 1),
-        has_iron_ore: inventory.has_item("iron_ore", 1),
-        has_stone_axe: inventory.has_item("stone_axe", 1),
+        wood: inventory.get_quantity("wood"),
+        stone: inventory.get_quantity("stone"),
+        iron_ore: inventory.get_quantity("iron_ore"),
+        stone_axe: inventory.get_quantity("stone_axe"),
     };
 
     HighLevelState {
