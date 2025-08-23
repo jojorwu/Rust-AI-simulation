@@ -1,8 +1,9 @@
 use crate::config::Config;
 use crate::state::AppState;
+use crate::ui::theme::*;
 use bevy::input::prelude::ButtonInput;
 use bevy::prelude::*;
-use bevy::reflect::{Reflect, ReflectRef};
+use bevy::reflect::ReflectRef;
 
 pub struct SettingsPlugin;
 
@@ -15,6 +16,7 @@ impl Plugin for SettingsPlugin {
                     settings_button_system,
                     text_input_system,
                     save_button_system,
+                    button_hover_system,
                 )
                     .run_if(in_state(AppState::Settings)),
             )
@@ -48,6 +50,7 @@ fn setup_settings_menu(mut commands: Commands, config: Res<Config>) {
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },
+                background_color: BACKGROUND_COLOR.into(),
                 ..default()
             },
             SettingsUi,
@@ -55,10 +58,7 @@ fn setup_settings_menu(mut commands: Commands, config: Res<Config>) {
         .with_children(|parent| {
             parent.spawn(TextBundle::from_section(
                 "Settings",
-                TextStyle {
-                    font_size: 80.0,
-                    ..default()
-                },
+                get_title_text_style(),
             ));
 
             // Dynamically create the UI
@@ -67,19 +67,31 @@ fn setup_settings_menu(mut commands: Commands, config: Res<Config>) {
 
             parent
                 .spawn((
-                    ButtonBundle { ..default() },
+                    ButtonBundle {
+                        background_color: NORMAL_BUTTON.into(),
+                        ..default()
+                    },
                     SettingsButtonAction::Save,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section("Save", TextStyle { ..default() }));
+                    parent.spawn(TextBundle::from_section(
+                        "Save",
+                        get_button_text_style(),
+                    ));
                 });
             parent
                 .spawn((
-                    ButtonBundle { ..default() },
+                    ButtonBundle {
+                        background_color: NORMAL_BUTTON.into(),
+                        ..default()
+                    },
                     SettingsButtonAction::Back,
                 ))
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section("Back", TextStyle { ..default() }));
+                    parent.spawn(TextBundle::from_section(
+                        "Back",
+                        get_button_text_style(),
+                    ));
                 });
         });
 }
@@ -113,6 +125,7 @@ fn build_ui_for_struct(
                         format!("{}:", field_name),
                         TextStyle {
                             font_size: 20.0,
+                            color: TEXT_COLOR,
                             ..default()
                         },
                     ));
@@ -126,6 +139,7 @@ fn build_ui_for_struct(
                                 field_value,
                                 TextStyle {
                                     font_size: 20.0,
+                                    color: TEXT_COLOR,
                                     ..default()
                                 },
                             ),
@@ -140,6 +154,21 @@ fn build_ui_for_struct(
 fn cleanup_settings_menu(mut commands: Commands, query: Query<Entity, With<SettingsUi>>) {
     for entity in query.iter() {
         commands.entity(entity).despawn_recursive();
+    }
+}
+
+fn button_hover_system(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    for (interaction, mut color) in &mut interaction_query {
+        *color = match *interaction {
+            Interaction::Pressed => PRESSED_BUTTON.into(),
+            Interaction::Hovered => HOVERED_BUTTON.into(),
+            Interaction::None => NORMAL_BUTTON.into(),
+        }
     }
 }
 
