@@ -9,6 +9,7 @@ pub mod movement;
 pub mod path_collection_system;
 pub mod path_movement_system;
 pub mod pathfinding_system;
+pub mod monitoring;
 pub mod persistence;
 pub mod pickup;
 pub mod storage;

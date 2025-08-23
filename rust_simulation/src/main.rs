@@ -1,12 +1,9 @@
 use bevy::prelude::*;
-use rust_simulation::config::Config;
 use rust_simulation::errors::SimulationError;
+use rust_simulation::graphics::GraphicsPlugin;
 use rust_simulation::road_builder;
 use rust_simulation::road_manager::RoadManager;
-use rust_simulation::state::AppState;
-use rust_simulation::ui::main_menu::MainMenuPlugin;
-use rust_simulation::ui::settings::SettingsPlugin;
-use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
+use rust_simulation::{DataPaths, SimulationSet, add_simulation_systems, setup_simulation};
 use std::env;
 use std::time::Duration;
 
@@ -34,40 +31,19 @@ fn main() -> Result<(), SimulationError> {
         return Ok(());
     }
 
-    // --- Load Config ---
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let config_path = format!("{manifest_dir}/data/config.toml");
-    let config = Config::load(&config_path)?;
-
-    // --- Setup Rayon Thread Pool ---
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(config.performance.processor_cores as usize)
-        .build_global()
-        .unwrap();
-
     // --- Bevy App Setup ---
     let mut app = App::new();
 
     // Add default plugins and our custom graphics plugin
-    app.add_plugins((MinimalPlugins, MainMenuPlugin, SettingsPlugin));
-    app.init_state::<AppState>();
-    app.register_type::<Config>()
-        .register_type::<rust_simulation::config::MapSettings>()
-        .register_type::<rust_simulation::config::PlayerSettings>()
-        .register_type::<rust_simulation::config::TrainingSettings>()
-        .register_type::<rust_simulation::config::DayNightCycle>()
-        .register_type::<rust_simulation::config::Ai>()
-        .register_type::<rust_simulation::config::QLearning>()
-        .register_type::<rust_simulation::config::Goals>()
-        .register_type::<rust_simulation::config::PerformanceSettings>();
+    app.add_plugins((DefaultPlugins, GraphicsPlugin));
 
     // --- Simulation Setup ---
     // Insert resources
-    app.insert_resource(config);
     app.insert_resource(Time::<Fixed>::from_duration(Duration::from_millis(100)));
     app.init_resource::<RoadManager>();
 
     // Insert data paths resource
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
     app.insert_resource(DataPaths {
         biomes: format!("{manifest_dir}/data/biomes.json"),
         resources: format!("{manifest_dir}/data/resources.json"),
@@ -75,9 +51,12 @@ fn main() -> Result<(), SimulationError> {
         recipes: format!("{manifest_dir}/data/recipes.json"),
     });
 
+    // Configure the system sets
+    app.configure_sets(Startup, SimulationSet::Setup.before(SimulationSet::Logic));
+
     // Add simulation setup and systems
     app.add_systems(
-        OnEnter(AppState::InGame),
+        Startup,
         (setup_simulation, road_builder::generate_roads)
             .chain()
             .in_set(SimulationSet::Setup),

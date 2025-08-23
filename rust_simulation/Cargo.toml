@@ -17,6 +17,7 @@ log = "0.4"
 crossbeam-channel = "0.5"
 bevy = "0.13.0"
 toml = "0.8.12"
+sysinfo = "0.30.13"
 
 [dev-dependencies]
 criterion = "0.5.1"
