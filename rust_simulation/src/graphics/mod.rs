@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-mod rendering;
+pub mod rendering;
 mod ui;
 
 use rendering::RenderingPlugin;

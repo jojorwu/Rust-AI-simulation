@@ -24,11 +24,13 @@ fn setup_app() -> App {
 
     // Insert resources needed for setup
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let config = rust_simulation::config::Config::load(&format!("{}/data/config.toml", manifest_dir)).unwrap();
+    app.insert_resource(config);
     app.insert_resource(DataPaths {
-        biomes: format!("{manifest_dir}/data/biomes.json"),
-        resources: format!("{manifest_dir}/data/resources.json"),
-        items: format!("{manifest_dir}/data/items.json"),
-        recipes: format!("{manifest_dir}/data/recipes.json"),
+        biomes: format!("{}/data/biomes.json", manifest_dir),
+        resources: format!("{}/data/resources.json", manifest_dir),
+        items: format!("{}/data/items.json", manifest_dir),
+        recipes: format!("{}/data/recipes.json", manifest_dir),
     });
 
     // Add setup and pathfinding systems
