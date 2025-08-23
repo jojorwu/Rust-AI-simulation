@@ -18,7 +18,7 @@ pub mod road;
 pub mod road_builder;
 pub mod road_manager;
 pub mod systems;
-pub mod renderer;
+pub mod graphics;
 pub mod world;
 
 use bevy_ecs::prelude::*;
@@ -139,6 +139,7 @@ pub fn create_schedule() -> Schedule {
     schedule
 }
 
+#[derive(Resource)]
 pub struct Game {
     pub world: World,
     schedule: Schedule,

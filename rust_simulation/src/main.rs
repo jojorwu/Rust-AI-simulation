@@ -1,50 +1,42 @@
-use rust_simulation::config::{EPISODES, MAX_STEPS_PER_EPISODE};
-use rust_simulation::renderer::Renderer;
+use bevy::prelude::*;
+use rust_simulation::graphics::GraphicsPlugin;
 use rust_simulation::road_builder;
 use rust_simulation::{errors::SimulationError, Game};
 use std::env;
+use std::time::Duration;
+
+// Define a simple system to run the game's tick function
+fn game_tick_system(mut game: ResMut<Game>) {
+    if let Err(e) = game.tick() {
+        eprintln!("Error during game tick: {}", e);
+    }
+}
 
 fn main() -> Result<(), SimulationError> {
-    env_logger::init();
     let args: Vec<String> = env::args().collect();
 
+    // --- This section is for wiping saved data, keeping it from the original main.rs ---
     if args.contains(&"--hard-wipe".to_string()) {
         println!("Wiping simulation state...");
-
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let root_dir = std::path::Path::new(manifest_dir);
-
         let models_path = root_dir.join("../models");
         if models_path.exists() {
             if let Err(e) = std::fs::remove_dir_all(&models_path) {
                 eprintln!("Failed to remove models directory: {e}");
-            } else {
-                println!("Removed models directory.");
             }
         }
-
         let q_table_path = root_dir.join("../q_table.json");
         if q_table_path.exists() {
             if let Err(e) = std::fs::remove_file(&q_table_path) {
                 eprintln!("Failed to remove q_table.json: {e}");
-            } else {
-                println!("Removed q_table.json.");
             }
         }
-
-        let sim_log_path = root_dir.join("../simulation_output.log");
-        if sim_log_path.exists() {
-            if let Err(e) = std::fs::remove_file(&sim_log_path) {
-                eprintln!("Failed to remove simulation_output.log: {e}");
-            } else {
-                println!("Removed simulation_output.log.");
-            }
-        }
-
         println!("Wipe complete.");
         return Ok(());
     }
 
+    // --- Game Initialization ---
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let mut game = Game::new(
         &format!("{manifest_dir}/data/biomes.json"),
@@ -59,21 +51,16 @@ fn main() -> Result<(), SimulationError> {
         game.new_generation()?;
     }
 
-    let renderer = Renderer::new();
-    renderer.print_intro();
+    // --- Bevy App Setup ---
+    let mut app = App::new();
+    app.add_plugins((DefaultPlugins, GraphicsPlugin))
+        .insert_resource(game)
+        // Run the game_tick_system on a fixed schedule
+        .add_systems(FixedUpdate, game_tick_system)
+        // Configure the fixed timestep
+        .insert_resource(Time::<Fixed>::from_duration(Duration::from_millis(100)));
 
-    for episode in 0..EPISODES {
-        for _step in 0..MAX_STEPS_PER_EPISODE {
-            game.tick()?;
-            renderer.render(&mut game);
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-        if (episode + 1) % 200 == 0 {
-            println!("Episode {}/{}", episode + 1, EPISODES);
-        }
-    }
-
-    renderer.print_outro();
+    app.run();
 
     Ok(())
 }
