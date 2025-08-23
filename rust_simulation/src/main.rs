@@ -70,6 +70,11 @@ fn main() -> Result<(), SimulationError> {
     );
 
     add_simulation_systems(&mut app);
+    app.add_systems(
+        PostUpdate,
+        rust_simulation::systems::persistence::save_q_tables_on_exit
+            .run_if(on_event::<bevy::app::AppExit>()),
+    );
 
     app.run();
 

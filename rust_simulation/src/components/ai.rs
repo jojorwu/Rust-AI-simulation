@@ -1,6 +1,7 @@
 use crate::brain::{Goal, HighLevelState, MemoryTile, PlayerMemory};
 use crate::components::Position;
 use bevy_ecs::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A component representing the agent's memory of the map layout.
@@ -16,7 +17,7 @@ pub struct KnownResources(pub HashMap<String, HashSet<Position>>);
 pub struct PlayerMemories(pub HashMap<Entity, PlayerMemory>);
 
 /// A component representing the agent's Q-table for goal selection.
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Serialize, Deserialize)]
 pub struct GoalQTable(pub HashMap<HighLevelState, HashMap<Goal, f64>>);
 
 /// A component representing the agent's frontier for exploration.

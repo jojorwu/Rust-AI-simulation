@@ -68,6 +68,8 @@ pub struct DataPaths {
 
 // --- Simulation Setup ---
 
+use std::fs;
+
 pub fn setup_simulation(
     mut commands: Commands,
     paths: Res<DataPaths>,
@@ -83,6 +85,13 @@ pub fn setup_simulation(
     let item_registry = Arc::new(ItemRegistry::new(&paths.items).unwrap());
     let recipe_manager = Arc::new(RecipeManager::new(&paths.recipes).unwrap());
 
+    // Load Q-tables if they exist
+    let q_tables: HashMap<u32, GoalQTable> = if let Ok(data) = fs::read_to_string("q_tables.json") {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
     commands.insert_resource(map);
     commands.insert_resource(ItemRegistryResource(item_registry));
     commands.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
@@ -92,6 +101,11 @@ pub fn setup_simulation(
     commands.init_resource::<Events<events::Event>>();
 
     for i in 0..config.player_settings.num_players {
+        let q_table = q_tables
+            .get(&i)
+            .cloned()
+            .unwrap_or_else(|| GoalQTable(HashMap::new()));
+
         commands.spawn((
             Player::new(i, config.map_settings.width, config.map_settings.height),
             Position { x: 0, y: 0 },
@@ -112,7 +126,7 @@ pub fn setup_simulation(
             ]),
             KnownResources(HashMap::new()),
             PlayerMemories(HashMap::new()),
-            GoalQTable(HashMap::new()),
+            q_table,
             ExplorationFrontier(VecDeque::new()),
         ));
     }
