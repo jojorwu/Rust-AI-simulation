@@ -6,6 +6,7 @@ pub mod crafting;
 pub mod death;
 pub mod gathering;
 pub mod movement;
+pub mod path_collection_system;
 pub mod path_movement_system;
 pub mod pathfinding_system;
 pub mod pickup;
