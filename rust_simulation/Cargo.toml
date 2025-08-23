@@ -16,3 +16,10 @@ bevy_tasks = "0.13.0"
 log = "0.4"
 crossbeam-channel = "0.5"
 bevy = "0.13.0"
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "pathfinding_bench"
+harness = false
