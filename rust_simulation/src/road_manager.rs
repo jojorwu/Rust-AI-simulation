@@ -1,13 +1,9 @@
 use crate::road::{Point, Road};
+use bevy::prelude::Resource;
 
+#[derive(Resource, Default)]
 pub struct RoadManager {
     pub roads: Vec<Road>,
-}
-
-impl Default for RoadManager {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl RoadManager {

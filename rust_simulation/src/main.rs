@@ -1,16 +1,11 @@
 use bevy::prelude::*;
+use rust_simulation::errors::SimulationError;
 use rust_simulation::graphics::GraphicsPlugin;
 use rust_simulation::road_builder;
-use rust_simulation::{errors::SimulationError, Game};
+use rust_simulation::road_manager::RoadManager;
+use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
 use std::env;
 use std::time::Duration;
-
-// Define a simple system to run the game's tick function
-fn game_tick_system(mut game: ResMut<Game>) {
-    if let Err(e) = game.tick() {
-        eprintln!("Error during game tick: {}", e);
-    }
-}
 
 fn main() -> Result<(), SimulationError> {
     let args: Vec<String> = env::args().collect();
@@ -36,29 +31,36 @@ fn main() -> Result<(), SimulationError> {
         return Ok(());
     }
 
-    // --- Game Initialization ---
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let mut game = Game::new(
-        &format!("{manifest_dir}/data/biomes.json"),
-        &format!("{manifest_dir}/data/resources.json"),
-        &format!("{manifest_dir}/data/items.json"),
-        &format!("{manifest_dir}/data/recipes.json"),
-    )?;
-
-    road_builder::generate_roads(&mut game)?;
-
-    if args.contains(&"--wipe".to_string()) {
-        game.new_generation()?;
-    }
-
     // --- Bevy App Setup ---
     let mut app = App::new();
-    app.add_plugins((DefaultPlugins, GraphicsPlugin))
-        .insert_resource(game)
-        // Run the game_tick_system on a fixed schedule
-        .add_systems(FixedUpdate, game_tick_system)
-        // Configure the fixed timestep
-        .insert_resource(Time::<Fixed>::from_duration(Duration::from_millis(100)));
+
+    // Add default plugins and our custom graphics plugin
+    app.add_plugins((DefaultPlugins, GraphicsPlugin));
+
+    // --- Simulation Setup ---
+    // Insert resources
+    app.insert_resource(Time::<Fixed>::from_duration(Duration::from_millis(100)));
+    app.init_resource::<RoadManager>();
+
+    // Insert data paths resource
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    app.insert_resource(DataPaths {
+        biomes: format!("{manifest_dir}/data/biomes.json"),
+        resources: format!("{manifest_dir}/data/resources.json"),
+        items: format!("{manifest_dir}/data/items.json"),
+        recipes: format!("{manifest_dir}/data/recipes.json"),
+    });
+
+    // Configure the system sets
+    app.configure_sets(Startup, SimulationSet::Setup.before(SimulationSet::Logic));
+
+    // Add simulation setup and systems
+    app.add_systems(Startup, (
+        setup_simulation,
+        road_builder::generate_roads,
+    ).chain().in_set(SimulationSet::Setup));
+
+    add_simulation_systems(&mut app);
 
     app.run();
 

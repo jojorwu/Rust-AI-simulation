@@ -2,25 +2,27 @@ use bevy::prelude::*;
 use crate::map::{Map, Tile};
 use crate::player::Player;
 use crate::components::Position;
-use crate::Game;
+use crate::SimulationSet;
 
 pub struct RenderingPlugin;
 
 impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_map_and_entities)
+        app.add_systems(Startup, setup_map_and_entities.after(SimulationSet::Setup))
             .add_systems(Update, update_entity_positions);
     }
 }
 
-pub(super) const TILE_SIZE: f32 = 32.0;
+pub const TILE_SIZE: f32 = 32.0;
 
 #[derive(Component)]
-pub(super) struct RenderedEntity(pub(super) Entity);
+pub struct RenderedEntity(pub Entity);
 
-pub(super) fn setup_map_and_entities(mut commands: Commands, mut game: ResMut<Game>) {
-    let map = game.world.get_resource::<Map>().unwrap();
-
+fn setup_map_and_entities(
+    mut commands: Commands,
+    map: Res<Map>,
+    player_query: Query<(Entity, &Position), With<Player>>,
+) {
     // Spawn map tiles
     for y in 0..map.height {
         for x in 0..map.width {
@@ -39,9 +41,7 @@ pub(super) fn setup_map_and_entities(mut commands: Commands, mut game: ResMut<Ga
     }
 
     // Spawn player sprite
-    let mut player_query = game.world.query_filtered::<Entity, With<Player>>();
-    for entity in player_query.iter(&game.world) {
-        let position = game.world.get::<Position>(entity).unwrap();
+    for (player_entity, position) in player_query.iter() {
         let spawned_entity = commands.spawn((
             SpriteBundle {
                 sprite: Sprite {
@@ -53,13 +53,16 @@ pub(super) fn setup_map_and_entities(mut commands: Commands, mut game: ResMut<Ga
                 ..default()
             },
         )).id();
-        commands.entity(spawned_entity).insert(RenderedEntity(entity));
+        commands.entity(spawned_entity).insert(RenderedEntity(player_entity));
     }
 }
 
-pub(super) fn update_entity_positions(game: Res<Game>, mut query: Query<(&mut Transform, &RenderedEntity)>) {
-    for (mut transform, rendered_entity) in query.iter_mut() {
-        if let Some(position) = game.world.get::<Position>(rendered_entity.0) {
+fn update_entity_positions(
+    mut sprite_query: Query<(&mut Transform, &RenderedEntity)>,
+    position_query: Query<&Position>,
+) {
+    for (mut transform, rendered_entity) in sprite_query.iter_mut() {
+        if let Ok(position) = position_query.get(rendered_entity.0) {
             transform.translation.x = position.x as f32 * TILE_SIZE;
             transform.translation.y = position.y as f32 * TILE_SIZE;
         }
