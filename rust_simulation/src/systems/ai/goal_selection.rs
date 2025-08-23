@@ -194,22 +194,20 @@ fn plan_goal(
     let mut plan = Vec::new();
     match goal {
         Goal::CraftItem(item_name) => {
-            let required = brain.recipe_manager.get_required_resources(item_name, 1);
-            plan.extend(plan_resource_gathering(
+            plan.extend(plan_crafting_or_building(
+                item_name,
+                brain,
                 inventory,
                 known_resources,
-                &required,
             ));
             plan.push(goal.clone());
         }
         Goal::Build(structure_name) => {
-            let required = brain
-                .recipe_manager
-                .get_required_resources(structure_name, 1);
-            plan.extend(plan_resource_gathering(
+            plan.extend(plan_crafting_or_building(
+                structure_name,
+                brain,
                 inventory,
                 known_resources,
-                &required,
             ));
             plan.push(goal.clone());
         }
@@ -225,6 +223,23 @@ fn plan_goal(
         }
     }
     Ok(plan)
+}
+
+/// Helper function to plan the gathering of resources for crafting or building.
+fn plan_crafting_or_building(
+    item_name: &str,
+    brain: &BrainComponent,
+    inventory: &Inventory,
+    known_resources: &KnownResources,
+) -> Vec<Goal> {
+    let mut plan = Vec::new();
+    let required = brain.recipe_manager.get_required_resources(item_name, 1);
+    plan.extend(plan_resource_gathering(
+        inventory,
+        known_resources,
+        &required,
+    ));
+    plan
 }
 
 /// Plans the gathering of resources required for a crafting recipe.
