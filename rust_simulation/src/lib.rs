@@ -26,8 +26,8 @@ pub mod systems;
 pub mod world;
 
 use components::{
-    ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
     BrainComponent, Health, Inventory, Position,
+    ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
 };
 use config::*;
 use item::ItemRegistry;
@@ -43,7 +43,6 @@ pub enum SimulationSet {
     Setup,
     Logic,
 }
-
 
 // --- Resources ---
 
@@ -69,10 +68,7 @@ pub struct DataPaths {
 
 // --- Simulation Setup ---
 
-pub fn setup_simulation(
-    mut commands: Commands,
-    paths: Res<DataPaths>,
-) {
+pub fn setup_simulation(mut commands: Commands, paths: Res<DataPaths>) {
     let map = Map::new(WIDTH, HEIGHT, &paths.biomes, &paths.resources).unwrap();
     let item_registry = Arc::new(ItemRegistry::new(&paths.items).unwrap());
     let recipe_manager = Arc::new(RecipeManager::new(&paths.recipes).unwrap());

@@ -1,9 +1,5 @@
+use crate::components::{Position, Velocity, path::CurrentPath};
 use bevy_ecs::prelude::*;
-use crate::components::{
-    path::CurrentPath,
-    Position,
-    Velocity,
-};
 use log::debug;
 
 pub fn path_movement_system(
@@ -29,7 +25,10 @@ pub fn path_movement_system(
             let dx = target_node.0 as i32 - position.x as i32;
             let dy = target_node.1 as i32 - position.y as i32;
 
-            debug!("Entity {:?} moving towards {:?} with velocity ({}, {})", entity, target_node, dx, dy);
+            debug!(
+                "Entity {:?} moving towards {:?} with velocity ({}, {})",
+                entity, target_node, dx, dy
+            );
             commands.entity(entity).insert(Velocity { dx, dy });
         } else {
             // No nodes left, the path is complete.

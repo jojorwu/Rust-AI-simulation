@@ -1,8 +1,8 @@
-use bevy_ecs::prelude::*;
-use crate::brain::BrainAction;
-use crate::components::{intents::IntendsToFlee, BrainComponent, Velocity};
-use crate::errors::SimulationError;
 use super::apply_brain_action;
+use crate::brain::BrainAction;
+use crate::components::{BrainComponent, Velocity, intents::IntendsToFlee};
+use crate::errors::SimulationError;
+use bevy_ecs::prelude::*;
 use rand::Rng;
 
 pub fn flee_action_system(

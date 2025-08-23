@@ -1,13 +1,13 @@
+pub mod ai;
+pub mod async_result_collection_system;
 pub mod building;
 pub mod combat;
 pub mod crafting;
 pub mod death;
 pub mod gathering;
 pub mod movement;
+pub mod path_movement_system;
+pub mod pathfinding_system;
 pub mod pickup;
 pub mod storage;
 pub mod visibility_system;
-pub mod pathfinding_system;
-pub mod async_result_collection_system;
-pub mod path_movement_system;
-pub mod ai;

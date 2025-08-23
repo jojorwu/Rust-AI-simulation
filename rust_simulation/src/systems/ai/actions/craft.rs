@@ -1,8 +1,8 @@
-use bevy_ecs::prelude::*;
-use crate::brain::BrainAction;
-use crate::components::{intents::IntendsToCraft, BrainComponent, WantsToCraft};
-use crate::errors::SimulationError;
 use super::apply_brain_action;
+use crate::brain::BrainAction;
+use crate::components::{BrainComponent, WantsToCraft, intents::IntendsToCraft};
+use crate::errors::SimulationError;
+use bevy_ecs::prelude::*;
 
 pub fn craft_action_system(
     mut commands: Commands,
@@ -22,9 +22,7 @@ pub fn craft_action_system(
     }
 }
 
-fn execute_craft_item_goal(
-    item_name: &str,
-) -> Result<Option<BrainAction>, SimulationError> {
+fn execute_craft_item_goal(item_name: &str) -> Result<Option<BrainAction>, SimulationError> {
     Ok(Some(BrainAction::Craft(WantsToCraft {
         item_name: item_name.to_string(),
     })))

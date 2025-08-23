@@ -7,10 +7,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::env;
 
-pub fn generate_roads(
-    mut map: ResMut<Map>,
-    mut road_manager: ResMut<RoadManager>,
-){
+pub fn generate_roads(mut map: ResMut<Map>, mut road_manager: ResMut<RoadManager>) {
     _generate_roads_from_config(&mut map, &mut road_manager).unwrap()
 }
 

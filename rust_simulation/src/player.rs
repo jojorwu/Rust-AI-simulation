@@ -7,9 +7,7 @@ pub struct Player {
 
 impl Player {
     pub fn new(_id: u32, _map_width: u32, _map_height: u32) -> Self {
-        Player {
-            _held_item: None,
-        }
+        Player { _held_item: None }
     }
 
     pub fn reset(&mut self) {

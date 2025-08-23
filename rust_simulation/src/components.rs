@@ -6,9 +6,9 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+pub mod ai;
 pub mod intents;
 pub mod path;
-pub mod ai;
 
 #[derive(Component, Debug, Clone, Copy, Eq)]
 pub struct Position {

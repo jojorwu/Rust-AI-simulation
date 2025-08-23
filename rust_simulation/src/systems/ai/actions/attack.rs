@@ -1,8 +1,8 @@
-use bevy_ecs::prelude::*;
-use crate::brain::BrainAction;
-use crate::components::{intents::IntendsToAttack, BrainComponent, WantsToAttack};
-use crate::errors::SimulationError;
 use super::apply_brain_action;
+use crate::brain::BrainAction;
+use crate::components::{BrainComponent, WantsToAttack, intents::IntendsToAttack};
+use crate::errors::SimulationError;
+use bevy_ecs::prelude::*;
 
 pub fn attack_action_system(
     mut commands: Commands,
@@ -22,12 +22,8 @@ pub fn attack_action_system(
     }
 }
 
-fn execute_attack_goal(
-    target_id: Entity,
-) -> Result<Option<BrainAction>, SimulationError> {
-    Ok(Some(BrainAction::Attack(
-        WantsToAttack {
-            target: target_id,
-        },
-    )))
+fn execute_attack_goal(target_id: Entity) -> Result<Option<BrainAction>, SimulationError> {
+    Ok(Some(BrainAction::Attack(WantsToAttack {
+        target: target_id,
+    })))
 }

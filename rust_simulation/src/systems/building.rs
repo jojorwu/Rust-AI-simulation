@@ -1,7 +1,7 @@
-use crate::components::{intents::IntendsToBuild, Chest, Inventory, Position};
-use crate::events::Event;
-use crate::map::{Map, CHUNK_SIZE};
 use crate::RecipeManagerResource;
+use crate::components::{Chest, Inventory, Position, intents::IntendsToBuild};
+use crate::events::Event;
+use crate::map::{CHUNK_SIZE, Map};
 use bevy_ecs::prelude::*;
 
 pub fn building_system(
@@ -14,8 +14,7 @@ pub fn building_system(
     let recipe_manager = &recipe_manager.0;
 
     for (builder_entity, pos, mut inventory, intends_to_build) in builder_query.iter_mut() {
-        let required =
-            recipe_manager.get_required_resources(&intends_to_build.0, 1);
+        let required = recipe_manager.get_required_resources(&intends_to_build.0, 1);
 
         // Check if the builder has the required resources
         if !inventory.has_resources(&required) {

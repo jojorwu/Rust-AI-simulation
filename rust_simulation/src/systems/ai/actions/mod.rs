@@ -7,8 +7,8 @@ pub mod stockpile;
 // This module will contain the individual action systems
 // and shared helper functions.
 
-use bevy_ecs::prelude::*;
 use crate::brain::BrainAction;
+use bevy_ecs::prelude::*;
 pub fn apply_brain_action(commands: &mut Commands, entity: Entity, action: BrainAction) {
     match action {
         BrainAction::Move(vel) => {

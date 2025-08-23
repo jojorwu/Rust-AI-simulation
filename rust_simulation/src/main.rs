@@ -3,7 +3,7 @@ use rust_simulation::errors::SimulationError;
 use rust_simulation::graphics::GraphicsPlugin;
 use rust_simulation::road_builder;
 use rust_simulation::road_manager::RoadManager;
-use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
+use rust_simulation::{DataPaths, SimulationSet, add_simulation_systems, setup_simulation};
 use std::env;
 use std::time::Duration;
 
@@ -55,10 +55,12 @@ fn main() -> Result<(), SimulationError> {
     app.configure_sets(Startup, SimulationSet::Setup.before(SimulationSet::Logic));
 
     // Add simulation setup and systems
-    app.add_systems(Startup, (
-        setup_simulation,
-        road_builder::generate_roads,
-    ).chain().in_set(SimulationSet::Setup));
+    app.add_systems(
+        Startup,
+        (setup_simulation, road_builder::generate_roads)
+            .chain()
+            .in_set(SimulationSet::Setup),
+    );
 
     add_simulation_systems(&mut app);
 

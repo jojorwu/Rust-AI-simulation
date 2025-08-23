@@ -1,5 +1,5 @@
-use crate::components::{Inventory, WantsToCraft};
 use crate::RecipeManagerResource;
+use crate::components::{Inventory, WantsToCraft};
 use bevy_ecs::prelude::*;
 
 pub fn crafting_system(

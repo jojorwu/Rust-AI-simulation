@@ -50,7 +50,10 @@ pub struct MapChunk {
 impl MapChunk {
     pub fn new() -> Self {
         MapChunk {
-            tiles: vec![vec![Tile::new(' ', "none".to_string()); CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+            tiles: vec![
+                vec![Tile::new(' ', "none".to_string()); CHUNK_SIZE as usize];
+                CHUNK_SIZE as usize
+            ],
             spatial_map: HashMap::new(),
         }
     }
@@ -149,7 +152,11 @@ impl Map {
         let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
         let local_x = x % CHUNK_SIZE;
         let local_y = y % CHUNK_SIZE;
-        chunk.spatial_map.entry((local_x, local_y)).or_default().push(entity);
+        chunk
+            .spatial_map
+            .entry((local_x, local_y))
+            .or_default()
+            .push(entity);
         Some(())
     }
 
@@ -172,19 +179,12 @@ impl Map {
         chunk.spatial_map.get(&(local_x, local_y)).cloned()
     }
 
-
     pub fn is_walkable(&self, x: u32, y: u32) -> bool {
         self.get_tile(x, y)
             .map_or(false, |tile| matches!(tile.tile_type, '.' | ',' | 'f'))
     }
 
-    fn generate_island_map(
-        &mut self,
-        scale: f64,
-        octaves: i32,
-        persistence: f64,
-        lacunarity: f64,
-    ) {
+    fn generate_island_map(&mut self, scale: f64, octaves: i32, persistence: f64, lacunarity: f64) {
         let mut rng = rand::rng();
         let seed = rng.random::<u32>();
 

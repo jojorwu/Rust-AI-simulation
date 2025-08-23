@@ -5,10 +5,10 @@ use crate::components::{
     BrainComponent, Health, Inventory,
 };
 use crate::errors::SimulationError;
-use crate::{IsDay, config};
+use crate::{config, IsDay};
 use bevy_ecs::prelude::*;
 use log::info;
-use rand::prelude::*;
+use rand::random;
 use std::collections::HashMap;
 
 pub fn goal_selection_system(
@@ -24,15 +24,8 @@ pub fn goal_selection_system(
     )>,
     is_day: Res<IsDay>,
 ) {
-    for (
-        entity,
-        mut brain,
-        health,
-        inventory,
-        known_resources,
-        player_memories,
-        goal_q_table,
-    ) in query.iter_mut()
+    for (entity, mut brain, health, inventory, known_resources, player_memories, goal_q_table) in
+        query.iter_mut()
     {
         if brain.current_goal.is_none() && brain.goal_commitment_ticks == 0 {
             let high_level_state =
@@ -63,7 +56,9 @@ pub fn goal_selection_system(
                                 commands.entity(entity).insert(IntendsToCraft(item.clone()));
                             }
                             Goal::Build(structure) => {
-                                commands.entity(entity).insert(IntendsToBuild(structure.clone()));
+                                commands
+                                    .entity(entity)
+                                    .insert(IntendsToBuild(structure.clone()));
                             }
                             Goal::Attack(target) => {
                                 commands.entity(entity).insert(IntendsToAttack(*target));
@@ -75,7 +70,9 @@ pub fn goal_selection_system(
                                 commands.entity(entity).insert(IntendsToExplore);
                             }
                             Goal::Stockpile(res) => {
-                                commands.entity(entity).insert(IntendsToStockpile(res.clone()));
+                                commands
+                                    .entity(entity)
+                                    .insert(IntendsToStockpile(res.clone()));
                             }
                         }
 
@@ -139,7 +136,7 @@ fn choose_goal(
     }
 
     if rand::random::<f64>() < brain.epsilon {
-        let index = rand::thread_rng().gen_range(0..valid_goals.len());
+        let index = (random::<f64>() * valid_goals.len() as f64).floor() as usize;
         return Ok(valid_goals[index].clone());
     }
 
@@ -163,11 +160,11 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = rand::thread_rng().gen_range(0..valid_goals.len());
+                let index = (random::<f64>() * valid_goals.len() as f64).floor() as usize;
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = rand::thread_rng().gen_range(0..valid_goals.len());
+        let index = (random::<f64>() * valid_goals.len() as f64).floor() as usize;
         Ok(valid_goals[index].clone())
     }
 }
@@ -193,9 +190,7 @@ fn plan_goal(
     let mut plan = Vec::new();
     match goal {
         Goal::CraftItem(item_name) => {
-            let required = brain
-                .recipe_manager
-                .get_required_resources(item_name, 1);
+            let required = brain.recipe_manager.get_required_resources(item_name, 1);
             plan.extend(plan_resource_gathering(
                 inventory,
                 known_resources,

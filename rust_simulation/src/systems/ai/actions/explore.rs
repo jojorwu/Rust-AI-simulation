@@ -1,8 +1,8 @@
 use crate::components::{
+    BrainComponent, Position,
     ai::{ExplorationFrontier, MentalMap},
     intents::IntendsToExplore,
     path::{CurrentPath, PathRequest},
-    BrainComponent, Position,
 };
 use bevy_ecs::prelude::*;
 

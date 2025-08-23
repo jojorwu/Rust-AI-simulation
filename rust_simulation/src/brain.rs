@@ -8,10 +8,8 @@
 //! The `Brain` uses a Q-learning-based approach to decide on a `Goal`, and then
 //! uses a planner to break that goal down into a series of actions.
 
+use crate::components::{Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
 use bevy_ecs::prelude::*;
-use crate::components::{
-    Velocity, WantsToCraft, WantsToAttack, WantsToStoreItem,
-};
 use serde::{Deserialize, Serialize};
 
 /// A tile as remembered by the agent.
@@ -91,4 +89,3 @@ pub struct HighLevelState {
     /// Whether it is currently night time.
     pub is_night: bool,
 }
-

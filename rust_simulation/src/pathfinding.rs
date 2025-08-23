@@ -89,10 +89,7 @@ pub fn find_path(
     None // No path found
 }
 
-fn get_neighbors(
-    position: (u32, u32),
-    mental_map: &[Vec<Option<MemoryTile>>],
-) -> Vec<(u32, u32)> {
+fn get_neighbors(position: (u32, u32), mental_map: &[Vec<Option<MemoryTile>>]) -> Vec<(u32, u32)> {
     let mut neighbors = Vec::new();
     let (x, y) = position;
 

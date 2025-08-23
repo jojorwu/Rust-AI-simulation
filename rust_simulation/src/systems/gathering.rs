@@ -1,8 +1,8 @@
 use crate::components::{
+    Inventory, Position, Resource as ResourceComponent,
     ai::KnownResources,
     intents::IntendsToGather,
     path::{CurrentPath, PathRequest},
-    Inventory, Position, Resource as ResourceComponent,
 };
 use crate::map::Map;
 use bevy_ecs::prelude::*;
@@ -27,15 +27,14 @@ pub fn gathering_system(
         let resource_name = &intent.0;
 
         // 1. Find the closest known resource of the desired type from the agent's brain.
-        let target_pos =
-            if let Some(known_positions) = known_resources.0.get(resource_name) {
-                known_positions
-                    .iter()
-                    .min_by_key(|pos| pos.x.abs_diff(position.x) + pos.y.abs_diff(position.y))
-                    .copied() // We need to copy the Position to use it.
-            } else {
-                None
-            };
+        let target_pos = if let Some(known_positions) = known_resources.0.get(resource_name) {
+            known_positions
+                .iter()
+                .min_by_key(|pos| pos.x.abs_diff(position.x) + pos.y.abs_diff(position.y))
+                .copied() // We need to copy the Position to use it.
+        } else {
+            None
+        };
 
         if let Some(target_pos) = target_pos {
             // 2. Check if the agent is adjacent to the target resource.
@@ -44,9 +43,9 @@ pub fn gathering_system(
 
             if is_adjacent {
                 // 3. If adjacent, perform the gathering action.
-                if let Some(target_entity) =
-                    map.get_entities_at(target_pos.x, target_pos.y)
-                        .and_then(|v| v.first().copied())
+                if let Some(target_entity) = map
+                    .get_entities_at(target_pos.x, target_pos.y)
+                    .and_then(|v| v.first().copied())
                 {
                     if let Ok(mut resource) = resource_query.get_mut(target_entity) {
                         if resource.quantity > 0 {

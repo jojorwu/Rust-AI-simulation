@@ -1,4 +1,4 @@
-use crate::components::{ai::GoalQTable, BrainComponent};
+use crate::components::{BrainComponent, ai::GoalQTable};
 use crate::events::Event;
 use bevy_ecs::prelude::*;
 
