@@ -123,6 +123,14 @@ impl Map {
         Ok(map)
     }
 
+    pub fn width_in_chunks(&self) -> u32 {
+        (self.width as f32 / CHUNK_SIZE as f32).ceil() as u32
+    }
+
+    pub fn height_in_chunks(&self) -> u32 {
+        (self.height as f32 / CHUNK_SIZE as f32).ceil() as u32
+    }
+
     pub fn get_chunk_index(&self, x: u32, y: u32) -> Option<(usize, usize)> {
         if x >= self.width || y >= self.height {
             return None;

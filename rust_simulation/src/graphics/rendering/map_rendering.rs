@@ -4,14 +4,53 @@ use bevy::{
     render::{mesh, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
 };
 use rayon::prelude::*;
+use std::collections::HashSet;
+use crate::player::Player;
+use crate::components::Position;
 
 use super::TILE_SIZE;
+
+const VIEW_DISTANCE: u32 = 2;
+
+#[derive(Resource, Default)]
+pub struct VisibleChunks(pub HashSet<(u32, u32)>);
+
+#[derive(Component)]
+struct LoadedChunk {
+    x: u32,
+    y: u32,
+}
 
 pub struct MapRenderingPlugin;
 
 impl Plugin for MapRenderingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_map_meshes);
+        app.init_resource::<VisibleChunks>()
+            .add_systems(Update, (chunk_visibility_system, load_new_chunks_system, unload_old_chunks_system));
+    }
+}
+
+fn chunk_visibility_system(
+    player_query: Query<&Position, With<Player>>,
+    mut visible_chunks: ResMut<VisibleChunks>,
+    map: Res<Map>,
+) {
+    if let Ok(player_pos) = player_query.get_single() {
+        let player_chunk_x = player_pos.x / CHUNK_SIZE;
+        let player_chunk_y = player_pos.y / CHUNK_SIZE;
+
+        let mut new_visible_chunks = HashSet::new();
+        for y in (player_chunk_y.saturating_sub(VIEW_DISTANCE))..=(player_chunk_y + VIEW_DISTANCE) {
+            for x in (player_chunk_x.saturating_sub(VIEW_DISTANCE))..=(player_chunk_x + VIEW_DISTANCE) {
+                if x < map.width_in_chunks() && y < map.height_in_chunks() {
+                    new_visible_chunks.insert((x, y));
+                }
+            }
+        }
+
+        if visible_chunks.0 != new_visible_chunks {
+            visible_chunks.0 = new_visible_chunks;
+        }
     }
 }
 
@@ -55,37 +94,62 @@ fn create_chunk_mesh(chunk: &MapChunk, chunk_pos: (u32, u32)) -> Mesh {
     mesh
 }
 
-pub fn setup_map_meshes(
+fn load_new_chunks_system(
     mut commands: Commands,
     map: Res<Map>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    visible_chunks: Res<VisibleChunks>,
+    loaded_chunks_query: Query<&LoadedChunk>,
 ) {
-    let chunks_with_positions = map
-        .chunks
+    let loaded_chunks: HashSet<(u32, u32)> = loaded_chunks_query
         .iter()
-        .enumerate()
-        .flat_map(|(y, row)| {
-            row.iter()
-                .enumerate()
-                .map(move |(x, chunk)| (chunk.clone(), (x as u32, y as u32)))
+        .map(|chunk| (chunk.x, chunk.y))
+        .collect();
+
+    let chunks_to_load = visible_chunks
+        .0
+        .difference(&loaded_chunks)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let chunks_with_data_to_load = chunks_to_load
+        .into_iter()
+        .map(|(x, y)| {
+            let chunk_data = map.chunks[y as usize][x as usize].clone();
+            (chunk_data, (x, y))
         })
         .collect::<Vec<_>>();
 
-    let chunk_meshes: Vec<Mesh> = chunks_with_positions
+    let new_meshes: Vec<(Mesh, (u32, u32))> = chunks_with_data_to_load
         .into_par_iter()
-        .map(|(chunk, pos)| {
-            let chunk_data = chunk.lock().unwrap();
-            create_chunk_mesh(&chunk_data, pos)
+        .map(|(chunk_data, pos)| {
+            let chunk = chunk_data.lock().unwrap();
+            (create_chunk_mesh(&chunk, pos), pos)
         })
         .collect();
 
-    for chunk_mesh in chunk_meshes {
-        commands.spawn(ColorMesh2dBundle {
-            mesh: meshes.add(chunk_mesh).into(),
-            material: materials.add(ColorMaterial::from(Color::WHITE)),
-            ..default()
-        });
+    for (mesh, (x, y)) in new_meshes {
+        commands.spawn((
+            ColorMesh2dBundle {
+                mesh: meshes.add(mesh).into(),
+                material: materials.add(ColorMaterial::from(Color::WHITE)),
+                ..default()
+            },
+            LoadedChunk { x, y },
+        ));
+    }
+}
+
+fn unload_old_chunks_system(
+    mut commands: Commands,
+    visible_chunks: Res<VisibleChunks>,
+    loaded_chunks_query: Query<(Entity, &LoadedChunk)>,
+) {
+    for (entity, loaded_chunk) in loaded_chunks_query.iter() {
+        if !visible_chunks.0.contains(&(loaded_chunk.x, loaded_chunk.y)) {
+            commands.entity(entity).despawn();
+        }
     }
 }
 
