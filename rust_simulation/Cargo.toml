@@ -30,3 +30,7 @@ harness = false
 [[bench]]
 name = "ai_bench"
 harness = false
+
+[[bench]]
+name = "map_generation_bench"
+harness = false

@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use rust_simulation::systems::ai::goal_selection::goal_selection_system;
 use rust_simulation::systems::ai::q_learning::update_q_table_system;
 use bevy::prelude::*;
-use rust_simulation::components::{BrainComponent, ai::GoalQTable, Health, Inventory, ai::KnownResources, ai::PlayerMemories};
+use rust_simulation::components::{BrainComponent, ai::GoalQTable, status::Health, Inventory, ai::KnownResources, ai::PlayerMemories};
 use rust_simulation::config::Config;
 use rust_simulation::map::Map;
 use rust_simulation::player::Player;
@@ -17,18 +17,17 @@ fn setup_app(num_agents: u32) -> App {
     app.add_plugins(MinimalPlugins);
     app.add_event::<Event>();
 
-    let config = Config::load("/app/rust_simulation/data/config.toml").unwrap();
+    let config = Config::load("data/config.toml").unwrap();
 
     let map = Map::new(
         config.map_settings.width,
         config.map_settings.height,
-        "/app/rust_simulation/data/biomes.json",
-        "/app/rust_simulation/data/resources.json",
-        config.map_settings.seed,
+        "data/biomes.json",
+        "data/resources.json",
     )
     .unwrap();
 
-    let recipe_manager = Arc::new(RecipeManager::new("/app/rust_simulation/data/recipes.json").unwrap());
+    let recipe_manager = Arc::new(RecipeManager::new("data/recipes.json").unwrap());
 
     app.insert_resource(map);
     app.insert_resource(config.clone());
