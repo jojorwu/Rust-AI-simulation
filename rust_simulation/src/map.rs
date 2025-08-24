@@ -4,6 +4,7 @@ use bevy_ecs::prelude::*;
 use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+use rayon::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -205,6 +206,13 @@ impl Map {
         let seed_val = seed.unwrap_or_else(rand::random);
         let mut rng = StdRng::seed_from_u64(seed_val as u64);
 
+        let mut random_numbers = vec![vec![0; self.width as usize]; self.height as usize];
+        for y in 0..self.height {
+            for x in 0..self.width {
+                random_numbers[y as usize][x as usize] = rng.gen_range(0..100);
+            }
+        }
+
         let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed_val);
         base_fbm.octaves = octaves as usize;
         base_fbm.persistence = persistence;
@@ -212,7 +220,7 @@ impl Map {
 
         let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed_val.wrapping_add(1));
 
-        for y_abs in 0..self.height {
+        (0..self.height).into_par_iter().for_each(|y_abs| {
             for x_abs in 0..self.width {
                 let nx = 2.0 * x_abs as f64 / self.width as f64 - 1.0;
                 let ny = 2.0 * y_abs as f64 / self.height as f64 - 1.0;
@@ -237,12 +245,12 @@ impl Map {
                     }
                 }
 
-                if biome_name == "plains" && tile_char == '.' && rng.gen_range(0..100) < 5 {
+                if biome_name == "plains" && tile_char == '.' && random_numbers[y_abs as usize][x_abs as usize] < 5 {
                     tile_char = 'f';
                 }
 
                 self.set_tile(x_abs, y_abs, Tile::new(tile_char, biome_name));
             }
-        }
+        });
     }
 }
