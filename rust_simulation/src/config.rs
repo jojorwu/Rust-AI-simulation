@@ -8,10 +8,16 @@ use std::fs;
 pub struct Config {
     pub map_settings: MapSettings,
     pub player_settings: PlayerSettings,
+    pub pig_settings: PigSettings,
     pub training_settings: TrainingSettings,
     pub day_night_cycle: DayNightCycle,
     pub ai: Ai,
     pub performance: PerformanceSettings,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct PigSettings {
+    pub num_pigs: u32,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]

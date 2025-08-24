@@ -3,6 +3,7 @@
 //! Entity-Component-System (ECS) architecture using `bevy_ecs`.
 
 use bevy::prelude::*;
+use rand::Rng;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -30,8 +31,9 @@ pub mod world;
 
 use crate::state::AppState;
 use components::{
-    BrainComponent, Health, Inventory, Position,
+    animal::{Pig, SimpleAi},
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
+    BrainComponent, Health, Inventory, Position, Velocity,
 };
 use config::*;
 use item::ItemRegistry;
@@ -41,6 +43,7 @@ use player::Player;
 use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
 use systems::map_builder::map_builder_system;
+use systems::pig_ai::{flee_stop_system, fleeing_system, wandering_system};
 use systems::*;
 
 // --- System Sets ---
@@ -114,15 +117,19 @@ pub fn setup_simulation(
         return;
     }
 
+    let mut player_positions = Vec::new();
     for i in 0..config.player_settings.num_players {
         let q_table = q_tables
             .get(&i)
             .cloned()
             .unwrap_or_else(|| GoalQTable(HashMap::new()));
 
+        let position = Position { x: 0, y: 0 }; // We will update this later
+        player_positions.push(position);
+
         commands.spawn((
             Player::new(i, config.map_settings.width, config.map_settings.height),
-            Position { x: 0, y: 0 },
+            position,
             Health {
                 current: 100,
                 max: 100,
@@ -142,6 +149,38 @@ pub fn setup_simulation(
             PlayerMemories(HashMap::new()),
             q_table,
             ExplorationFrontier(VecDeque::new()),
+        ));
+    }
+
+    let mut rng = rand::thread_rng();
+    for _ in 0..config.pig_settings.num_pigs {
+        let mut pig_pos;
+        loop {
+            pig_pos = Position {
+                x: rng.gen_range(0..config.map_settings.width),
+                y: rng.gen_range(0..config.map_settings.height),
+            };
+
+            let too_close_to_player = player_positions.iter().any(|p| {
+                let dx = (p.x as i32 - pig_pos.x as i32).abs();
+                let dy = (p.y as i32 - pig_pos.y as i32).abs();
+                dx < 10 && dy < 10
+            });
+
+            if !too_close_to_player {
+                break;
+            }
+        }
+
+        commands.spawn((
+            Pig,
+            pig_pos,
+            Health {
+                current: 50,
+                max: 50,
+            },
+            SimpleAi::default(),
+            Velocity { dx: 0, dy: 0 },
         ));
     }
 }
@@ -167,6 +206,9 @@ pub fn add_simulation_systems(app: &mut App) {
             systems::visibility_system::visibility_system,
             q_learning::update_q_table_system,
             goal_selection::goal_selection_system,
+            wandering_system,
+            fleeing_system,
+            flee_stop_system,
             apply_deferred,
         )
             .chain()

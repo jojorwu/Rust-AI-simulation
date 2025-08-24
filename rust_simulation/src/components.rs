@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 pub mod ai;
+pub mod animal;
 pub mod intents;
 pub mod path;
 

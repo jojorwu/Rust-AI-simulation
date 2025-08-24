@@ -1,0 +1,42 @@
+[map_settings]
+width = 100
+height = 100
+
+[player_settings]
+num_players = 10
+
+[pig_settings]
+num_pigs = 10
+
+[training_settings]
+episodes = 100
+max_steps_per_episode = 1000
+
+[day_night_cycle]
+day_length = 1200
+night_length = 600
+
+[ai]
+opportunistic_commitment_threshold = 5
+valuable_resources = ["wood", "stone", "iron_ore"]
+defense_radius = 10
+critical_health_ratio = 0.25
+standard_health_ratio = 0.75
+
+[ai.q_learning]
+learning_rate = 0.1
+discount_factor = 0.9
+epsilon = 0.1
+
+[ai.goals]
+reward = 10.0
+penalty = -10.0
+build_bonus = 5.0
+gather_threshold = 5
+commitment_ticks = 100
+threat_commitment_ticks = 200
+
+[performance]
+processor_cores = 4
+ram_limit_gb = 4
+enable_ram_limit = false

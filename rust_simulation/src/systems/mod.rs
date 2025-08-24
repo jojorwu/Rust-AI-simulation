@@ -2,6 +2,7 @@ pub mod ai;
 pub mod async_result_collection_system;
 pub mod building;
 pub mod map_builder;
+pub mod pig_ai;
 pub mod combat;
 pub mod crafting;
 pub mod death;

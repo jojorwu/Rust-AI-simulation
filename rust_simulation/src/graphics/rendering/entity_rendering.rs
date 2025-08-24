@@ -1,4 +1,7 @@
-use crate::{components::Position, player::Player};
+use crate::{
+    components::{animal::Pig, Position},
+    player::Player,
+};
 use bevy::prelude::*;
 
 pub const TILE_SIZE: f32 = 32.0;
@@ -18,6 +21,7 @@ impl Plugin for EntityRenderingPlugin {
 pub fn setup_entity_sprites(
     mut commands: Commands,
     player_query: Query<(Entity, &Position), With<Player>>,
+    pig_query: Query<(Entity, &Position), With<Pig>>,
 ) {
     // Spawn player sprite
     for (player_entity, position) in player_query.iter() {
@@ -39,6 +43,28 @@ pub fn setup_entity_sprites(
         commands
             .entity(spawned_entity)
             .insert(RenderedEntity(player_entity));
+    }
+
+    // Spawn pig sprites
+    for (pig_entity, position) in pig_query.iter() {
+        let spawned_entity = commands
+            .spawn((SpriteBundle {
+                sprite: Sprite {
+                    color: Color::PINK,
+                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
+                    ..default()
+                },
+                transform: Transform::from_xyz(
+                    position.x as f32 * TILE_SIZE,
+                    position.y as f32 * TILE_SIZE,
+                    1.0,
+                ),
+                ..default()
+            },))
+            .id();
+        commands
+            .entity(spawned_entity)
+            .insert(RenderedEntity(pig_entity));
     }
 }
 
