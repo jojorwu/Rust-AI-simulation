@@ -1,10 +1,6 @@
 //! This module handles the representation of the game world, divided into chunks for concurrent access.
 
 use bevy_ecs::prelude::*;
-use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use rayon::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -93,7 +89,6 @@ impl Map {
         height: u32,
         biomes_path: &str,
         resources_path: &str,
-        seed: Option<u32>,
     ) -> Result<Self, SimulationError> {
         let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
@@ -112,7 +107,7 @@ impl Map {
             })
             .collect();
 
-        let mut map = Map {
+        let map = Map {
             width,
             height,
             chunks,
@@ -120,7 +115,6 @@ impl Map {
             resources,
         };
 
-        map.generate_island_map(25.0, 5, 0.5, 2.0, seed);
         Ok(map)
     }
 
@@ -195,62 +189,4 @@ impl Map {
             .map_or(false, |tile| matches!(tile.tile_type, '.' | ',' | 'f'))
     }
 
-    fn generate_island_map(
-        &mut self,
-        scale: f64,
-        octaves: i32,
-        persistence: f64,
-        lacunarity: f64,
-        seed: Option<u32>,
-    ) {
-        let seed_val = seed.unwrap_or_else(rand::random);
-        let mut rng = StdRng::seed_from_u64(seed_val as u64);
-
-        let mut random_numbers = vec![vec![0; self.width as usize]; self.height as usize];
-        for y in 0..self.height {
-            for x in 0..self.width {
-                random_numbers[y as usize][x as usize] = rng.gen_range(0..100);
-            }
-        }
-
-        let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed_val);
-        base_fbm.octaves = octaves as usize;
-        base_fbm.persistence = persistence;
-        base_fbm.lacunarity = lacunarity;
-
-        let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed_val.wrapping_add(1));
-
-        (0..self.height).into_par_iter().for_each(|y_abs| {
-            for x_abs in 0..self.width {
-                let nx = 2.0 * x_abs as f64 / self.width as f64 - 1.0;
-                let ny = 2.0 * y_abs as f64 / self.height as f64 - 1.0;
-                let dist = 1.0 - (1.0 - nx.powi(2)) * (1.0 - ny.powi(2));
-
-                let pos = [x_abs as f64 / scale, y_abs as f64 / scale];
-                let base_noise = base_fbm.get(pos);
-                let mountain_pos = [x_abs as f64 / (scale * 2.5), y_abs as f64 / (scale * 2.5)];
-                let mountain_noise = ridged_multi.get(mountain_pos);
-                let combined_noise = base_noise + (mountain_noise.powi(2) * 0.6);
-                let island_val = (combined_noise.clamp(-1.0, 1.5) + 1.0) / 2.5;
-                let height = island_val * (1.0 - dist);
-
-                let mut tile_char = ' ';
-                let mut biome_name = "none".to_string();
-
-                for biome in &self.biomes {
-                    if height >= biome.height_range[0] && height < biome.height_range[1] {
-                        tile_char = biome.tile_type;
-                        biome_name = biome.name.clone();
-                        break;
-                    }
-                }
-
-                if biome_name == "plains" && tile_char == '.' && random_numbers[y_abs as usize][x_abs as usize] < 5 {
-                    tile_char = 'f';
-                }
-
-                self.set_tile(x_abs, y_abs, Tile::new(tile_char, biome_name));
-            }
-        });
-    }
 }

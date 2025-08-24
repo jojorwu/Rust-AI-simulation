@@ -16,6 +16,7 @@ pub mod fov;
 pub mod graphics;
 pub mod item;
 pub mod map;
+pub mod map_generator;
 pub mod pathfinding;
 pub mod player;
 pub mod recipes;
@@ -35,9 +36,11 @@ use components::{
 use config::*;
 use item::ItemRegistry;
 use map::Map;
+use map_generator::trigger_map_generation_system;
 use player::Player;
 use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
+use systems::map_builder::map_builder_system;
 use systems::*;
 
 // --- System Sets ---
@@ -86,7 +89,6 @@ pub fn setup_simulation(
         config.map_settings.height,
         &paths.biomes,
         &paths.resources,
-        config.map_settings.seed,
     )
     .unwrap();
     let item_registry = Arc::new(ItemRegistry::new(&paths.items).unwrap());
@@ -156,23 +158,49 @@ fn update_day_night(
 }
 
 pub fn add_simulation_systems(app: &mut App) {
+    app.add_systems(Startup, trigger_map_generation_system);
     app.add_systems(
         FixedUpdate,
         (
+            map_builder_system,
             update_day_night,
             systems::visibility_system::visibility_system,
             q_learning::update_q_table_system,
             goal_selection::goal_selection_system,
             apply_deferred,
+        )
+            .chain()
+            .in_set(SimulationSet::Logic)
+            .run_if(in_state(AppState::InGame)),
+    );
+    app.add_systems(
+        FixedUpdate,
+        (
             actions::craft::craft_action_system,
             actions::attack::attack_action_system,
             actions::flee::flee_action_system,
             actions::explore::explore_action_system,
             actions::stockpile::stockpile_action_system,
+        )
+            .chain()
+            .in_set(SimulationSet::Logic)
+            .run_if(in_state(AppState::InGame)),
+    );
+    app.add_systems(
+        FixedUpdate,
+        (
             systems::pathfinding_system::pathfinding_system,
             systems::async_result_collection_system::async_result_collection_system,
             systems::path_movement_system::path_movement_system,
             movement::movement_system,
+        )
+            .chain()
+            .in_set(SimulationSet::Logic)
+            .run_if(in_state(AppState::InGame)),
+    );
+    app.add_systems(
+        FixedUpdate,
+        (
             gathering::gathering_system,
             crafting::crafting_system,
             building::building_system,
@@ -185,4 +213,3 @@ pub fn add_simulation_systems(app: &mut App) {
             .run_if(in_state(AppState::InGame)),
     );
 }
-
