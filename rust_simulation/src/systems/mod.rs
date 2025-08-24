@@ -3,6 +3,7 @@ pub mod async_result_collection_system;
 pub mod building;
 pub mod eating;
 pub mod hunger;
+pub mod hunting;
 pub mod map_builder;
 pub mod combat;
 pub mod crafting;

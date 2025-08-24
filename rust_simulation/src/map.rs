@@ -71,6 +71,8 @@ pub struct ResourceDef {
     pub name: String,
     pub biomes: Vec<String>,
     pub density: f64,
+    #[serde(default)]
+    pub huntable: bool,
 }
 
 /// The main map resource, containing a grid of map chunks.

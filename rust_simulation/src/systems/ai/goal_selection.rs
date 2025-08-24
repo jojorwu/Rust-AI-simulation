@@ -7,6 +7,7 @@ use crate::components::{
 };
 use crate::config::Config;
 use crate::errors::SimulationError;
+use crate::map::Map;
 use crate::IsDay;
 use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
@@ -28,6 +29,7 @@ pub fn goal_selection_system(
     )>,
     is_day: Res<IsDay>,
     config: Res<Config>,
+    map: Res<Map>,
 ) {
     query.par_iter_mut().for_each(
         |(entity, mut brain, health, hunger, inventory, known_resources, player_memories, goal_q_table)| {
@@ -44,6 +46,7 @@ pub fn goal_selection_system(
                     goal_q_table,
                     is_day.0,
                     &config,
+                    &map,
                     &mut rng,
                 ) {
                     if let Ok(mut plan) =
@@ -135,6 +138,7 @@ fn choose_goal(
     goal_q_table: &GoalQTable,
     is_night: bool,
     config: &Config,
+    map: &Map,
     rng: &mut impl Rng,
 ) -> Result<Goal, SimulationError> {
     const FLEE_HEALTH_THRESHOLD: u32 = 25;
@@ -154,7 +158,7 @@ fn choose_goal(
     let valid_goals: Vec<_> = brain
         .goals
         .iter()
-        .filter(|g| is_goal_valid(g, known_resources))
+        .filter(|g| is_goal_valid(g, known_resources, map))
         .cloned()
         .collect();
     if valid_goals.is_empty() {
@@ -169,7 +173,7 @@ fn choose_goal(
     if let Some(q_values) = goal_q_table.0.get(state) {
         q_values
             .iter()
-            .filter(|(g, _)| is_goal_valid(g, known_resources))
+            .filter(|(g, _)| is_goal_valid(g, known_resources, map))
             .map(|(goal, q_value)| {
                 let effective_q_value = if is_night {
                     if let Goal::Build(_) = goal {
@@ -196,11 +200,13 @@ fn choose_goal(
 }
 
 /// Checks if a goal is currently valid.
-fn is_goal_valid(goal: &Goal, known_resources: &KnownResources) -> bool {
+fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bool {
     match goal {
         Goal::GatherResource(resource_name) => {
-            if resource_name == "pig" {
-                return true;
+            if let Some(resource_def) = map.resources.iter().find(|r| &r.name == resource_name) {
+                if resource_def.huntable {
+                    return true;
+                }
             }
             known_resources
                 .0

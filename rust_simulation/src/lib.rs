@@ -46,6 +46,7 @@ use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
 use systems::eating::eating_system;
 use systems::hunger::hunger_system;
+use systems::hunting::hunting_system;
 use systems::map_builder::map_builder_system;
 use systems::*;
 
@@ -229,6 +230,7 @@ pub fn add_simulation_systems(app: &mut App) {
             fleeing_system,
             flee_stop_system,
             apply_deferred,
+            hunting_system,
         )
             .chain()
             .in_set(SimulationSet::Logic)
