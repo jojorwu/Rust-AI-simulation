@@ -25,3 +25,7 @@ criterion = "0.5.1"
 [[bench]]
 name = "pathfinding_bench"
 harness = false
+
+[[bench]]
+name = "ai_bench"
+harness = false

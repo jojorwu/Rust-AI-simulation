@@ -7,13 +7,14 @@ use crate::components::{
 use crate::config::Config;
 use crate::errors::SimulationError;
 use crate::IsDay;
+use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
 use log::info;
 use rand::random;
 use std::collections::HashMap;
 
 pub fn goal_selection_system(
-    mut commands: Commands,
+    commands: ParallelCommands,
     mut query: Query<(
         Entity,
         &mut BrainComponent,
@@ -26,65 +27,65 @@ pub fn goal_selection_system(
     is_day: Res<IsDay>,
     config: Res<Config>,
 ) {
-    for (entity, mut brain, health, inventory, known_resources, player_memories, goal_q_table) in
-        query.iter_mut()
-    {
-        if brain.current_goal.is_none() && brain.goal_commitment_ticks == 0 {
-            let high_level_state =
-                get_high_level_state(health, inventory, player_memories, is_day.0);
+    query.par_iter_mut().for_each(
+        |(entity, mut brain, health, inventory, known_resources, player_memories, goal_q_table)| {
+            if brain.current_goal.is_none() && brain.goal_commitment_ticks == 0 {
+                let high_level_state =
+                    get_high_level_state(health, inventory, player_memories, is_day.0);
 
-            if let Ok(new_high_level_goal) = choose_goal(
-                &high_level_state,
-                &brain,
-                known_resources,
-                goal_q_table,
-                is_day.0,
-                &config,
-            ) {
-                if let Ok(mut plan) =
-                    plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
-                {
-                    plan.reverse();
-                    brain.goal_stack = plan;
-                    brain.current_goal = brain.goal_stack.pop();
-                    if let Some(goal) = &brain.current_goal {
-                        info!("Entity {:?} selected new goal: {:?}", entity, goal);
+                if let Ok(new_high_level_goal) = choose_goal(
+                    &high_level_state,
+                    &brain,
+                    known_resources,
+                    goal_q_table,
+                    is_day.0,
+                    &config,
+                ) {
+                    if let Ok(mut plan) =
+                        plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
+                    {
+                        plan.reverse();
+                        brain.goal_stack = plan;
+                        brain.current_goal = brain.goal_stack.pop();
+                        if let Some(goal) = &brain.current_goal {
+                            info!("Entity {:?} selected new goal: {:?}", entity, goal);
 
-                        // Add the corresponding intent component
-                        match goal {
-                            Goal::GatherResource(res) => {
-                                commands.entity(entity).insert(IntendsToGather(res.clone()));
-                            }
-                            Goal::CraftItem(item) => {
-                                commands.entity(entity).insert(IntendsToCraft(item.clone()));
-                            }
-                            Goal::Build(structure) => {
-                                commands
-                                    .entity(entity)
-                                    .insert(IntendsToBuild(structure.clone()));
-                            }
-                            Goal::Attack(target) => {
-                                commands.entity(entity).insert(IntendsToAttack(*target));
-                            }
-                            Goal::Flee => {
-                                commands.entity(entity).insert(IntendsToFlee);
-                            }
-                            Goal::Explore => {
-                                commands.entity(entity).insert(IntendsToExplore);
-                            }
-                            Goal::Stockpile(res) => {
-                                commands
-                                    .entity(entity)
-                                    .insert(IntendsToStockpile(res.clone()));
-                            }
+                            // Add the corresponding intent component
+                            commands.command_scope(|mut c| {
+                                match goal {
+                                    Goal::GatherResource(res) => {
+                                        c.entity(entity).insert(IntendsToGather(res.clone()));
+                                    }
+                                    Goal::CraftItem(item) => {
+                                        c.entity(entity).insert(IntendsToCraft(item.clone()));
+                                    }
+                                    Goal::Build(structure) => {
+                                        c.entity(entity)
+                                            .insert(IntendsToBuild(structure.clone()));
+                                    }
+                                    Goal::Attack(target) => {
+                                        c.entity(entity).insert(IntendsToAttack(*target));
+                                    }
+                                    Goal::Flee => {
+                                        c.entity(entity).insert(IntendsToFlee);
+                                    }
+                                    Goal::Explore => {
+                                        c.entity(entity).insert(IntendsToExplore);
+                                    }
+                                    Goal::Stockpile(res) => {
+                                        c.entity(entity)
+                                            .insert(IntendsToStockpile(res.clone()));
+                                    }
+                                }
+                            });
+
+                            brain.goal_commitment_ticks = config.ai.goals.commitment_ticks;
                         }
-
-                        brain.goal_commitment_ticks = config.ai.goals.commitment_ticks;
                     }
                 }
             }
-        }
-    }
+        },
+    );
 }
 
 /// Constructs the high-level state of an agent from its components.
