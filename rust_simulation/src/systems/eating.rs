@@ -1,5 +1,5 @@
-use crate::components::animal::Hunger;
 use crate::components::intents::WantsToEat;
+use crate::components::status::Hunger;
 use crate::components::Inventory;
 use bevy_ecs::prelude::*;
 

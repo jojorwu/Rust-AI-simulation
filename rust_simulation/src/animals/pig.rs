@@ -1,7 +1,31 @@
-use crate::components::animal::{Fleeing, Pig, SimpleAi};
 use crate::components::{Position, Velocity, WantsToAttack};
 use bevy_ecs::prelude::*;
 use rand::Rng;
+
+// --- Components ---
+
+#[derive(Component)]
+pub struct Pig;
+
+#[derive(Component)]
+pub struct Fleeing;
+
+#[derive(Component)]
+pub struct SimpleAi {
+    pub move_timer: u32,
+    pub direction: (i32, i32),
+}
+
+impl Default for SimpleAi {
+    fn default() -> Self {
+        Self {
+            move_timer: 0,
+            direction: (0, 0),
+        }
+    }
+}
+
+// --- Systems ---
 
 const WANDER_TIMER: u32 = 60; // Change direction every 60 ticks
 const FLEE_TIMER: u32 = 120; // Flee for 120 ticks

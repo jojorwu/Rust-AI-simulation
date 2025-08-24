@@ -1,5 +1,4 @@
-use crate::components::animal::Hunger;
-use crate::components::Health;
+use crate::components::status::{Health, Hunger};
 use bevy_ecs::prelude::*;
 
 const HUNGER_RATE: f32 = 0.01;

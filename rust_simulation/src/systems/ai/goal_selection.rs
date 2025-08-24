@@ -1,9 +1,9 @@
 use crate::brain::{Goal, HighLevelState, InventorySummary};
 use crate::components::{
     ai::{GoalQTable, KnownResources, PlayerMemories},
-    animal::Hunger,
     intents::*,
-    BrainComponent, Health, Inventory,
+    status::{Health, Hunger},
+    BrainComponent, Inventory,
 };
 use crate::config::Config;
 use crate::errors::SimulationError;

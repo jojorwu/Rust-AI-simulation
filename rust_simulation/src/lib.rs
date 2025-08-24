@@ -7,6 +7,7 @@ use rand::Rng;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
+pub mod animals;
 pub mod async_task;
 pub mod brain;
 pub mod components;
@@ -30,10 +31,11 @@ pub mod ui;
 pub mod world;
 
 use crate::state::AppState;
+use animals::pig::{flee_stop_system, fleeing_system, wandering_system, Pig, SimpleAi};
 use components::{
-    animal::{Hunger, Pig, SimpleAi},
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
-    BrainComponent, Health, Inventory, Position, Velocity,
+    status::{Health, Hunger},
+    BrainComponent, Inventory, Position, Velocity,
 };
 use config::*;
 use item::ItemRegistry;
@@ -45,7 +47,6 @@ use systems::ai::{actions, goal_selection, q_learning};
 use systems::eating::eating_system;
 use systems::hunger::hunger_system;
 use systems::map_builder::map_builder_system;
-use systems::pig_ai::{flee_stop_system, fleeing_system, wandering_system};
 use systems::*;
 
 // --- System Sets ---

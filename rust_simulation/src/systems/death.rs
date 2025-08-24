@@ -1,4 +1,4 @@
-use crate::components::animal::Pig;
+use crate::animals::pig::Pig;
 use crate::components::{DroppedItem, Position};
 use crate::events::Event;
 use crate::map::Map;

@@ -1,5 +1,6 @@
 use crate::{
-    components::{animal::Pig, Position},
+    animals::pig::Pig,
+    components::Position,
     player::Player,
 };
 use bevy::prelude::*;
