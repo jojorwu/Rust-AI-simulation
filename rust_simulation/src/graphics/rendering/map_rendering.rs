@@ -3,6 +3,7 @@ use bevy::{
     prelude::*,
     render::{mesh, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
 };
+use rayon::prelude::*;
 
 use super::TILE_SIZE;
 
@@ -60,16 +61,31 @@ pub fn setup_map_meshes(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    for (chunk_y, chunk_row) in map.chunks.iter().enumerate() {
-        for (chunk_x, chunk) in chunk_row.iter().enumerate() {
-            let chunk_pos = (chunk_x as u32, chunk_y as u32);
-            let chunk_mesh = create_chunk_mesh(&chunk.lock().unwrap(), chunk_pos);
-            commands.spawn(ColorMesh2dBundle {
-                mesh: meshes.add(chunk_mesh).into(),
-                material: materials.add(ColorMaterial::from(Color::WHITE)),
-                ..default()
-            });
-        }
+    let chunks_with_positions = map
+        .chunks
+        .iter()
+        .enumerate()
+        .flat_map(|(y, row)| {
+            row.iter()
+                .enumerate()
+                .map(move |(x, chunk)| (chunk.clone(), (x as u32, y as u32)))
+        })
+        .collect::<Vec<_>>();
+
+    let chunk_meshes: Vec<Mesh> = chunks_with_positions
+        .into_par_iter()
+        .map(|(chunk, pos)| {
+            let chunk_data = chunk.lock().unwrap();
+            create_chunk_mesh(&chunk_data, pos)
+        })
+        .collect();
+
+    for chunk_mesh in chunk_meshes {
+        commands.spawn(ColorMesh2dBundle {
+            mesh: meshes.add(chunk_mesh).into(),
+            material: materials.add(ColorMaterial::from(Color::WHITE)),
+            ..default()
+        });
     }
 }
 

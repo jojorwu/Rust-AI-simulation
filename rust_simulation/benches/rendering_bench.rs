@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use rust_simulation::graphics::rendering::setup_chunk_meshes;
+use rust_simulation::graphics::rendering::map_rendering::setup_map_meshes;
 use bevy::prelude::*;
 use rust_simulation::config::Config;
 use rust_simulation::map::Map;
@@ -30,7 +30,7 @@ fn benchmark_setup_chunk_meshes(c: &mut Criterion) {
     c.bench_function("setup_chunk_meshes", |b| {
         b.iter(|| {
             let mut app = setup_app();
-            app.add_systems(Startup, setup_chunk_meshes);
+            app.add_systems(Startup, setup_map_meshes);
             app.update();
         })
     });
