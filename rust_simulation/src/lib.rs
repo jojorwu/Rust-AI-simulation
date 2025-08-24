@@ -104,14 +104,6 @@ pub fn setup_simulation(
         HashMap::new()
     };
 
-    commands.insert_resource(map);
-    commands.insert_resource(ItemRegistryResource(item_registry));
-    commands.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
-    commands.insert_resource(IsDay(true));
-    commands.insert_resource(TickCount(0));
-    commands.init_resource::<async_task::AsyncResultChannel>();
-    commands.init_resource::<Events<events::Event>>();
-
     if memory_limit_reached.0 {
         log::warn!("RAM limit reached, not spawning any agents.");
         return;
@@ -153,6 +145,7 @@ pub fn setup_simulation(
     }
 
     let mut rng = rand::thread_rng();
+    let mut pig_positions = Vec::new();
     for _ in 0..config.pig_settings.num_pigs {
         let mut pig_pos;
         loop {
@@ -167,11 +160,28 @@ pub fn setup_simulation(
                 dx < 10 && dy < 10
             });
 
-            if !too_close_to_player {
-                break;
+            if !too_close_to_player && map.is_walkable(pig_pos.x, pig_pos.y) {
+                if let Some(entities) = map.get_entities_at(pig_pos.x, pig_pos.y) {
+                    if entities.is_empty() {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
         }
+        pig_positions.push(pig_pos);
+    }
 
+    commands.insert_resource(map);
+    commands.insert_resource(ItemRegistryResource(item_registry));
+    commands.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
+    commands.insert_resource(IsDay(true));
+    commands.insert_resource(TickCount(0));
+    commands.init_resource::<async_task::AsyncResultChannel>();
+    commands.init_resource::<Events<events::Event>>();
+
+    for pig_pos in pig_positions {
         commands.spawn((
             Pig,
             pig_pos,
