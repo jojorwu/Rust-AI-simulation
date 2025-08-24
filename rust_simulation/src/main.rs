@@ -10,18 +10,6 @@ use rust_simulation::ui::settings::SettingsPlugin;
 use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
 use std::env;
 use std::time::Duration;
-use bevy::app::ScheduleRunnerPlugin;
-use bevy::asset::AssetPlugin;
-use bevy::core_pipeline::CorePipelinePlugin;
-use bevy::diagnostic::DiagnosticsPlugin;
-use bevy::input::InputPlugin;
-use bevy::pbr::PbrPlugin;
-use bevy::render::RenderPlugin;
-use bevy::sprite::SpritePlugin;
-use bevy::text::TextPlugin;
-use bevy::transform::TransformPlugin;
-use bevy::ui::UiPlugin;
-
 fn main() -> Result<(), SimulationError> {
     let args: Vec<String> = env::args().collect();
 
@@ -46,8 +34,17 @@ fn main() -> Result<(), SimulationError> {
         return Ok(());
     }
 
-    // --- Load Config ---
+    // --- Create models directory ---
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let root_dir = std::path::Path::new(manifest_dir);
+    let models_path = root_dir.join("../models");
+    if !models_path.exists() {
+        if let Err(e) = std::fs::create_dir_all(&models_path) {
+            eprintln!("Failed to create models directory: {}", e);
+        }
+    }
+
+    // --- Load Config ---
     let config_path = format!("{manifest_dir}/data/config.toml");
     let mut config = Config::load(&config_path)?;
 
@@ -72,19 +69,7 @@ fn main() -> Result<(), SimulationError> {
     // --- Bevy App Setup ---
     let mut app = App::new();
 
-    app.add_plugins(MinimalPlugins);
-    app.add_plugins(bevy::log::LogPlugin::default());
-    app.add_plugins(TransformPlugin::default());
-    app.add_plugins(DiagnosticsPlugin::default());
-    app.add_plugins(InputPlugin::default());
-    app.add_plugins(ScheduleRunnerPlugin::default());
-    app.add_plugins(AssetPlugin::default());
-    app.add_plugins(RenderPlugin::default());
-    app.add_plugins(CorePipelinePlugin::default());
-    app.add_plugins(SpritePlugin::default());
-    app.add_plugins(TextPlugin::default());
-    app.add_plugins(UiPlugin::default());
-    app.add_plugins(PbrPlugin::default());
+    app.add_plugins(DefaultPlugins);
     app.add_plugins(rust_simulation::graphics::GraphicsPlugin);
     app.add_plugins(MainMenuPlugin);
     app.add_plugins(SettingsPlugin);
