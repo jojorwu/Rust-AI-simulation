@@ -1,25 +1,27 @@
 use crate::components::{ai::GoalQTable, BrainComponent};
 use crate::events::Event;
 use bevy_ecs::prelude::*;
-use std::collections::HashMap;
+use dashmap::DashMap;
+use rayon::prelude::*;
 
 pub fn update_q_table_system(
     mut q_table_query: Query<(Entity, &BrainComponent, &mut GoalQTable)>,
     mut event_reader: EventReader<Event>,
 ) {
-    let events_by_entity: HashMap<Entity, Vec<&Event>> =
-        event_reader.read().fold(HashMap::new(), |mut acc, event| {
-            if let Event::GoalCompleted { entity, .. } = event {
-                acc.entry(*entity).or_default().push(event);
-            }
-            acc
-        });
+    let events: Vec<_> = event_reader.read().collect();
+    let events_by_entity: DashMap<Entity, Vec<&Event>> = DashMap::new();
+
+    events.par_iter().for_each(|event| {
+        if let Event::GoalCompleted { entity, .. } = event {
+            events_by_entity.entry(*entity).or_default().push(event);
+        }
+    });
 
     q_table_query
         .par_iter_mut()
         .for_each(|(entity, brain, mut q_table)| {
             if let Some(events) = events_by_entity.get(&entity) {
-                for event in events {
+                for event in events.iter() {
                     if let Event::GoalCompleted {
                         prev_state,
                         goal,
