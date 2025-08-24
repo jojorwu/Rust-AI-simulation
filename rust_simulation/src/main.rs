@@ -10,7 +10,7 @@ use rust_simulation::ui::settings::SettingsPlugin;
 use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
 use std::env;
 use std::time::Duration;
-use bevy::app::{PluginGroupBuilder, ScheduleRunnerPlugin};
+use bevy::app::ScheduleRunnerPlugin;
 use bevy::asset::AssetPlugin;
 use bevy::core::TaskPoolPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;

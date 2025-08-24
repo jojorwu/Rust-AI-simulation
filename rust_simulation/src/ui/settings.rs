@@ -262,7 +262,7 @@ fn text_input_system(
         }
 
         let field_path = &config_field.path;
-        let mut config_reflect = config.as_mut();
+        let config_reflect = config.as_mut();
         if let Some(field) = config_reflect.field_mut(field_path) {
             if field.is::<u32>() {
                 if let Ok(value) = text.sections[0].value.parse::<u32>() {
@@ -304,7 +304,7 @@ fn checkbox_system(
 ) {
     for (entity, interaction, config_field) in interaction_query.iter() {
         if *interaction == Interaction::Pressed {
-            let mut config_reflect = config.as_mut();
+            let config_reflect = config.as_mut();
             if let Some(field) = config_reflect.field_mut(&config_field.path) {
                 if field.is::<bool>() {
                     let value = field.downcast_mut::<bool>().unwrap();

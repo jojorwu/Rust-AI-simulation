@@ -1,24 +1,18 @@
-use crate::map::{Map, MapChunk, CHUNK_SIZE};
-use crate::player::Player;
-use crate::components::Position;
-use bevy::prelude::*;
-use bevy::render::mesh::{self, PrimitiveTopology};
+use crate::map::{Map, MapChunk, Tile, CHUNK_SIZE};
+use bevy::{
+    prelude::*,
+    render::{mesh, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
+};
 
-pub struct RenderingPlugin;
+use super::TILE_SIZE;
 
-impl Plugin for RenderingPlugin {
+pub struct MapRenderingPlugin;
+
+impl Plugin for MapRenderingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_chunk_meshes)
-            .add_systems(Update, update_entity_positions);
+        app.add_systems(Startup, setup_map_meshes);
     }
 }
-
-pub const TILE_SIZE: f32 = 32.0;
-
-#[derive(Component)]
-pub struct RenderedEntity(pub Entity);
-
-use bevy::render::render_asset::RenderAssetUsages;
 
 fn create_chunk_mesh(chunk: &MapChunk, chunk_pos: (u32, u32)) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
@@ -60,12 +54,11 @@ fn create_chunk_mesh(chunk: &MapChunk, chunk_pos: (u32, u32)) -> Mesh {
     mesh
 }
 
-pub fn setup_chunk_meshes(
+pub fn setup_map_meshes(
     mut commands: Commands,
     map: Res<Map>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    player_query: Query<(Entity, &Position), With<Player>>,
 ) {
     for (chunk_y, chunk_row) in map.chunks.iter().enumerate() {
         for (chunk_x, chunk) in chunk_row.iter().enumerate() {
@@ -78,43 +71,9 @@ pub fn setup_chunk_meshes(
             });
         }
     }
-
-    // Spawn player sprite
-    for (player_entity, position) in player_query.iter() {
-        let spawned_entity = commands
-            .spawn((SpriteBundle {
-                sprite: Sprite {
-                    color: Color::RED,
-                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
-                    ..default()
-                },
-                transform: Transform::from_xyz(
-                    position.x as f32 * TILE_SIZE,
-                    position.y as f32 * TILE_SIZE,
-                    1.0,
-                ),
-                ..default()
-            },))
-            .id();
-        commands
-            .entity(spawned_entity)
-            .insert(RenderedEntity(player_entity));
-    }
 }
 
-fn update_entity_positions(
-    mut sprite_query: Query<(&mut Transform, &RenderedEntity)>,
-    position_query: Query<&Position>,
-) {
-    for (mut transform, rendered_entity) in sprite_query.iter_mut() {
-        if let Ok(position) = position_query.get(rendered_entity.0) {
-            transform.translation.x = position.x as f32 * TILE_SIZE;
-            transform.translation.y = position.y as f32 * TILE_SIZE;
-        }
-    }
-}
-
-fn tile_type_to_color(tile: &crate::map::Tile) -> Color {
+fn tile_type_to_color(tile: &Tile) -> Color {
     match tile.tile_type {
         '.' => Color::rgb(0.2, 0.8, 0.2), // Green for grass
         'f' => Color::rgb(0.1, 0.5, 0.1), // Dark green for forest
