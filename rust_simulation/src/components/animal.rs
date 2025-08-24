@@ -7,6 +7,12 @@ pub struct Pig;
 pub struct Fleeing;
 
 #[derive(Component)]
+pub struct Hunger {
+    pub current: f32,
+    pub max: f32,
+}
+
+#[derive(Component)]
 pub struct SimpleAi {
     pub move_timer: u32,
     pub direction: (i32, i32),

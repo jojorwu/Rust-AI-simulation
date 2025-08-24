@@ -93,6 +93,7 @@ impl BrainComponent {
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
             Goal::Stockpile("wood".to_string()),
+            Goal::EatFood("meat".to_string()),
         ];
         BrainComponent {
             current_goal: None,

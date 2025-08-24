@@ -25,3 +25,6 @@ pub struct IntendsToExplore;
 
 #[derive(Component)]
 pub struct IntendsToStockpile(pub String);
+
+#[derive(Component)]
+pub struct WantsToEat(pub String);

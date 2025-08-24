@@ -1,6 +1,7 @@
 use crate::brain::{Goal, HighLevelState, InventorySummary};
 use crate::components::{
     ai::{GoalQTable, KnownResources, PlayerMemories},
+    animal::Hunger,
     intents::*,
     BrainComponent, Health, Inventory,
 };
@@ -19,6 +20,7 @@ pub fn goal_selection_system(
         Entity,
         &mut BrainComponent,
         &Health,
+        &Hunger,
         &Inventory,
         &KnownResources,
         &PlayerMemories,
@@ -28,15 +30,16 @@ pub fn goal_selection_system(
     config: Res<Config>,
 ) {
     query.par_iter_mut().for_each(
-        |(entity, mut brain, health, inventory, known_resources, player_memories, goal_q_table)| {
+        |(entity, mut brain, health, hunger, inventory, known_resources, player_memories, goal_q_table)| {
             if brain.current_goal.is_none() && brain.goal_commitment_ticks == 0 {
                 let high_level_state =
-                    get_high_level_state(health, inventory, player_memories, is_day.0);
+                    get_high_level_state(health, hunger, inventory, player_memories, is_day.0);
 
                 let mut rng = rand::thread_rng();
                 if let Ok(new_high_level_goal) = choose_goal(
                     &high_level_state,
                     &brain,
+                    inventory,
                     known_resources,
                     goal_q_table,
                     is_day.0,
@@ -78,6 +81,9 @@ pub fn goal_selection_system(
                                         c.entity(entity)
                                             .insert(IntendsToStockpile(res.clone()));
                                     }
+                                    Goal::EatFood(food) => {
+                                        c.entity(entity).insert(WantsToEat(food.clone()));
+                                    }
                                 }
                             });
 
@@ -93,6 +99,7 @@ pub fn goal_selection_system(
 /// Constructs the high-level state of an agent from its components.
 fn get_high_level_state(
     health: &Health,
+    hunger: &Hunger,
     inventory: &Inventory,
     player_memories: &PlayerMemories,
     is_day: bool,
@@ -114,6 +121,7 @@ fn get_high_level_state(
         inventory_summary,
         num_hostile_players,
         health_level: health.current as u32,
+        hunger_level: hunger.current as u32,
         is_night: !is_day,
     }
 }
@@ -122,6 +130,7 @@ fn get_high_level_state(
 fn choose_goal(
     state: &HighLevelState,
     brain: &BrainComponent,
+    inventory: &Inventory,
     known_resources: &KnownResources,
     goal_q_table: &GoalQTable,
     is_night: bool,
@@ -131,6 +140,15 @@ fn choose_goal(
     const FLEE_HEALTH_THRESHOLD: u32 = 25;
     if state.health_level < FLEE_HEALTH_THRESHOLD {
         return Ok(Goal::Flee);
+    }
+
+    const HUNGER_THRESHOLD: u32 = 50;
+    if state.hunger_level < HUNGER_THRESHOLD {
+        if inventory.has_item("meat", 1) {
+            return Ok(Goal::EatFood("meat".to_string()));
+        } else {
+            return Ok(Goal::GatherResource("pig".to_string()));
+        }
     }
 
     let valid_goals: Vec<_> = brain
@@ -143,8 +161,8 @@ fn choose_goal(
         return Ok(Goal::Flee);
     }
 
-    if rng.random::<f64>() < brain.epsilon {
-        let index = (rng.random::<f64>() * valid_goals.len() as f64).floor() as usize;
+    if rng.r#gen::<f64>() < brain.epsilon {
+        let index = rng.gen_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
@@ -168,11 +186,11 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = (rng.random::<f64>() * valid_goals.len() as f64).floor() as usize;
+                let index = rng.gen_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = (rng.random::<f64>() * valid_goals.len() as f64).floor() as usize;
+        let index = rng.gen_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
 }
@@ -180,10 +198,15 @@ fn choose_goal(
 /// Checks if a goal is currently valid.
 fn is_goal_valid(goal: &Goal, known_resources: &KnownResources) -> bool {
     match goal {
-        Goal::GatherResource(resource_name) => known_resources
-            .0
-            .get(resource_name)
-            .map_or(false, |s| !s.is_empty()),
+        Goal::GatherResource(resource_name) => {
+            if resource_name == "pig" {
+                return true;
+            }
+            known_resources
+                .0
+                .get(resource_name)
+                .map_or(false, |s| !s.is_empty())
+        }
         _ => true,
     }
 }

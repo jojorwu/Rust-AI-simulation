@@ -31,7 +31,7 @@ pub mod world;
 
 use crate::state::AppState;
 use components::{
-    animal::{Pig, SimpleAi},
+    animal::{Hunger, Pig, SimpleAi},
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
     BrainComponent, Health, Inventory, Position, Velocity,
 };
@@ -42,6 +42,8 @@ use map_generator::trigger_map_generation_system;
 use player::Player;
 use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
+use systems::eating::eating_system;
+use systems::hunger::hunger_system;
 use systems::map_builder::map_builder_system;
 use systems::pig_ai::{flee_stop_system, fleeing_system, wandering_system};
 use systems::*;
@@ -125,6 +127,10 @@ pub fn setup_simulation(
             Health {
                 current: 100,
                 max: 100,
+            },
+            Hunger {
+                current: 100.0,
+                max: 100.0,
             },
             Inventory::new(),
             BrainComponent::new(
@@ -213,6 +219,8 @@ pub fn add_simulation_systems(app: &mut App) {
         (
             map_builder_system,
             update_day_night,
+            hunger_system,
+            eating_system,
             systems::visibility_system::visibility_system,
             q_learning::update_q_table_system,
             goal_selection::goal_selection_system,

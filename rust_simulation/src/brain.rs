@@ -48,6 +48,8 @@ pub enum Goal {
     Explore,
     /// Stockpile a resource in a chest.
     Stockpile(String),
+    /// Eat a food item.
+    EatFood(String),
 }
 
 /// Represents the concrete actions that an agent's brain can decide to take.
@@ -86,6 +88,8 @@ pub struct HighLevelState {
     pub num_hostile_players: u32,
     /// The agent's current health level.
     pub health_level: u32,
+    /// The agent's current hunger level.
+    pub hunger_level: u32,
     /// Whether it is currently night time.
     pub is_night: bool,
 }
