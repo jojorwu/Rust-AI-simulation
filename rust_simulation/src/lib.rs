@@ -163,6 +163,7 @@ pub fn add_simulation_systems(app: &mut App) {
             systems::visibility_system::visibility_system,
             q_learning::update_q_table_system,
             goal_selection::goal_selection_system,
+            apply_deferred,
             actions::craft::craft_action_system,
             actions::attack::attack_action_system,
             actions::flee::flee_action_system,
