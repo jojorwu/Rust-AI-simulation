@@ -2,6 +2,7 @@ use crate::map::{Map, MapChunk, Tile, CHUNK_SIZE};
 use bevy::{
     prelude::*,
     render::{mesh, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
+    ecs::system::ParallelCommands,
 };
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -142,15 +143,17 @@ fn load_new_chunks_system(
 }
 
 fn unload_old_chunks_system(
-    mut commands: Commands,
+    commands: ParallelCommands,
     visible_chunks: Res<VisibleChunks>,
     loaded_chunks_query: Query<(Entity, &LoadedChunk)>,
 ) {
-    for (entity, loaded_chunk) in loaded_chunks_query.iter() {
+    loaded_chunks_query.par_iter().for_each(|(entity, loaded_chunk)| {
         if !visible_chunks.0.contains(&(loaded_chunk.x, loaded_chunk.y)) {
-            commands.entity(entity).despawn();
+            commands.command_scope(|mut c| {
+                c.entity(entity).despawn();
+            });
         }
-    }
+    });
 }
 
 fn tile_type_to_color(tile: &Tile) -> Color {
