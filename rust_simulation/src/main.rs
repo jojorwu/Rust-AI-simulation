@@ -12,7 +12,6 @@ use std::env;
 use std::time::Duration;
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::asset::AssetPlugin;
-use bevy::core::TaskPoolPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
 use bevy::input::InputPlugin;
@@ -20,7 +19,6 @@ use bevy::pbr::PbrPlugin;
 use bevy::render::RenderPlugin;
 use bevy::sprite::SpritePlugin;
 use bevy::text::TextPlugin;
-use bevy::time::TimePlugin;
 use bevy::transform::TransformPlugin;
 use bevy::ui::UiPlugin;
 
@@ -76,8 +74,6 @@ fn main() -> Result<(), SimulationError> {
 
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::log::LogPlugin::default());
-    app.add_plugins(TaskPoolPlugin::default());
-    app.add_plugins(TimePlugin::default());
     app.add_plugins(TransformPlugin::default());
     app.add_plugins(DiagnosticsPlugin::default());
     app.add_plugins(InputPlugin::default());

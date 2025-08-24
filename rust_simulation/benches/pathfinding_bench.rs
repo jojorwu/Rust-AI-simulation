@@ -52,7 +52,7 @@ fn pathfinding_benchmark(c: &mut Criterion) {
 
     // Set up the specific map condition for the test
     {
-        let mut map = app.world.resource_mut::<Map>();
+        let map = app.world.resource_mut::<Map>();
         map.set_tile(1, 0, Tile::new('.', "grassland".to_string()));
     }
 

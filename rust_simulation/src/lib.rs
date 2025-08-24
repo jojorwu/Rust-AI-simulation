@@ -3,7 +3,6 @@
 //! Entity-Component-System (ECS) architecture using `bevy_ecs`.
 
 use bevy::prelude::*;
-use rand::Rng;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -18,7 +17,6 @@ pub mod fov;
 pub mod graphics;
 pub mod item;
 pub mod map;
-pub mod map_generator;
 pub mod pathfinding;
 pub mod player;
 pub mod recipes;
@@ -31,23 +29,17 @@ pub mod ui;
 pub mod world;
 
 use crate::state::AppState;
-use animals::pig::{flee_stop_system, fleeing_system, wandering_system, Pig, SimpleAi};
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
-    status::{Health, Hunger},
-    BrainComponent, Inventory, Position, Velocity,
+    status::Health,
+    BrainComponent, Inventory, Position,
 };
 use config::*;
 use item::ItemRegistry;
 use map::Map;
-use map_generator::trigger_map_generation_system;
 use player::Player;
 use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
-use systems::eating::eating_system;
-use systems::hunger::hunger_system;
-use systems::hunting::hunting_system;
-use systems::map_builder::map_builder_system;
 use systems::*;
 
 // --- System Sets ---
@@ -108,31 +100,31 @@ pub fn setup_simulation(
         HashMap::new()
     };
 
+    commands.insert_resource(map);
+    commands.insert_resource(ItemRegistryResource(item_registry));
+    commands.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
+    commands.insert_resource(IsDay(true));
+    commands.insert_resource(TickCount(0));
+    commands.init_resource::<async_task::AsyncResultChannel>();
+    commands.init_resource::<Events<events::Event>>();
+
     if memory_limit_reached.0 {
         log::warn!("RAM limit reached, not spawning any agents.");
         return;
     }
 
-    let mut player_positions = Vec::new();
     for i in 0..config.player_settings.num_players {
         let q_table = q_tables
             .get(&i)
             .cloned()
             .unwrap_or_else(|| GoalQTable(HashMap::new()));
 
-        let position = Position { x: 0, y: 0 }; // We will update this later
-        player_positions.push(position);
-
         commands.spawn((
             Player::new(i, config.map_settings.width, config.map_settings.height),
-            position,
+            Position { x: 0, y: 0 },
             Health {
                 current: 100,
                 max: 100,
-            },
-            Hunger {
-                current: 100.0,
-                max: 100.0,
             },
             Inventory::new(),
             BrainComponent::new(
@@ -151,56 +143,6 @@ pub fn setup_simulation(
             ExplorationFrontier(VecDeque::new()),
         ));
     }
-
-    let mut rng = rand::thread_rng();
-    let mut pig_positions = Vec::new();
-    for _ in 0..config.pig_settings.num_pigs {
-        let mut pig_pos;
-        loop {
-            pig_pos = Position {
-                x: rng.gen_range(0..config.map_settings.width),
-                y: rng.gen_range(0..config.map_settings.height),
-            };
-
-            let too_close_to_player = player_positions.iter().any(|p| {
-                let dx = (p.x as i32 - pig_pos.x as i32).abs();
-                let dy = (p.y as i32 - pig_pos.y as i32).abs();
-                dx < 10 && dy < 10
-            });
-
-            if !too_close_to_player && map.is_walkable(pig_pos.x, pig_pos.y) {
-                if let Some(entities) = map.get_entities_at(pig_pos.x, pig_pos.y) {
-                    if entities.is_empty() {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-        pig_positions.push(pig_pos);
-    }
-
-    commands.insert_resource(map);
-    commands.insert_resource(ItemRegistryResource(item_registry));
-    commands.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
-    commands.insert_resource(IsDay(true));
-    commands.insert_resource(TickCount(0));
-    commands.init_resource::<async_task::AsyncResultChannel>();
-    commands.init_resource::<Events<events::Event>>();
-
-    for pig_pos in pig_positions {
-        commands.spawn((
-            Pig,
-            pig_pos,
-            Health {
-                current: 50,
-                max: 50,
-            },
-            SimpleAi::default(),
-            Velocity { dx: 0, dy: 0 },
-        ));
-    }
 }
 
 fn update_day_night(
@@ -215,55 +157,22 @@ fn update_day_night(
 }
 
 pub fn add_simulation_systems(app: &mut App) {
-    app.add_systems(Startup, trigger_map_generation_system);
     app.add_systems(
         FixedUpdate,
         (
-            map_builder_system,
             update_day_night,
-            hunger_system,
-            eating_system,
             systems::visibility_system::visibility_system,
             q_learning::update_q_table_system,
             goal_selection::goal_selection_system,
-            wandering_system,
-            fleeing_system,
-            flee_stop_system,
-            apply_deferred,
-            hunting_system,
-        )
-            .chain()
-            .in_set(SimulationSet::Logic)
-            .run_if(in_state(AppState::InGame)),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
             actions::craft::craft_action_system,
             actions::attack::attack_action_system,
             actions::flee::flee_action_system,
             actions::explore::explore_action_system,
             actions::stockpile::stockpile_action_system,
-        )
-            .chain()
-            .in_set(SimulationSet::Logic)
-            .run_if(in_state(AppState::InGame)),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
             systems::pathfinding_system::pathfinding_system,
             systems::async_result_collection_system::async_result_collection_system,
             systems::path_movement_system::path_movement_system,
             movement::movement_system,
-        )
-            .chain()
-            .in_set(SimulationSet::Logic)
-            .run_if(in_state(AppState::InGame)),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
             gathering::gathering_system,
             crafting::crafting_system,
             building::building_system,

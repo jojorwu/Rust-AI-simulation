@@ -3,7 +3,7 @@ width = 100
 height = 100
 
 [player_settings]
-num_players = 10
+num_players = 1
 
 [pig_settings]
 num_pigs = 10
