@@ -10,7 +10,7 @@ use crate::IsDay;
 use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
 use log::info;
-use rand::random;
+use rand::Rng;
 use std::collections::HashMap;
 
 pub fn goal_selection_system(
@@ -33,6 +33,7 @@ pub fn goal_selection_system(
                 let high_level_state =
                     get_high_level_state(health, inventory, player_memories, is_day.0);
 
+                let mut rng = rand::thread_rng();
                 if let Ok(new_high_level_goal) = choose_goal(
                     &high_level_state,
                     &brain,
@@ -40,6 +41,7 @@ pub fn goal_selection_system(
                     goal_q_table,
                     is_day.0,
                     &config,
+                    &mut rng,
                 ) {
                     if let Ok(mut plan) =
                         plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
@@ -124,6 +126,7 @@ fn choose_goal(
     goal_q_table: &GoalQTable,
     is_night: bool,
     config: &Config,
+    rng: &mut impl Rng,
 ) -> Result<Goal, SimulationError> {
     const FLEE_HEALTH_THRESHOLD: u32 = 25;
     if state.health_level < FLEE_HEALTH_THRESHOLD {
@@ -140,8 +143,8 @@ fn choose_goal(
         return Ok(Goal::Flee);
     }
 
-    if rand::random::<f64>() < brain.epsilon {
-        let index = (random::<f64>() * valid_goals.len() as f64).floor() as usize;
+    if rng.random::<f64>() < brain.epsilon {
+        let index = (rng.random::<f64>() * valid_goals.len() as f64).floor() as usize;
         return Ok(valid_goals[index].clone());
     }
 
@@ -165,11 +168,11 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = (random::<f64>() * valid_goals.len() as f64).floor() as usize;
+                let index = (rng.random::<f64>() * valid_goals.len() as f64).floor() as usize;
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = (random::<f64>() * valid_goals.len() as f64).floor() as usize;
+        let index = (rng.random::<f64>() * valid_goals.len() as f64).floor() as usize;
         Ok(valid_goals[index].clone())
     }
 }
