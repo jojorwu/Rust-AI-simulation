@@ -30,14 +30,6 @@ impl PartialEq for Position {
     }
 }
 
-impl Position {
-    pub fn distance(&self, other: &Position) -> f32 {
-        let dx = self.x as i32 - other.x as i32;
-        let dy = self.y as i32 - other.y as i32;
-        ((dx * dx + dy * dy) as f32).sqrt()
-    }
-}
-
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Velocity {
     pub dx: i32,
@@ -123,14 +115,6 @@ impl BrainComponent {
 pub struct WantsToAttack {
     pub target: Entity,
 }
-
-#[derive(Component)]
-pub struct Food {
-    pub value: f32,
-}
-
-#[derive(Component, Clone, Copy)]
-pub struct Kills(pub u32);
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct WantsToPickup {}

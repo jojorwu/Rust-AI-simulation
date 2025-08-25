@@ -1,5 +1,5 @@
 use crate::animals::pig::Pig;
-use crate::components::{DroppedItem, Kills, Position};
+use crate::components::{DroppedItem, Position};
 use crate::events::Event;
 use crate::map::Map;
 use bevy_ecs::prelude::*;
@@ -9,16 +9,10 @@ pub fn death_system(
     mut event_reader: EventReader<Event>,
     position_query: Query<&Position>,
     pig_query: Query<&Position, With<Pig>>,
-    mut kills_query: Query<&mut Kills>,
     map: Res<Map>,
 ) {
     for event in event_reader.read() {
-        if let Event::EntityDied { entity, attacker } = event {
-            if let Some(attacker_entity) = attacker {
-                if let Ok(mut kills) = kills_query.get_mut(*attacker_entity) {
-                    kills.0 += 1;
-                }
-            }
+        if let Event::EntityDied(entity) = event {
             if let Ok(pos) = position_query.get(*entity) {
                 map.remove_entity_from_spatial_map(*entity, pos.x, pos.y);
 

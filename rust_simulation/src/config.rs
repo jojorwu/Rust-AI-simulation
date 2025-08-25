@@ -30,7 +30,6 @@ pub struct MapSettings {
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
 pub struct PlayerSettings {
     pub num_players: u32,
-    pub num_wolves: u32,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]

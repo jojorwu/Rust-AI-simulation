@@ -4,7 +4,6 @@ height = 100
 
 [player_settings]
 num_players = 1
-num_wolves = 5
 
 [pig_settings]
 num_pigs = 10

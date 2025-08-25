@@ -3,7 +3,6 @@
 //! Entity-Component-System (ECS) architecture using `bevy_ecs`.
 
 use bevy::prelude::*;
-use rand::Rng;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -30,12 +29,10 @@ pub mod ui;
 pub mod world;
 
 use crate::state::AppState;
-use crate::events::Event;
-use animals::{pig::{Pig, SimpleAi}, wolf::{Wolf, WolfAI, wolf_ai_system}, pack::{form_new_packs_system, join_existing_packs_system}};
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
-    status::{Health, Hunger},
-    BrainComponent, Food, Inventory, Kills, Position, Velocity,
+    status::Health,
+    BrainComponent, Inventory, Position,
 };
 use config::*;
 use item::ItemRegistry;
@@ -44,8 +41,6 @@ use player::Player;
 use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
 use systems::*;
-use systems::visibility_system::visibility_system;
-
 
 // --- System Sets ---
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -80,10 +75,13 @@ pub struct DataPaths {
 
 use std::fs;
 
+use crate::systems::monitoring::MemoryLimitReached;
+
 pub fn setup_simulation(
     mut commands: Commands,
     paths: Res<DataPaths>,
     config: Res<Config>,
+    memory_limit_reached: Res<MemoryLimitReached>,
 ) {
     let map = Map::new(
         config.map_settings.width,
@@ -110,6 +108,11 @@ pub fn setup_simulation(
     commands.init_resource::<async_task::AsyncResultChannel>();
     commands.init_resource::<Events<events::Event>>();
 
+    if memory_limit_reached.0 {
+        log::warn!("RAM limit reached, not spawning any agents.");
+        return;
+    }
+
     for i in 0..config.player_settings.num_players {
         let q_table = q_tables
             .get(&i)
@@ -124,7 +127,6 @@ pub fn setup_simulation(
                 max: 100,
             },
             Inventory::new(),
-            Food { value: 100.0 },
             BrainComponent::new(
                 Arc::clone(&recipe_manager),
                 config.ai.q_learning.learning_rate,
@@ -141,48 +143,6 @@ pub fn setup_simulation(
             ExplorationFrontier(VecDeque::new()),
         ));
     }
-
-    // Spawn pigs
-    let mut rng = rand::thread_rng();
-    for _ in 0..config.pig_settings.num_pigs {
-        let x = rng.gen_range(0..config.map_settings.width);
-        let y = rng.gen_range(0..config.map_settings.height);
-        commands.spawn((
-            Pig,
-            Position { x, y },
-            Velocity { dx: 0, dy: 0 },
-            Health {
-                current: 50,
-                max: 50,
-            },
-            Food { value: 25.0 },
-            SimpleAi::default(),
-        ));
-    }
-
-
-    // Spawn wolves
-    for _ in 0..config.player_settings.num_wolves {
-        let mut rng = rand::thread_rng();
-        let x = rng.gen_range(0..config.map_settings.width);
-        let y = rng.gen_range(0..config.map_settings.height);
-
-        commands.spawn((
-            Wolf,
-            WolfAI::default(),
-            Position { x, y },
-            Velocity { dx: 0, dy: 0 },
-            Health {
-                current: 100,
-                max: 100,
-            },
-            Hunger {
-                current: 0.0,
-                max: 100.0,
-            },
-            Kills(0),
-        ));
-    }
 }
 
 fn update_day_night(
@@ -196,42 +156,31 @@ fn update_day_night(
         < day_night_cycle.day_length;
 }
 
-pub fn wolf_eating_system(
-    mut event_reader: EventReader<Event>,
-    mut wolf_query: Query<&mut Hunger, With<Wolf>>,
-    food_query: Query<&Food>,
-) {
-    for event in event_reader.read() {
-        if let Event::EntityDied { entity, attacker } = event {
-            if let Some(attacker_entity) = attacker {
-                if let Ok(mut hunger) = wolf_query.get_mut(*attacker_entity) {
-                    if let Ok(food) = food_query.get(*entity) {
-                        hunger.current -= food.value;
-                        if hunger.current < 0.0 {
-                            hunger.current = 0.0;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 pub fn add_simulation_systems(app: &mut App) {
     app.add_systems(
         FixedUpdate,
         (
             update_day_night,
-            systems::hunger::hunger_system,
-            form_new_packs_system,
-            join_existing_packs_system,
-            wolf_eating_system,
-            wolf_ai_system,
+            systems::visibility_system::visibility_system,
+            q_learning::update_q_table_system,
+            goal_selection::goal_selection_system,
+            actions::craft::craft_action_system,
+            actions::attack::attack_action_system,
+            actions::flee::flee_action_system,
+            actions::explore::explore_action_system,
+            actions::stockpile::stockpile_action_system,
+            systems::pathfinding_system::pathfinding_system,
+            systems::async_result_collection_system::async_result_collection_system,
+            systems::path_movement_system::path_movement_system,
             movement::movement_system,
+            gathering::gathering_system,
+            crafting::crafting_system,
+            building::building_system,
+            storage::storage_system,
             combat::combat_system,
             death::death_system,
-            visibility_system,
         )
+            .chain()
             .in_set(SimulationSet::Logic)
             .run_if(in_state(AppState::InGame)),
     );
