@@ -18,7 +18,7 @@ pub struct PlayerMemories(pub HashMap<Entity, PlayerMemory>);
 
 /// A component representing the agent's Q-table for goal selection.
 #[derive(Component, Clone, Serialize, Deserialize)]
-pub struct GoalQTable(pub HashMap<HighLevelState, HashMap<Goal, f64>>);
+pub struct GoalQTable(pub Vec<(HighLevelState, HashMap<Goal, f64>)>);
 
 /// A component representing the agent's frontier for exploration.
 #[derive(Component, Clone)]

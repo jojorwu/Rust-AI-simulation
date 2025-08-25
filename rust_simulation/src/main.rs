@@ -1,3 +1,4 @@
+use bevy::app::AppExit;
 use bevy::prelude::*;
 use rust_simulation::config::Config;
 use rust_simulation::errors::SimulationError;
@@ -5,6 +6,7 @@ use rust_simulation::road_builder;
 use rust_simulation::road_manager::RoadManager;
 use rust_simulation::state::AppState;
 use rust_simulation::systems::monitoring::MonitoringPlugin;
+use rust_simulation::systems::persistence::save_q_tables_on_exit;
 use rust_simulation::ui::main_menu::MainMenuPlugin;
 use rust_simulation::ui::settings::SettingsPlugin;
 use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
@@ -123,6 +125,8 @@ fn main() -> Result<(), SimulationError> {
     );
 
     add_simulation_systems(&mut app);
+
+    app.add_systems(Update, save_q_tables_on_exit.run_if(on_event::<AppExit>()));
 
     app.run();
 

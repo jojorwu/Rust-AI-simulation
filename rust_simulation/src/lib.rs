@@ -115,7 +115,7 @@ pub fn setup_simulation(
         let q_table = q_tables
             .get(&i)
             .cloned()
-            .unwrap_or_else(|| GoalQTable(HashMap::new()));
+            .unwrap_or_else(|| GoalQTable(Vec::new()));
 
         commands.spawn((
             Player::new(i, config.map_settings.width, config.map_settings.height),
