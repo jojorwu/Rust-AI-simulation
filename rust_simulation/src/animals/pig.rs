@@ -36,8 +36,8 @@ pub fn wandering_system(
     let mut rng = rand::thread_rng();
     for (mut ai, mut velocity) in query.iter_mut() {
         if ai.move_timer == 0 {
-            let dx = rng.gen_range(-1..=1);
-            let dy = rng.gen_range(-1..=1);
+            let dx = rng.random_range(-1..=1);
+            let dy = rng.random_range(-1..=1);
             ai.direction = (dx, dy);
             velocity.dx = dx;
             velocity.dy = dy;
@@ -64,7 +64,7 @@ pub fn fleeing_system(
                     let (flee_dx, flee_dy) = if dx == 0 && dy == 0 {
                         // If positions are the same, flee in a random direction
                         let mut rng = rand::thread_rng();
-                        (rng.gen_range(-1..=1), rng.gen_range(-1..=1))
+                        (rng.random_range(-1..=1), rng.random_range(-1..=1))
                     } else {
                         (dx.signum(), dy.signum())
                     };
