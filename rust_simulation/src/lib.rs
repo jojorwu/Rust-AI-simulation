@@ -189,11 +189,6 @@ pub fn setup_simulation(
                 current: 0.0,
                 max: 100.0,
             },
-            MentalMap(vec![
-                vec![None; config.map_settings.width as usize];
-                config.map_settings.height as usize
-            ]),
-            ExplorationFrontier(VecDeque::new()),
         ));
     }
 }
