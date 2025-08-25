@@ -16,7 +16,6 @@ use rand::Rng;
 use std::collections::HashMap;
 
 pub fn goal_selection_system(
-    commands: ParallelCommands,
     mut query: Query<(
         Entity,
         &mut BrainComponent,
@@ -49,54 +48,68 @@ pub fn goal_selection_system(
                     &map,
                     &mut rng,
                 ) {
-                    if let Ok(mut plan) =
-                        plan_goal(&brain, inventory, known_resources, &new_high_level_goal)
-                    {
-                        plan.reverse();
-                        brain.goal_stack = plan;
-                        brain.current_goal = brain.goal_stack.pop();
-                        if let Some(goal) = &brain.current_goal {
-                            info!("Entity {:?} selected new goal: {:?}", entity, goal);
-
-                            // Add the corresponding intent component
-                            commands.command_scope(|mut c| {
-                                match goal {
-                                    Goal::GatherResource(res) => {
-                                        c.entity(entity).insert(IntendsToGather(res.clone()));
-                                    }
-                                    Goal::CraftItem(item) => {
-                                        c.entity(entity).insert(IntendsToCraft(item.clone()));
-                                    }
-                                    Goal::Build(structure) => {
-                                        c.entity(entity)
-                                            .insert(IntendsToBuild(structure.clone()));
-                                    }
-                                    Goal::Attack(target) => {
-                                        c.entity(entity).insert(IntendsToAttack(*target));
-                                    }
-                                    Goal::Flee => {
-                                        c.entity(entity).insert(IntendsToFlee);
-                                    }
-                                    Goal::Explore => {
-                                        c.entity(entity).insert(IntendsToExplore);
-                                    }
-                                    Goal::Stockpile(res) => {
-                                        c.entity(entity)
-                                            .insert(IntendsToStockpile(res.clone()));
-                                    }
-                                    Goal::EatFood(food) => {
-                                        c.entity(entity).insert(WantsToEat(food.clone()));
-                                    }
-                                }
-                            });
-
-                            brain.goal_commitment_ticks = config.ai.goals.commitment_ticks;
-                        }
+                    brain.current_goal = Some(new_high_level_goal);
+                    if let Some(goal) = &brain.current_goal {
+                        info!("Entity {:?} selected new goal: {:?}", entity, goal);
+                        brain.goal_commitment_ticks = config.ai.goals.commitment_ticks;
                     }
                 }
             }
         },
     );
+}
+
+pub fn goal_planning_system(
+    mut query: Query<(Entity, &mut BrainComponent, &Inventory, &KnownResources)>,
+) {
+    for (_entity, mut brain, inventory, known_resources) in query.iter_mut() {
+        if let Some(goal) = &brain.current_goal {
+            if brain.goal_stack.is_empty() {
+                if let Ok(mut plan) = plan_goal(&brain, inventory, known_resources, goal) {
+                    plan.reverse();
+                    brain.goal_stack = plan;
+                }
+            }
+        }
+    }
+}
+
+pub fn intent_creation_system(
+    commands: ParallelCommands,
+    query: Query<(Entity, &BrainComponent)>,
+) {
+    query.par_iter().for_each(|(entity, brain)| {
+        if let Some(goal) = &brain.current_goal {
+            commands.command_scope(|mut c| match goal {
+                Goal::GatherResource(res) => {
+                    c.entity(entity).insert(IntendsToGather(res.clone()));
+                }
+                Goal::CraftItem(item) => {
+                    c.entity(entity).insert(IntendsToCraft(item.clone()));
+                }
+                Goal::Build(structure) => {
+                    c.entity(entity)
+                        .insert(IntendsToBuild(structure.clone()));
+                }
+                Goal::Attack(target) => {
+                    c.entity(entity).insert(IntendsToAttack(*target));
+                }
+                Goal::Flee => {
+                    c.entity(entity).insert(IntendsToFlee);
+                }
+                Goal::Explore => {
+                    c.entity(entity).insert(IntendsToExplore);
+                }
+                Goal::Stockpile(res) => {
+                    c.entity(entity)
+                        .insert(IntendsToStockpile(res.clone()));
+                }
+                Goal::EatFood(food) => {
+                    c.entity(entity).insert(WantsToEat(food.clone()));
+                }
+            });
+        }
+    });
 }
 
 /// Constructs the high-level state of an agent from its components.
@@ -218,7 +231,7 @@ fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bo
 }
 
 /// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
-fn plan_goal(
+pub fn plan_goal(
     brain: &BrainComponent,
     inventory: &Inventory,
     known_resources: &KnownResources,
@@ -226,18 +239,9 @@ fn plan_goal(
 ) -> Result<Vec<Goal>, SimulationError> {
     let mut plan = Vec::new();
     match goal {
-        Goal::CraftItem(item_name) => {
+        Goal::CraftItem(item_name) | Goal::Build(item_name) => {
             plan.extend(plan_crafting_or_building(
                 item_name,
-                brain,
-                inventory,
-                known_resources,
-            ));
-            plan.push(goal.clone());
-        }
-        Goal::Build(structure_name) => {
-            plan.extend(plan_crafting_or_building(
-                structure_name,
                 brain,
                 inventory,
                 known_resources,

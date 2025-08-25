@@ -183,4 +183,14 @@ pub fn add_simulation_systems(app: &mut App) {
             .in_set(SimulationSet::Logic)
             .run_if(in_state(AppState::InGame)),
     );
+    app.add_systems(
+        FixedUpdate,
+        (
+            goal_selection::goal_planning_system,
+            goal_selection::intent_creation_system,
+        )
+            .chain()
+            .in_set(SimulationSet::Logic)
+            .run_if(in_state(AppState::InGame)),
+    );
 }
