@@ -67,8 +67,7 @@ fn main() -> Result<(), SimulationError> {
     let mut app = App::new();
 
     app.add_plugins(MinimalPlugins);
-    app.add_state::<AppState>();
-    app.insert_resource(NextState(Some(AppState::InGame)));
+    app.init_state::<AppState>();
     app.register_type::<Config>()
         .register_type::<rust_simulation::config::MapSettings>()
         .register_type::<rust_simulation::config::PlayerSettings>()
@@ -102,6 +101,9 @@ fn main() -> Result<(), SimulationError> {
     );
 
     add_simulation_systems(&mut app);
+
+    // Start the simulation
+    app.world.get_resource_mut::<NextState<AppState>>().unwrap().set(AppState::InGame);
 
     app.run();
 

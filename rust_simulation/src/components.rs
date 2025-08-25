@@ -129,6 +129,9 @@ pub struct Food {
     pub value: f32,
 }
 
+#[derive(Component)]
+pub struct Kills(pub u32);
+
 #[derive(Component, Debug, Clone, Copy)]
 pub struct WantsToPickup {}
 

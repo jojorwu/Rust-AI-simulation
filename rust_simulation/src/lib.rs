@@ -31,11 +31,11 @@ pub mod world;
 
 use crate::state::AppState;
 use crate::events::Event;
-use animals::{pig::{Pig, SimpleAi}, wolf::{Wolf, WolfAI, wolf_ai_system}};
+use animals::{pig::{Pig, SimpleAi}, wolf::{Wolf, WolfAI, wolf_ai_system}, pack::pack_system};
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
     status::{Health, Hunger},
-    BrainComponent, Food, Inventory, Position, Velocity,
+    BrainComponent, Food, Inventory, Kills, Position, Velocity,
 };
 use config::*;
 use item::ItemRegistry;
@@ -81,13 +81,10 @@ pub struct DataPaths {
 
 use std::fs;
 
-use crate::systems::monitoring::MemoryLimitReached;
-
 pub fn setup_simulation(
     mut commands: Commands,
     paths: Res<DataPaths>,
     config: Res<Config>,
-    memory_limit_reached: Res<MemoryLimitReached>,
 ) {
     let map = Map::new(
         config.map_settings.width,
@@ -113,11 +110,6 @@ pub fn setup_simulation(
     commands.insert_resource(TickCount(0));
     commands.init_resource::<async_task::AsyncResultChannel>();
     commands.init_resource::<Events<events::Event>>();
-
-    if memory_limit_reached.0 {
-        log::warn!("RAM limit reached, not spawning any agents.");
-        return;
-    }
 
     for i in 0..config.player_settings.num_players {
         let q_table = q_tables
@@ -189,6 +181,7 @@ pub fn setup_simulation(
                 current: 0.0,
                 max: 100.0,
             },
+            Kills(0),
         ));
     }
 }
@@ -231,6 +224,7 @@ pub fn add_simulation_systems(app: &mut App) {
         (
             update_day_night,
             systems::hunger::hunger_system,
+            pack_system,
             wolf_eating_system,
             wolf_ai_system,
             movement::movement_system,
