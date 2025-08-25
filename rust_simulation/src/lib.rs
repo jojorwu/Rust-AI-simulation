@@ -29,10 +29,11 @@ pub mod ui;
 pub mod world;
 
 use crate::state::AppState;
+use animals::wolf::{Wolf, WolfAi, wolf_ai_system};
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
     status::Health,
-    BrainComponent, Inventory, Position,
+    BrainComponent, Inventory, Position, Velocity,
 };
 use config::*;
 use item::ItemRegistry;
@@ -143,6 +144,20 @@ pub fn setup_simulation(
             ExplorationFrontier(VecDeque::new()),
         ));
     }
+
+    // Spawn wolves
+    for _ in 0..config.player_settings.num_wolves {
+        commands.spawn((
+            Wolf,
+            WolfAi::default(),
+            Position { x: 10, y: 10 },
+            Velocity { dx: 0, dy: 0 },
+            Health {
+                current: 100,
+                max: 100,
+            },
+        ));
+    }
 }
 
 fn update_day_night(
@@ -164,6 +179,7 @@ pub fn add_simulation_systems(app: &mut App) {
             systems::visibility_system::visibility_system,
             q_learning::update_q_table_system,
             goal_selection::goal_selection_system,
+            wolf_ai_system,
             actions::craft::craft_action_system,
             actions::attack::attack_action_system,
             actions::flee::flee_action_system,

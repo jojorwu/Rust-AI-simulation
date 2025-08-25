@@ -4,7 +4,6 @@ use rust_simulation::errors::SimulationError;
 use rust_simulation::road_builder;
 use rust_simulation::road_manager::RoadManager;
 use rust_simulation::state::AppState;
-use rust_simulation::systems::monitoring::MonitoringPlugin;
 use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
 use std::env;
 use std::time::Duration;
@@ -67,12 +66,7 @@ fn main() -> Result<(), SimulationError> {
     // --- Bevy App Setup ---
     let mut app = App::new();
 
-    app.add_plugins((
-        MinimalPlugins,
-        AssetPlugin::default(),
-        bevy::log::LogPlugin::default(),
-    ));
-    app.add_plugins(MonitoringPlugin);
+    app.add_plugins(MinimalPlugins);
     app.init_state::<AppState>();
     app.register_type::<Config>()
         .register_type::<rust_simulation::config::MapSettings>()
