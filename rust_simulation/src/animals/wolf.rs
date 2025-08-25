@@ -140,9 +140,18 @@ pub fn wolf_ai_system(
                                 velocity.dx = 0;
                                 velocity.dy = 0;
                             }
+                        } else {
+                            // Leader is dead, dissolve the pack
+                            wolf_ai.pack = None;
                         }
                     }
+                } else {
+                    // No leader, dissolve the pack
+                    wolf_ai.pack = None;
                 }
+            } else {
+                // Pack entity doesn't exist, dissolve the pack
+                wolf_ai.pack = None;
             }
         } else {
             // Lone wolf behavior
@@ -183,14 +192,16 @@ pub fn wolf_ai_system(
 
             if wolf_ai.state == WolfState::Hunting {
                 if let Some(target_entity) = wolf_ai.target {
-                    if let Ok((_, target_position)) = prey_query.get(target_entity) {
-                        let dx = (target_position.x as i32 - position.x as i32).signum();
-                        let dy = (target_position.y as i32 - position.y as i32).signum();
-                        velocity.dx = dx;
-                        velocity.dy = dy;
+                    if prey_query.get(target_entity).is_ok() {
+                        if let Ok((_, target_position)) = prey_query.get(target_entity) {
+                            let dx = (target_position.x as i32 - position.x as i32).signum();
+                            let dy = (target_position.y as i32 - position.y as i32).signum();
+                            velocity.dx = dx;
+                            velocity.dy = dy;
 
-                        if position.distance(target_position) < 1.5 {
-                            commands.entity(wolf_entity).insert(WantsToAttack { target: target_entity });
+                            if position.distance(target_position) < 1.5 {
+                                commands.entity(wolf_entity).insert(WantsToAttack { target: target_entity });
+                            }
                         }
                     } else {
                         wolf_ai.state = WolfState::Wandering;

@@ -31,7 +31,7 @@ pub mod world;
 
 use crate::state::AppState;
 use crate::events::Event;
-use animals::{pig::{Pig, SimpleAi}, wolf::{Wolf, WolfAI, wolf_ai_system}, pack::pack_system};
+use animals::{pig::{Pig, SimpleAi}, wolf::{Wolf, WolfAI, wolf_ai_system}, pack::{form_new_packs_system, join_existing_packs_system}};
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
     status::{Health, Hunger},
@@ -45,7 +45,6 @@ use recipes::RecipeManager;
 use systems::ai::{actions, goal_selection, q_learning};
 use systems::*;
 use systems::visibility_system::visibility_system;
-use crate::animals::wolf::WolfState;
 
 
 // --- System Sets ---
@@ -224,7 +223,8 @@ pub fn add_simulation_systems(app: &mut App) {
         (
             update_day_night,
             systems::hunger::hunger_system,
-            pack_system,
+            form_new_packs_system,
+            join_existing_packs_system,
             wolf_eating_system,
             wolf_ai_system,
             movement::movement_system,

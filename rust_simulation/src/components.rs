@@ -129,7 +129,7 @@ pub struct Food {
     pub value: f32,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub struct Kills(pub u32);
 
 #[derive(Component, Debug, Clone, Copy)]
