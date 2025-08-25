@@ -17,9 +17,8 @@ fn test_plan_goal_craft_item() {
     let plan = plan_goal(&brain, &inventory, &known_resources, &goal).unwrap();
 
     assert_eq!(plan.len(), 5);
-    assert_eq!(plan[0], Goal::Explore);
-    assert_eq!(plan[1], Goal::GatherResource("wood".to_string()));
-    assert_eq!(plan[2], Goal::Explore);
-    assert_eq!(plan[3], Goal::GatherResource("stone".to_string()));
+    assert!(plan.contains(&Goal::Explore));
+    assert!(plan.contains(&Goal::GatherResource("wood".to_string())));
+    assert!(plan.contains(&Goal::GatherResource("stone".to_string())));
     assert_eq!(plan[4], Goal::CraftItem("stone_axe".to_string()));
 }

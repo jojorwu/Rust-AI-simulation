@@ -35,6 +35,7 @@ pub fn stockpile_action_system(
                     target_chest: chest_entity,
                 });
                 commands.entity(entity).remove::<IntendsToStockpile>();
+                brain.current_goal = None;
             } else {
                 // If not adjacent, request a path.
                 commands.entity(entity).insert(PathRequest {
