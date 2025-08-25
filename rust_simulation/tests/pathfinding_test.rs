@@ -1,24 +1,22 @@
 use bevy::prelude::*;
 use rust_simulation::{
-    async_task::AsyncResultChannel,
     brain::MemoryTile,
     components::{
         ai::{ExplorationFrontier, MentalMap},
-        intents::IntendsToExplore,
         path::{CurrentPath, PathRequest},
-        Position, BrainComponent,
+        Position, BrainComponent, intents::IntendsToExplore
     },
     map::Tile,
     player::Player,
-    recipes::RecipeManager,
     systems::{
-        ai::actions::explore::explore_action_system,
-        async_result_collection_system::async_result_collection_system,
-        path_collection_system::path_collection_system,
+        pathfinding_completion_system::pathfinding_completion_system,
         pathfinding_system::pathfinding_system,
+        ai::actions::explore::explore_action_system,
     },
+    recipes::RecipeManager,
 };
 use std::{collections::VecDeque, sync::Arc};
+
 
 const TEST_WIDTH: u32 = 100;
 const TEST_HEIGHT: u32 = 100;
@@ -44,15 +42,12 @@ fn test_pathfinding_flow() {
         tile: Tile::new('#', "wall".to_string()),
     });
 
-    app.init_resource::<AsyncResultChannel>();
-
     // --- Setup Systems ---
     app.add_systems(
         Update,
         (
             pathfinding_system,
-            async_result_collection_system,
-            path_collection_system,
+            pathfinding_completion_system,
         ),
     );
 
@@ -102,8 +97,6 @@ fn test_exploration_flow() {
     let mut exploration_frontier = ExplorationFrontier(VecDeque::new());
     // Manually add a frontier for the test
     exploration_frontier.0.push_back(Position { x: 1, y: 0 });
-
-    app.init_resource::<AsyncResultChannel>();
 
     // --- Setup Systems ---
     app.add_systems(Update, explore_action_system);

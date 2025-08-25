@@ -105,7 +105,6 @@ pub fn setup_simulation(
     commands.insert_resource(RecipeManagerResource(Arc::clone(&recipe_manager)));
     commands.insert_resource(IsDay(true));
     commands.insert_resource(TickCount(0));
-    commands.init_resource::<async_task::AsyncResultChannel>();
     commands.init_resource::<Events<events::Event>>();
 
     if memory_limit_reached.0 {
@@ -170,7 +169,7 @@ pub fn add_simulation_systems(app: &mut App) {
             actions::explore::explore_action_system,
             actions::stockpile::stockpile_action_system,
             systems::pathfinding_system::pathfinding_system,
-            systems::async_result_collection_system::async_result_collection_system,
+            systems::pathfinding_completion_system::pathfinding_completion_system,
             systems::path_movement_system::path_movement_system,
             movement::movement_system,
             gathering::gathering_system,
