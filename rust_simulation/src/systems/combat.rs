@@ -24,7 +24,10 @@ pub fn combat_system(
         }
 
         if target_dead {
-            event_writer.send(Event::EntityDied(target));
+            event_writer.send(Event::EntityDied {
+                entity: target,
+                attacker: Some(attacker),
+            });
         }
         commands.entity(attacker).remove::<WantsToAttack>();
     }

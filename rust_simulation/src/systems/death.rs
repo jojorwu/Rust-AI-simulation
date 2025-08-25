@@ -12,7 +12,7 @@ pub fn death_system(
     map: Res<Map>,
 ) {
     for event in event_reader.read() {
-        if let Event::EntityDied(entity) = event {
+        if let Event::EntityDied { entity, .. } = event {
             if let Ok(pos) = position_query.get(*entity) {
                 map.remove_entity_from_spatial_map(*entity, pos.x, pos.y);
 

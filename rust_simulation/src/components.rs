@@ -124,6 +124,11 @@ pub struct WantsToAttack {
     pub target: Entity,
 }
 
+#[derive(Component)]
+pub struct Food {
+    pub value: f32,
+}
+
 #[derive(Component, Debug, Clone, Copy)]
 pub struct WantsToPickup {}
 
