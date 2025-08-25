@@ -33,7 +33,7 @@ const FLEE_TIMER: u32 = 120; // Flee for 120 ticks
 pub fn wandering_system(
     mut query: Query<(&mut SimpleAi, &mut Velocity), (With<Pig>, Without<Fleeing>)>,
 ) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     for (mut ai, mut velocity) in query.iter_mut() {
         if ai.move_timer == 0 {
             let dx = rng.random_range(-1..=1);
@@ -63,7 +63,7 @@ pub fn fleeing_system(
 
                     let (flee_dx, flee_dy) = if dx == 0 && dy == 0 {
                         // If positions are the same, flee in a random direction
-                        let mut rng = rand::thread_rng();
+                        let mut rng = rand::rng();
                         (rng.random_range(-1..=1), rng.random_range(-1..=1))
                     } else {
                         (dx.signum(), dy.signum())

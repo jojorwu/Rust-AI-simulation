@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod building;
+pub mod building_logic;
 pub mod combat;
 pub mod crafting;
 pub mod death;
@@ -9,6 +10,7 @@ pub mod gathering;
 pub mod hunger;
 pub mod hunting;
 pub mod map_builder;
+pub mod map_modification;
 pub mod monitoring;
 pub mod movement;
 pub mod path_movement_system;

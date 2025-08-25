@@ -14,6 +14,11 @@ pub enum Event {
         builder: Entity,
         position: Position,
     },
+    BuildRequest {
+        builder: Entity,
+        structure: String,
+        position: Position,
+    },
     GoalCompleted {
         entity: Entity,
         prev_state: HighLevelState,

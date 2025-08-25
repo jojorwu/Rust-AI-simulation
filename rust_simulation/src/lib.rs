@@ -28,7 +28,6 @@ pub mod systems;
 pub mod ui;
 pub mod world;
 
-use crate::state::AppState;
 use components::{
     ai::{ExplorationFrontier, GoalQTable, KnownResources, MentalMap, PlayerMemories},
     status::Health,
@@ -167,6 +166,14 @@ pub fn add_simulation_systems(app: &mut App) {
             actions::attack::attack_action_system,
             actions::flee::flee_action_system,
             actions::explore::explore_action_system,
+        )
+            .chain()
+            .in_set(SimulationSet::Logic),
+    );
+
+    app.add_systems(
+        FixedUpdate,
+        (
             actions::stockpile::stockpile_action_system,
             systems::pathfinding_system::pathfinding_system,
             systems::pathfinding_completion_system::pathfinding_completion_system,
@@ -175,15 +182,25 @@ pub fn add_simulation_systems(app: &mut App) {
             find_resource::find_resource_system,
             gathering::gathering_system,
             crafting::crafting_system,
-            building::building_system,
+        )
+            .chain()
+            .in_set(SimulationSet::Logic),
+    );
+
+    app.add_systems(
+        FixedUpdate,
+        (
+            building_logic::check_resources_system,
+            building_logic::check_tile_system,
+            building_logic::build_system,
             storage::storage_system,
             combat::combat_system,
             death::death_system,
         )
             .chain()
-            .in_set(SimulationSet::Logic)
-            .run_if(in_state(AppState::InGame)),
+            .in_set(SimulationSet::Logic),
     );
+
     app.add_systems(
         FixedUpdate,
         (
@@ -191,7 +208,11 @@ pub fn add_simulation_systems(app: &mut App) {
             goal_selection::intent_creation_system,
         )
             .chain()
-            .in_set(SimulationSet::Logic)
-            .run_if(in_state(AppState::InGame)),
+            .in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        (map_modification::map_modification_system)
+            .in_set(SimulationSet::Logic),
     );
 }

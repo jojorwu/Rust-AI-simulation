@@ -6,7 +6,7 @@ pub fn flee_action_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut BrainComponent), With<IntendsToFlee>>,
 ) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     for (entity, mut brain_component) in query.iter_mut() {
         let dx = rng.random_range(-1..=1);
         let dy = rng.random_range(-1..=1);

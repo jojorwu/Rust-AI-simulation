@@ -31,3 +31,15 @@ pub struct IntendsToStockpile(pub String);
 
 #[derive(Component)]
 pub struct WantsToEat(pub String);
+
+#[derive(Component)]
+pub struct CheckResources(pub String);
+
+#[derive(Component)]
+pub struct HasResources;
+
+#[derive(Component)]
+pub struct CheckTile(pub super::Position);
+
+#[derive(Component)]
+pub struct TileIsSuitable;

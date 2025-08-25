@@ -36,7 +36,7 @@ pub fn goal_selection_system(
                 let high_level_state =
                     get_high_level_state(health, hunger, inventory, player_memories, is_day.0);
 
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 if let Ok(new_high_level_goal) = choose_goal(
                     &high_level_state,
                     &brain,
