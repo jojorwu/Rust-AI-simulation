@@ -4,6 +4,7 @@ pub mod combat;
 pub mod crafting;
 pub mod death;
 pub mod eating;
+pub mod find_resource;
 pub mod gathering;
 pub mod hunger;
 pub mod hunting;

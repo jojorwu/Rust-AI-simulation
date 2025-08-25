@@ -172,6 +172,7 @@ pub fn add_simulation_systems(app: &mut App) {
             systems::pathfinding_completion_system::pathfinding_completion_system,
             systems::path_movement_system::path_movement_system,
             movement::movement_system,
+            find_resource::find_resource_system,
             gathering::gathering_system,
             crafting::crafting_system,
             building::building_system,

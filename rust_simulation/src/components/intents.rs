@@ -9,6 +9,9 @@ use bevy_ecs::prelude::*;
 pub struct IntendsToGather(pub String);
 
 #[derive(Component)]
+pub struct IntendsToGatherFrom(pub Entity);
+
+#[derive(Component)]
 pub struct IntendsToCraft(pub String);
 
 #[derive(Component)]
