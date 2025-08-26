@@ -3254,7 +3254,6 @@ dependencies = [
  "bevy_ecs",
  "bevy_tasks",
  "criterion",
- "crossbeam-channel",
  "dashmap",
  "log",
  "noise",
