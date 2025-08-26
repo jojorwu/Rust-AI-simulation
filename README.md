@@ -30,6 +30,16 @@ To run the simulation, use the following command:
 cargo run
 ```
 
+### Running on Windows
+
+For Windows users, a convenience script is provided to build and package the application.
+
+1.  Make sure you have Rust and Cargo installed.
+2.  Navigate to the `rust_simulation` directory.
+3.  Run the `run.bat` script by double-clicking it or by running it from the command prompt.
+
+This script will compile the application and create a `dist` folder inside the `rust_simulation` directory. This folder will contain the `rust_simulation.exe` executable and the required `data` folder. You can then run the application from the `dist` folder.
+
 ## Project Structure
 
 The project is organized as follows:
