@@ -143,7 +143,7 @@ impl Map {
 
     pub fn get_tile(&self, x: u32, y: u32) -> Option<Tile> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = (x % CHUNK_SIZE) as usize;
         let local_y = (y % CHUNK_SIZE) as usize;
         chunk.tiles.get(local_y)?.get(local_x).cloned()
@@ -151,7 +151,7 @@ impl Map {
 
     pub fn set_tile(&self, x: u32, y: u32, tile: Tile) -> Option<()> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = (x % CHUNK_SIZE) as usize;
         let local_y = (y % CHUNK_SIZE) as usize;
         if let Some(t) = chunk.tiles.get_mut(local_y)?.get_mut(local_x) {
@@ -162,7 +162,7 @@ impl Map {
 
     pub fn add_entity_to_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = x % CHUNK_SIZE;
         let local_y = y % CHUNK_SIZE;
         chunk
@@ -175,7 +175,7 @@ impl Map {
 
     pub fn remove_entity_from_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = x % CHUNK_SIZE;
         let local_y = y % CHUNK_SIZE;
         if let Some(entities) = chunk.spatial_map.get_mut(&(local_x, local_y)) {
@@ -186,7 +186,7 @@ impl Map {
 
     pub fn get_entities_at(&self, x: u32, y: u32) -> Option<Vec<Entity>> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = x % CHUNK_SIZE;
         let local_y = y % CHUNK_SIZE;
         chunk.spatial_map.get(&(local_x, local_y)).cloned()

@@ -5,6 +5,7 @@ use crate::components::{
 };
 use bevy_ecs::prelude::*;
 
+#[allow(clippy::type_complexity)]
 pub fn stockpile_action_system(
     mut commands: Commands,
     mut query: Query<

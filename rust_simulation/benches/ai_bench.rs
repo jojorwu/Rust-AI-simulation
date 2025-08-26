@@ -17,7 +17,7 @@ fn setup_app(num_agents: u32) -> App {
     app.add_plugins(MinimalPlugins);
     app.add_event::<Event>();
 
-    let config = Config::load("data/config.toml").unwrap();
+    let config = Config::load("data/config.toml").expect("Failed to load config");
 
     let map = Map::new(
         config.map_settings.width,
@@ -25,9 +25,10 @@ fn setup_app(num_agents: u32) -> App {
         "data/biomes.json",
         "data/resources.json",
     )
-    .unwrap();
+    .expect("Failed to create map");
 
-    let recipe_manager = Arc::new(RecipeManager::new("data/recipes.json").unwrap());
+    let recipe_manager =
+        Arc::new(RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"));
 
     app.insert_resource(map);
     app.insert_resource(config.clone());

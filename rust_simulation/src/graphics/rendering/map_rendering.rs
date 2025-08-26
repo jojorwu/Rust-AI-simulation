@@ -124,9 +124,11 @@ fn load_new_chunks_system(
 
     let new_meshes: Vec<(Mesh, (u32, u32))> = chunks_with_data_to_load
         .into_par_iter()
-        .map(|(chunk_data, pos)| {
-            let chunk = chunk_data.lock().unwrap();
-            (create_chunk_mesh(&chunk, pos), pos)
+        .filter_map(|(chunk_data, pos)| {
+            match chunk_data.lock() {
+                Ok(chunk) => Some((create_chunk_mesh(&chunk, pos), pos)),
+                Err(_) => None, // Skip poisoned mutexes
+            }
         })
         .collect();
 

@@ -6,9 +6,12 @@ use crate::road_manager::RoadManager;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::env;
+use log::error;
 
 pub fn generate_roads(mut map: ResMut<Map>, mut road_manager: ResMut<RoadManager>) {
-    _generate_roads_from_config(&mut map, &mut road_manager).unwrap()
+    if let Err(e) = _generate_roads_from_config(&mut map, &mut road_manager) {
+        error!("Failed to generate roads: {}", e);
+    }
 }
 
 fn _generate_roads_from_config(

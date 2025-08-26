@@ -66,10 +66,12 @@ fn main() -> Result<(), SimulationError> {
     }
 
     // --- Setup Rayon Thread Pool ---
-    rayon::ThreadPoolBuilder::new()
+    if let Err(e) = rayon::ThreadPoolBuilder::new()
         .num_threads(config.performance.processor_cores as usize)
         .build_global()
-        .unwrap();
+    {
+        log::error!("Failed to build global thread pool: {}", e);
+    }
 
     // --- Bevy App Setup ---
     let mut app = App::new();

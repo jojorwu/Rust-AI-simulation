@@ -89,9 +89,9 @@ pub fn setup_simulation(
         &paths.biomes,
         &paths.resources,
     )
-    .unwrap();
-    let item_registry = Arc::new(ItemRegistry::new(&paths.items).unwrap());
-    let recipe_manager = Arc::new(RecipeManager::new(&paths.recipes).unwrap());
+    .expect("Failed to create Map");
+    let item_registry = Arc::new(ItemRegistry::new(&paths.items).expect("Failed to create ItemRegistry"));
+    let recipe_manager = Arc::new(RecipeManager::new(&paths.recipes).expect("Failed to create RecipeManager"));
 
     // Load Q-tables if they exist
     let q_tables: HashMap<u32, GoalQTable> = if let Ok(data) = fs::read_to_string("q_tables.json") {

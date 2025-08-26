@@ -191,8 +191,8 @@ fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, Si
         return Ok(Goal::Flee);
     }
 
-    if args.rng.r#gen::<f64>() < args.brain.epsilon {
-        let index = args.rng.gen_range(0..valid_goals.len());
+    if args.rng.random::<f64>() < args.brain.epsilon {
+        let index = args.rng.random_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
@@ -216,11 +216,11 @@ fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, Si
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = args.rng.gen_range(0..valid_goals.len());
+                let index = args.rng.random_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = args.rng.gen_range(0..valid_goals.len());
+        let index = args.rng.random_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
 }

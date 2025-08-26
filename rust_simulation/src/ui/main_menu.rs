@@ -99,6 +99,7 @@ fn setup_main_menu(mut commands: Commands) {
         });
 }
 
+#[allow(clippy::type_complexity)]
 fn button_hover_system(
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor),
@@ -114,6 +115,7 @@ fn button_hover_system(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn main_menu_button_system(
     interaction_query: Query<
         (&Interaction, &MainMenuButtonAction),

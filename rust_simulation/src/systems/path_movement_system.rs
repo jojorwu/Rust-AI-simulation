@@ -9,15 +9,11 @@ pub fn path_movement_system(
     for (entity, mut path, position) in query.iter_mut() {
         // If the agent is at the current head of the path, pop it.
         // This handles both the starting node and arriving at an intermediate node.
-        let mut arrived_at_node = false;
         if let Some(next_node) = path.nodes.front() {
             if next_node.0 == position.x && next_node.1 == position.y {
-                arrived_at_node = true;
+                path.nodes.pop_front();
+                debug!("Entity {entity:?} arrived at path node {next_node:?}");
             }
-        }
-        if arrived_at_node {
-            let popped_node = path.nodes.pop_front().unwrap(); // Safe to unwrap due to check above
-            debug!("Entity {entity:?} arrived at path node {popped_node:?}");
         }
 
         // After potentially popping the current node, if there's a next one, move towards it.
