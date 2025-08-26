@@ -33,15 +33,15 @@ goto :end
 
 :initialize
     :: Set language, falling back to selection prompt if not configured
-    if exist "lang.cfg" (
-        set /p lang=<lang.cfg
+    if exist "%~dp0lang.cfg" (
+        set /p lang=<"%~dp0lang.cfg"
     ) else (
         echo Choose your language / Выберите ваш язык:
         echo  1. English
         echo  2. Русский
         choice /c 12 /n /m ">"
         if errorlevel 2 (set lang=RU) else (set lang=EN)
-        echo !lang! > lang.cfg
+        echo !lang! > "%~dp0lang.cfg"
         echo.
     )
 
@@ -73,6 +73,7 @@ goto :end
         set "msg_post_install_restart=Please close this window and run this script again."
         set "msg_building=Building the project... This may take a few minutes."
         set "msg_build_failed=Build failed. Please check for errors in the output above."
+        set "msg_build_failed_help=Note: If the error mentions 'linker' or 'LNK' errors, you may need to install the 'C++ build tools' from the Visual Studio Installer."
         set "msg_build_verify_failed=ERROR: Build seemed to succeed, but the executable was not found."
         set "msg_packaging=Build successful. Packaging the application..."
         set "msg_copy_failed=ERROR: Failed to copy the executable to the 'dist/windows' folder."
@@ -96,6 +97,7 @@ goto :end
         set "msg_post_install_restart=Пожалуйста, закройте это окно и запустите скрипт снова."
         set "msg_building=Сборка проекта... Это может занять несколько минут."
         set "msg_build_failed=Сборка не удалась. Пожалуйста, проверьте наличие ошибок."
+        set "msg_build_failed_help=Примечание: Если ошибка упоминает 'linker' или 'LNK', вам может потребоваться установить 'C++ build tools' через Visual Studio Installer."
         set "msg_build_verify_failed=ОШИБКА: Сборка вроде бы прошла успешно, но исполняемый файл не найден."
         set "msg_packaging=Сборка прошла успешно. Упаковка приложения..."
         set "msg_copy_failed=ОШИБКА: Не удалось скопировать исполняемый файл в папку 'dist/windows'."
@@ -117,7 +119,7 @@ goto :end
 :install_rust
     echo !msg_cargo_not_found!
     echo.
-    powershell -Command "Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile rustup-init.exe" >nul 2>&1
+    powershell -Command "Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile '%~dp0rustup-init.exe'" >nul 2>&1
     if !errorlevel! neq 0 (
         echo.
         echo ====================================================================
@@ -129,15 +131,15 @@ goto :end
         echo ====================================================================
         echo.
         pause
-        if not exist "rustup-init.exe" (
+        if not exist "%~dp0rustup-init.exe" (
             echo !msg_file_not_found!
             exit /b 1
         )
     )
     echo !msg_starting_installer!
-    start /wait rustup-init.exe --default-toolchain stable -y
-    if exist "rustup-init.exe" (
-        del "rustup-init.exe"
+    start /wait "%~dp0rustup-init.exe" --default-toolchain stable -y
+    if exist "%~dp0rustup-init.exe" (
+        del "%~dp0rustup-init.exe"
     )
     exit /b 0
 
@@ -154,28 +156,29 @@ goto :end
 :build_project
     echo !msg_building!
     echo.
-    cd rust_simulation
+    cd "%~dp0rust_simulation"
     cargo build --release > nul
     if !errorlevel! neq 0 (
         echo !msg_build_failed!
-        cd ..
+        echo !msg_build_failed_help!
+        cd "%~dp0"
         exit /b 1
     )
     if not exist "target\release\rust_simulation.exe" (
         echo !msg_build_verify_failed!
-        cd ..
+        cd "%~dp0"
         exit /b 1
     )
-    cd ..
+    cd "%~dp0"
     exit /b 0
 
 :package_app
     echo !msg_packaging!
-    if not exist "dist" mkdir "dist"
-    if not exist "dist\windows" mkdir "dist\windows"
-    copy "rust_simulation\target\release\rust_simulation.exe" "dist\windows\" > nul
-    xcopy "rust_simulation\data" "dist\windows\data\" /E /I /Y /Q
-    if not exist "dist\windows\rust_simulation.exe" (
+    if not exist "%~dp0dist" mkdir "%~dp0dist"
+    if not exist "%~dp0dist\windows" mkdir "%~dp0dist\windows"
+    copy "%~dp0rust_simulation\target\release\rust_simulation.exe" "%~dp0dist\windows\" > nul
+    xcopy "%~dp0rust_simulation\data" "%~dp0dist\windows\data\" /E /I /Y /Q
+    if not exist "%~dp0dist\windows\rust_simulation.exe" (
         echo !msg_copy_failed!
         exit /b 1
     )
@@ -189,7 +192,7 @@ goto :end
     echo  !msg_launching!
     echo ======================================================
     echo.
-    cd "dist\windows"
+    cd "%~dp0dist\windows"
     start rust_simulation.exe
     exit /b 0
 
