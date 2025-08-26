@@ -32,13 +32,13 @@ cargo run
 
 ### Running on Windows
 
-A convenience script `run-windows.bat` is provided in the root of the project to make it easy to run the application on Windows.
+A convenience script `run-windows.bat` is provided in the root of the project to make it easy to run the application on Windows. The instructions in the script are in Russian.
 
-Simply double-click the `run-windows.bat` file. The script will:
-1.  Check if you have the Rust toolchain installed. If not, it will help you install it.
-2.  Build the application (this might take a few minutes on the first run).
-3.  Package the application into a `dist/windows` folder.
-4.  Launch the application automatically.
+Simply double-click the `run-windows.bat` file. The script will handle everything for you:
+1.  **Dependency Check:** It will check if you have the Rust toolchain installed. If not, it will guide you through the installation process, with a manual download option if the automatic download fails.
+2.  **Build:** It will compile the application. This might take a few minutes on the first run.
+3.  **Package:** It will package the game into a `dist/windows` folder.
+4.  **Launch:** It will launch the application automatically.
 
 ## Project Structure
 

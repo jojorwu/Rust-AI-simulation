@@ -1,35 +1,65 @@
 @echo off
+:: Set the code page to UTF-8 to support Cyrillic characters
+chcp 65001 > nul
 setlocal
+
+:: Check if rustup-init.exe exists from a previous failed attempt
+if exist "rustup-init.exe" (
+    goto :run_installer
+)
 
 :: Check if cargo is installed
 cargo --version >nul 2>&1
+if %errorlevel% equ 0 (
+    goto :build_project
+)
+
+:install_rust
+echo Cargo не найден. Этот скрипт попытается загрузить и запустить установщик Rust.
+echo.
+
+:: Attempt to download the installer
+powershell -Command "Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile rustup-init.exe"
 if %errorlevel% neq 0 (
-    echo Cargo is not found. This script will attempt to download and run the Rust installer.
     echo.
-    powershell -Command "Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile rustup-init.exe"
-    if %errorlevel% neq 0 (
-        echo Failed to download the Rust installer. Please install it manually from https://www.rust-lang.org/tools/install
-        pause
-        exit /b 1
-    )
-
-    echo Starting the Rust installer...
-    start /wait rustup-init.exe --default-toolchain stable -y
-
     echo.
     echo ====================================================================
-    echo  Rust has been installed.
-    echo  IMPORTANT: You must restart your command prompt or terminal
-    echo  for the changes to take effect.
-    echo  Please close this window and run this script again.
+    echo ! Автоматическая загрузка не удалась. Пожалуйста, загрузите установщик Rust вручную.
+    echo.
+    echo 1. Скачайте файл с: https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+    echo 2. Сохраните 'rustup-init.exe' в ту же папку, где находится этот скрипт.
+    echo 3. Когда скачивание завершится, вернитесь в это окно.
     echo ====================================================================
     echo.
     pause
-    exit /b 0
+    if not exist "rustup-init.exe" (
+        echo Файл 'rustup-init.exe' все еще не найден. Пожалуйста, попробуйте снова.
+        pause
+        exit /b 1
+    )
 )
 
-echo Cargo found. Building the project...
-echo This may take a few minutes.
+:run_installer
+echo.
+echo Запуск установщика Rust...
+start /wait rustup-init.exe --default-toolchain stable -y
+
+echo.
+echo ====================================================================
+echo  Rust был установлен.
+echo  ВАЖНО: Вы должны перезапустить командную строку или терминал,
+echo  чтобы изменения вступили в силу.
+echo.
+echo  Пожалуйста, закройте это окно и запустите скрипт снова.
+echo ====================================================================
+echo.
+pause
+exit /b 0
+
+
+:build_project
+echo Cargo найден. Сборка проекта...
+echo Это может занять несколько минут.
 echo.
 
 :: Navigate to the rust_simulation directory and build
@@ -37,12 +67,12 @@ cd rust_simulation
 cargo build --release
 
 if %errorlevel% neq 0 (
-    echo Build failed. Please check for errors.
+    echo Сборка не удалась. Пожалуйста, проверьте наличие ошибок.
     pause
     exit /b 1
 )
 
-echo Build successful. Packaging the application...
+echo Сборка прошла успешно. Упаковка приложения...
 echo.
 
 :: Navigate back to the root
@@ -60,9 +90,9 @@ xcopy "rust_simulation\data" "dist\windows\data\" /E /I /Y
 
 echo.
 echo ======================================================
-echo  Application packaged successfully!
-echo  The distributable is in the 'dist\windows' directory.
-echo  Launching the application now...
+echo  Приложение успешно упаковано!
+echo  Готовое приложение находится в папке 'dist\windows'.
+echo  Запускаю приложение...
 echo ======================================================
 echo.
 
