@@ -11,3 +11,6 @@ pub struct Hunger {
     pub current: f32,
     pub max: f32,
 }
+
+#[derive(Component)]
+pub struct Damage(pub i32);
