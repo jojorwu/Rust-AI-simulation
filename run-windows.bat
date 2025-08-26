@@ -72,6 +72,16 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+:: Verify that the executable was created
+if not exist "target\release\rust_simulation.exe" (
+    echo.
+    echo ОШИБКА: Сборка вроде бы прошла успешно, но файл 'target\release\rust_simulation.exe' не найден.
+    echo Что-то пошло не так во время компиляции.
+    echo.
+    pause
+    exit /b 1
+)
+
 echo Сборка прошла успешно. Упаковка приложения...
 echo.
 
@@ -87,6 +97,16 @@ copy "rust_simulation\target\release\rust_simulation.exe" "dist\windows\"
 
 :: Copy data files
 xcopy "rust_simulation\data" "dist\windows\data\" /E /I /Y
+
+:: Verify that the executable was copied
+if not exist "dist\windows\rust_simulation.exe" (
+    echo.
+    echo ОШИБКА: Не удалось скопировать 'rust_simulation.exe' в папку 'dist\windows'.
+    echo Пожалуйста, проверьте, есть ли у вас права на запись в этой папке.
+    echo.
+    pause
+    exit /b 1
+)
 
 echo.
 echo ======================================================
