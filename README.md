@@ -32,13 +32,13 @@ cargo run
 
 ### Running on Windows
 
-For Windows users, a convenience script is provided to build and package the application.
+A convenience script `run-windows.bat` is provided in the root of the project to make it easy to run the application on Windows.
 
-1.  Make sure you have Rust and Cargo installed.
-2.  Navigate to the `rust_simulation` directory.
-3.  Run the `run.bat` script by double-clicking it or by running it from the command prompt.
-
-This script will compile the application and create a `dist` folder inside the `rust_simulation` directory. This folder will contain the `rust_simulation.exe` executable and the required `data` folder. You can then run the application from the `dist` folder.
+Simply double-click the `run-windows.bat` file. The script will:
+1.  Check if you have the Rust toolchain installed. If not, it will help you install it.
+2.  Build the application (this might take a few minutes on the first run).
+3.  Package the application into a `dist/windows` folder.
+4.  Launch the application automatically.
 
 ## Project Structure
 
