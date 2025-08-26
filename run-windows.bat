@@ -5,6 +5,12 @@ setlocal enabledelayedexpansion
 :: Main Script Logic
 :: =============================================================================
 
+call :check_font
+if !errorlevel! neq 0 (
+	call :show_font_instructions
+	goto :end
+)
+
 call :initialize
 call :check_rust
 if !errorlevel! neq 0 (
@@ -38,6 +44,56 @@ goto :end
 :: =============================================================================
 :: Subroutines
 :: =============================================================================
+
+:check_font
+	chcp 65001 > nul
+	cls
+	echo ====================================================================
+	echo Font Check / Проверка шрифта
+	echo ====================================================================
+	echo.
+	echo This script uses Unicode characters for messages. Please check if the
+	echo Russian text below displays correctly.
+	echo.
+	echo --> Тест / Test <--
+	echo.
+	echo Can you see the Russian text correctly ^(and not as '?????'^)?
+	echo (Y/N)
+	choice /c YN /n
+	if errorlevel 2 (exit /b 1) else (exit /b 0)
+
+:show_font_instructions
+	cls
+	echo ====================================================================
+	echo Font Configuration Needed / Требуется настройка шрифта
+	echo ====================================================================
+	echo.
+	echo Your console font does not support Unicode characters, which is
+	echo needed for the Russian language prompts.
+	echo.
+	echo Please follow these steps to fix it:
+	echo 1. Right-click the title bar of this window.
+	echo 2. Select 'Properties'.
+	echo 3. Go to the 'Font' tab.
+	echo 4. Choose a modern font like 'Consolas' or 'Lucida Console'.
+	echo    (Do NOT use 'Raster Fonts' or 'Terminal'.)
+	echo 5. Click 'OK' to save.
+	echo 6. Close this window and run the script again.
+	echo.
+	echo ---
+	echo.
+	echo Вашему шрифту в консоли не хватает поддержки Юникода,
+	echo которая необходима для отображения сообщений на русском языке.
+	echo.
+	echo Пожалуйста, следуйте этим инструкциям:
+	echo 1. Нажмите правой кнопкой мыши на заголовок этого окна.
+	echo 2. Выберите 'Свойства'.
+	echo 3. Перейдите на вкладку 'Шрифт'.
+	echo 4. Выберите современный шрифт, например, 'Consolas' или 'Lucida Console'.
+	echo    (Не используйте 'Растровые шрифты' или 'Terminal'.)
+	echo 5. Нажмите 'OK', чтобы сохранить.
+	echo 6. Закройте это окно и запустите скрипт еще раз.
+	exit /b 1
 
 :initialize
     :: Set language, falling back to selection prompt if not configured
