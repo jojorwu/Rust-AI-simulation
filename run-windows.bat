@@ -12,6 +12,8 @@ if !errorlevel! neq 0 (
 )
 
 call :initialize
+call :get_version
+call :ask_clean_build
 call :check_rust
 if !errorlevel! neq 0 (
     call :install_rust
@@ -120,9 +122,33 @@ goto :end
     echo.
     exit /b 0
 
+:get_version
+    set "project_version="
+    for /f "tokens=3 delims== " %%v in ('findstr "version =" "%~dp0rust_simulation\Cargo.toml"') do (
+        set "project_version=%%~v"
+    )
+    set "project_version=!project_version:"=!"
+    if "!project_version!"=="" (
+        set "project_version=unknown"
+    )
+    echo !msg_version_found! !project_version!
+    exit /b 0
+
+:ask_clean_build
+    set "do_clean=0"
+    echo.
+    echo !msg_clean_build_prompt!
+    echo (Y/N)
+    choice /c YN /n
+    if errorlevel 2 (exit /b 0) else (set "do_clean=1")
+    exit /b 0
+
 :set_strings
     if "!lang!"=="EN" (
         set "msg_welcome=Welcome to the Rust Simulation setup script."
+        set "msg_version_found=Project version found:"
+        set "msg_clean_build_prompt=Perform a clean build? (This is slower but can fix some issues)"
+        set "msg_cleaning=Cleaning previous build artifacts..."
         set "msg_cargo_found=Cargo found."
         set "msg_cargo_not_found=Cargo not found. Attempting to download the Rust installer."
         set "msg_download_failed=! AUTOMATIC DOWNLOAD FAILED. Please download the Rust installer manually."
@@ -146,11 +172,14 @@ goto :end
         set "msg_creating_zip=Creating ZIP archive..."
         set "msg_creating_zip_failed=Warning: Failed to create ZIP archive."
         set "msg_packaged_successfully=Application packaged successfully!"
-        set "msg_dist_location=The distributable is in the 'dist/windows' directory and 'dist/rust_simulation_release.zip'."
+        set "msg_dist_location=The distributable is in the 'dist/windows' directory and 'dist/rust_simulation_v!project_version!.zip'."
         set "msg_launching=Launching the application..."
     )
     if "!lang!"=="RU" (
         set "msg_welcome=Добро пожаловать в скрипт установки Rust Simulation."
+        set "msg_version_found=Найдена версия проекта:"
+        set "msg_clean_build_prompt=Выполнить чистую сборку? (Это дольше, но может исправить некоторые проблемы)"
+        set "msg_cleaning=Очистка предыдущих артефактов сборки..."
         set "msg_cargo_found=Cargo найден."
         set "msg_cargo_not_found=Cargo не найден. Попытка загрузить установщик Rust."
         set "msg_download_failed=! АВТОМАТИЧЕСКАЯ ЗАГРУЗКА НЕ УДАЛАСЬ. Пожалуйста, загрузите установщик Rust вручную."
@@ -174,7 +203,7 @@ goto :end
         set "msg_creating_zip=Создание ZIP архива..."
         set "msg_creating_zip_failed=Предупреждение: Не удалось создать ZIP архив."
         set "msg_packaged_successfully=Приложение успешно упаковано!"
-        set "msg_dist_location=Готовое приложение находится в папке 'dist/windows' и в 'dist/rust_simulation_release.zip'."
+        set "msg_dist_location=Готовое приложение находится в папке 'dist/windows' и в 'dist/rust_simulation_v!project_version!.zip'."
         set "msg_launching=Запускаю приложение..."
     )
     exit /b 0
@@ -229,6 +258,10 @@ goto :end
     echo !msg_building!
     echo.
     cd "%~dp0rust_simulation"
+    if "!do_clean!"=="1" (
+        echo !msg_cleaning!
+        cargo clean > nul
+    )
     cargo build --release > nul
     if !errorlevel! neq 0 (
         echo !msg_build_failed!
@@ -295,7 +328,7 @@ goto :end
 
 :create_zip
     echo !msg_creating_zip!
-    set "zip_path=%~dp0dist\rust_simulation_release.zip"
+    set "zip_path=%~dp0dist\rust_simulation_v!project_version!.zip"
     set "source_path=%~dp0dist\windows"
     powershell -Command "Compress-Archive -Path '%source_path%\*' -DestinationPath '%zip_path%' -Force" >nul 2>&1
     if !errorlevel! neq 0 (
