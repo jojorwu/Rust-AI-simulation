@@ -124,10 +124,10 @@ goto :end
 
 :get_version
     set "project_version="
-    for /f "tokens=3 delims== " %%v in ('findstr "version =" "%~dp0rust_simulation\Cargo.toml"') do (
-        set "project_version=%%~v"
+    set "toml_path=%~dp0rust_simulation\Cargo.toml"
+    for /f "usebackq tokens=*" %%i in (`powershell -Command "(Get-Content -Path '%toml_path%' | Select-String -Pattern 'version =').Line -replace 'version = ', '' -replace '\"', ''"`) do (
+        set "project_version=%%i"
     )
-    set "project_version=!project_version:"=!"
     if "!project_version!"=="" (
         set "project_version=unknown"
     )
