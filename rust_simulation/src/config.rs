@@ -13,6 +13,14 @@ pub struct Config {
     pub day_night_cycle: DayNightCycle,
     pub ai: Ai,
     pub performance: PerformanceSettings,
+    pub survival: SurvivalSettings,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct SurvivalSettings {
+    pub hunger_rate: f32,
+    pub starvation_damage: i32,
+    pub meat_hunger_value: f32,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
