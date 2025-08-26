@@ -5,6 +5,11 @@ setlocal enabledelayedexpansion
 :: Main Script Logic
 :: =============================================================================
 
+call :check_powershell
+if !errorlevel! neq 0 (
+	goto :end
+)
+
 call :check_font
 if !errorlevel! neq 0 (
 	call :show_font_instructions
@@ -46,6 +51,20 @@ goto :end
 :: =============================================================================
 :: Subroutines
 :: =============================================================================
+
+:check_powershell
+	where powershell >nul 2>&1
+	if !errorlevel! neq 0 (
+		echo ERROR: PowerShell is not found on this system.
+		echo This script requires PowerShell to download and package files.
+		echo Please install PowerShell or run it from a modern Windows system.
+		echo.
+		echo ОШИБКА: PowerShell не найден в этой системе.
+		echo Этому скрипту требуется PowerShell для загрузки и упаковки файлов.
+		echo Пожалуйста, установите PowerShell или запустите скрипт в современной системе Windows.
+		exit /b 1
+	)
+	exit /b 0
 
 :check_font
 	chcp 65001 > nul
@@ -125,7 +144,7 @@ goto :end
 :get_version
     set "project_version="
     set "toml_path=%~dp0rust_simulation\Cargo.toml"
-    for /f "usebackq tokens=*" %%i in (`powershell -Command "(Get-Content -Path '%toml_path%' | Select-String -Pattern 'version =').Line -replace 'version = ', '' -replace '\"', ''"`) do (
+    for /f "usebackq tokens=*" %%i in (`powershell -Command "(Get-Content -Path '%toml_path%' | Select-String -Pattern 'version\s*=').Line.Split('=')[1].Trim().Trim('\"')"`) do (
         set "project_version=%%i"
     )
     if "!project_version!"=="" (
@@ -257,7 +276,7 @@ goto :end
 :build_project
     echo !msg_building!
     echo.
-    cd "%~dp0rust_simulation"
+    cd "%~dp0rust_simulation" || exit /b 1
     if "!do_clean!"=="1" (
         echo !msg_cleaning!
         cargo clean > nul
@@ -318,7 +337,7 @@ goto :end
 
 :bundle_redist
     echo !msg_bundling_redist!
-    cd "%~dp0dist\windows"
+    cd "%~dp0dist\windows" || exit /b 1
     powershell -Command "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile 'vc_redist.x64.exe'" >nul 2>&1
     if !errorlevel! neq 0 (
         echo !msg_bundling_redist_failed!
@@ -344,8 +363,7 @@ goto :end
     echo  !msg_launching!
     echo ======================================================
     echo.
-    cd "%~dp0dist\windows"
-    start rust_simulation.exe
+    cd "%~dp0dist\windows" && start rust_simulation.exe
     exit /b 0
 
 :end
