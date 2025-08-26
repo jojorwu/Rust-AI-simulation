@@ -41,8 +41,8 @@ fn test_q_table_persistence() {
         goal_map.insert(goal.clone(), 42.0);
 
         // Create a mock Q-table
-        let mut q_table = GoalQTable(Vec::new());
-        q_table.0.push((state.clone(), goal_map));
+        let mut q_table = GoalQTable(HashMap::new());
+        q_table.0.insert(state.clone(), goal_map);
 
         // Create a mock player entity
         app.world.spawn((
@@ -65,8 +65,7 @@ fn test_q_table_persistence() {
         assert_eq!(deserialized.len(), 1);
         assert!(deserialized.contains_key(&1));
         let saved_q_table = deserialized.get(&1).unwrap();
-        let (saved_state, saved_goal_map) = saved_q_table.0.iter().find(|(s, _)| s == &state).unwrap();
-        assert_eq!(saved_state, &state);
+        let saved_goal_map = saved_q_table.0.get(&state).unwrap();
         assert_eq!(saved_goal_map.get(&goal), Some(&42.0));
     });
 

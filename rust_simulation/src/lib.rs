@@ -23,6 +23,7 @@ pub mod recipes;
 pub mod road;
 pub mod road_builder;
 pub mod road_manager;
+pub mod serde_helpers;
 pub mod state;
 pub mod systems;
 pub mod ui;
@@ -115,7 +116,7 @@ pub fn setup_simulation(
         let q_table = q_tables
             .get(&i)
             .cloned()
-            .unwrap_or_else(|| GoalQTable(Vec::new()));
+            .unwrap_or_else(|| GoalQTable(HashMap::new()));
 
         commands.spawn((
             Player::new(i, config.map_settings.width, config.map_settings.height),

@@ -183,7 +183,7 @@ fn choose_goal(
         return Ok(valid_goals[index].clone());
     }
 
-    if let Some((_, q_values)) = goal_q_table.0.iter().find(|(s, _)| s == state) {
+    if let Some(q_values) = goal_q_table.0.get(state) {
         q_values
             .iter()
             .filter(|(g, _)| is_goal_valid(g, known_resources, map))
