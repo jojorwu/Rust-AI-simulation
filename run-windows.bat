@@ -24,6 +24,14 @@ call :package_app
 if !errorlevel! neq 0 (
     goto :end
 )
+call :bundle_redist
+if !errorlevel! neq 0 (
+    goto :end
+)
+call :create_zip
+if !errorlevel! neq 0 (
+    goto :end
+)
 call :launch_app
 goto :end
 
@@ -77,8 +85,12 @@ goto :end
         set "msg_build_verify_failed=ERROR: Build seemed to succeed, but the executable was not found."
         set "msg_packaging=Build successful. Packaging the application..."
         set "msg_copy_failed=ERROR: Failed to copy the executable to the 'dist/windows' folder."
+        set "msg_bundling_redist=Bundling Microsoft VC++ Redistributable..."
+        set "msg_bundling_redist_failed=Warning: Failed to download VC++ Redistributable. The application may not run on PCs without development tools installed."
+        set "msg_creating_zip=Creating ZIP archive..."
+        set "msg_creating_zip_failed=Warning: Failed to create ZIP archive."
         set "msg_packaged_successfully=Application packaged successfully!"
-        set "msg_dist_location=The distributable is in the 'dist/windows' directory."
+        set "msg_dist_location=The distributable is in the 'dist/windows' directory and 'dist/rust_simulation_release.zip'."
         set "msg_launching=Launching the application..."
     )
     if "!lang!"=="RU" (
@@ -101,8 +113,12 @@ goto :end
         set "msg_build_verify_failed=ОШИБКА: Сборка вроде бы прошла успешно, но исполняемый файл не найден."
         set "msg_packaging=Сборка прошла успешно. Упаковка приложения..."
         set "msg_copy_failed=ОШИБКА: Не удалось скопировать исполняемый файл в папку 'dist/windows'."
+        set "msg_bundling_redist=Добавление Microsoft VC++ Redistributable..."
+        set "msg_bundling_redist_failed=Предупреждение: Не удалось скачать VC++ Redistributable. Приложение может не запуститься на ПК без установленных средств разработки."
+        set "msg_creating_zip=Создание ZIP архива..."
+        set "msg_creating_zip_failed=Предупреждение: Не удалось создать ZIP архив."
         set "msg_packaged_successfully=Приложение успешно упаковано!"
-        set "msg_dist_location=Готовое приложение находится в папке 'dist/windows'."
+        set "msg_dist_location=Готовое приложение находится в папке 'dist/windows' и в 'dist/rust_simulation_release.zip'."
         set "msg_launching=Запускаю приложение..."
     )
     exit /b 0
@@ -181,6 +197,53 @@ goto :end
     if not exist "%~dp0dist\windows\rust_simulation.exe" (
         echo !msg_copy_failed!
         exit /b 1
+    )
+    call :create_package_readme
+    exit /b 0
+
+:create_package_readme
+    (
+        echo ==================================
+        echo Rust Simulation - Instructions
+        echo ==================================
+        echo.
+        echo Thank you for downloading Rust Simulation!
+        echo.
+        echo To run the game, simply run the `rust_simulation.exe` file.
+        echo.
+        echo If the game does not start and you see an error about a missing DLL ^(like VCRUNTIME140.dll^), please run the included `vc_redist.x64.exe` installer first. This is the official Microsoft C++ library installer and is required by the game engine.
+        echo.
+        echo ---
+        echo.
+        echo ==================================
+        echo Rust Simulation - Инструкции
+        echo ==================================
+        echo.
+        echo Спасибо за загрузку Rust Simulation!
+        echo.
+        echo Чтобы запустить игру, просто запустите файл `rust_simulation.exe`.
+        echo.
+        echo Если игра не запускается и вы видите ошибку об отсутствующей DLL ^(например, VCRUNTIME140.dll^), пожалуйста, сначала запустите установщик `vc_redist.x64.exe`, который находится в этой же папке. Это официальный установщик библиотек Microsoft C++, который требуется для игрового движка.
+    ) > "%~dp0dist\windows\README.txt"
+    exit /b 0
+
+:bundle_redist
+    echo !msg_bundling_redist!
+    cd "%~dp0dist\windows"
+    powershell -Command "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile 'vc_redist.x64.exe'" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo !msg_bundling_redist_failed!
+    )
+    cd "%~dp0"
+    exit /b 0
+
+:create_zip
+    echo !msg_creating_zip!
+    set "zip_path=%~dp0dist\rust_simulation_release.zip"
+    set "source_path=%~dp0dist\windows"
+    powershell -Command "Compress-Archive -Path '%source_path%\*' -DestinationPath '%zip_path%' -Force" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo !msg_creating_zip_failed!
     )
     exit /b 0
 
