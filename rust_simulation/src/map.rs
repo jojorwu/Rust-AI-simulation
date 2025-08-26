@@ -45,6 +45,12 @@ pub struct MapChunk {
     pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
 }
 
+impl Default for MapChunk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MapChunk {
     pub fn new() -> Self {
         MapChunk {
@@ -188,7 +194,7 @@ impl Map {
 
     pub fn is_walkable(&self, x: u32, y: u32) -> bool {
         self.get_tile(x, y)
-            .map_or(false, |tile| matches!(tile.tile_type, '.' | ',' | 'f'))
+            .is_some_and(|tile| matches!(tile.tile_type, '.' | ',' | 'f'))
     }
 
 }

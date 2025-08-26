@@ -166,7 +166,7 @@ fn update_inventory_panel(
             let items_str = inventory
                 .items
                 .iter()
-                .map(|(item_id, quantity)| format!("- {}: {}", item_id, quantity))
+                .map(|(item_id, quantity)| format!("- {item_id}: {quantity}"))
                 .collect::<Vec<_>>()
                 .join("\n");
             text.sections[0].value = if items_str.is_empty() {

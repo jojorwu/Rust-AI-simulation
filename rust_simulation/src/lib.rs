@@ -158,62 +158,93 @@ fn update_day_night(
 pub fn add_simulation_systems(app: &mut App) {
     app.add_systems(
         FixedUpdate,
-        (
-            update_day_night,
-            systems::visibility_system::visibility_system,
-            q_learning::update_q_table_system,
-            goal_selection::goal_selection_system,
-            actions::craft::craft_action_system,
-            actions::attack::attack_action_system,
-            actions::flee::flee_action_system,
-            actions::explore::explore_action_system,
-        )
-            .chain()
+        (update_day_night, systems::visibility_system::visibility_system)
             .in_set(SimulationSet::Logic),
     );
-
     app.add_systems(
         FixedUpdate,
         (
-            actions::stockpile::stockpile_action_system,
-            systems::pathfinding_system::pathfinding_system,
-            systems::pathfinding_completion_system::pathfinding_completion_system,
-            systems::path_movement_system::path_movement_system,
-            movement::movement_system,
-            find_resource::find_resource_system,
-            gathering::gathering_system,
-            crafting::crafting_system,
+            q_learning::update_q_table_system,
+            goal_selection::goal_selection_system,
         )
-            .chain()
             .in_set(SimulationSet::Logic),
     );
-
+    app.add_systems(
+        FixedUpdate,
+        (
+            actions::craft::craft_action_system,
+            actions::attack::attack_action_system,
+        )
+            .in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        actions::flee::flee_action_system.in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        actions::explore::explore_action_system.in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        actions::stockpile::stockpile_action_system.in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        systems::pathfinding_system::pathfinding_system.in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        (
+            systems::pathfinding_completion_system::pathfinding_completion_system,
+            systems::path_movement_system::path_movement_system,
+        )
+            .in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        (
+            movement::movement_system,
+            find_resource::find_resource_system,
+        )
+            .in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        gathering::gathering_system.in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        crafting::crafting_system.in_set(SimulationSet::Logic),
+    );
     app.add_systems(
         FixedUpdate,
         (
             building_logic::check_resources_system,
             building_logic::check_tile_system,
-            building_logic::build_system,
-            storage::storage_system,
-            combat::combat_system,
-            death::death_system,
         )
-            .chain()
             .in_set(SimulationSet::Logic),
     );
-
+    app.add_systems(
+        FixedUpdate,
+        (building_logic::build_system, storage::storage_system)
+            .in_set(SimulationSet::Logic),
+    );
+    app.add_systems(
+        FixedUpdate,
+        (combat::combat_system, death::death_system)
+            .in_set(SimulationSet::Logic),
+    );
     app.add_systems(
         FixedUpdate,
         (
             goal_selection::goal_planning_system,
             goal_selection::intent_creation_system,
         )
-            .chain()
             .in_set(SimulationSet::Logic),
     );
     app.add_systems(
         FixedUpdate,
-        (map_modification::map_modification_system)
-            .in_set(SimulationSet::Logic),
+        (map_modification::map_modification_system,).in_set(SimulationSet::Logic),
     );
 }

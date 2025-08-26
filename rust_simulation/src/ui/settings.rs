@@ -140,7 +140,7 @@ fn build_ui_for_struct(
             let new_path = if path.is_empty() {
                 field_name.to_string()
             } else {
-                format!("{}.{}", path, field_name)
+                format!("{path}.{field_name}")
             };
 
             parent
@@ -154,7 +154,7 @@ fn build_ui_for_struct(
                 })
                 .with_children(|parent| {
                     parent.spawn(TextBundle::from_section(
-                        format!("{}:", field_name),
+                        format!("{field_name}:"),
                         TextStyle {
                             font_size: 20.0,
                             color: TEXT_COLOR,

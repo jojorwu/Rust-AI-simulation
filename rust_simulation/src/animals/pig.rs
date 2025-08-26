@@ -10,29 +10,21 @@ pub struct Pig;
 #[derive(Component)]
 pub struct Fleeing;
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct SimpleAi {
     pub move_timer: u32,
     pub direction: (i32, i32),
 }
 
-impl Default for SimpleAi {
-    fn default() -> Self {
-        Self {
-            move_timer: 0,
-            direction: (0, 0),
-        }
-    }
-}
-
 // --- Systems ---
+
+type WanderingPigQuery<'w, 's> =
+    Query<'w, 's, (&'s mut SimpleAi, &'s mut Velocity), (With<Pig>, Without<Fleeing>)>;
 
 const WANDER_TIMER: u32 = 60; // Change direction every 60 ticks
 const FLEE_TIMER: u32 = 120; // Flee for 120 ticks
 
-pub fn wandering_system(
-    mut query: Query<(&mut SimpleAi, &mut Velocity), (With<Pig>, Without<Fleeing>)>,
-) {
+pub fn wandering_system(mut query: WanderingPigQuery) {
     let mut rng = rand::rng();
     for (mut ai, mut velocity) in query.iter_mut() {
         if ai.move_timer == 0 {

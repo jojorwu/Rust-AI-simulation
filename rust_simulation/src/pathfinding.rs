@@ -57,7 +57,7 @@ pub fn find_path(
                 current = node.parent;
             }
             path.reverse();
-            debug!("Path found from {:?} to {:?}: {:?}", start, goal, path);
+            debug!("Path found from {start:?} to {goal:?}: {path:?}");
             return Some(path);
         }
 
@@ -85,7 +85,7 @@ pub fn find_path(
         }
     }
 
-    debug!("No path found from {:?} to {:?}", start, goal);
+    debug!("No path found from {start:?} to {goal:?}");
     None // No path found
 }
 

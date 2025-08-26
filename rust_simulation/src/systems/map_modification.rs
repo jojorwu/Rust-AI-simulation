@@ -22,7 +22,7 @@ pub fn map_modification_system(
                 let mut chunk = match chunk_lock {
                     Ok(guard) => guard,
                     Err(poisoned) => {
-                        error!("Mutex was poisoned. Recovering. Error: {:?}", poisoned);
+                        error!("Mutex was poisoned. Recovering. Error: {poisoned:?}");
                         poisoned.into_inner()
                     }
                 };

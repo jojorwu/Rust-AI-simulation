@@ -36,7 +36,7 @@ fn save_q_tables(query: &Query<(&Player, &GoalQTable)>) -> Result<(), anyhow::Er
 pub fn save_q_tables_on_exit(query: Query<(&Player, &GoalQTable)>) {
     info!("Saving Q-tables...");
     if let Err(e) = save_q_tables(&query) {
-        error!("Failed to save Q-tables: {}", e);
+        error!("Failed to save Q-tables: {e}");
     } else {
         info!("Q-tables saved successfully to q_tables.json");
     }

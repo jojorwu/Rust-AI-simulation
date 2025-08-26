@@ -76,16 +76,16 @@ fn main() -> Result<(), SimulationError> {
 
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::log::LogPlugin::default());
-    app.add_plugins(TransformPlugin::default());
-    app.add_plugins(DiagnosticsPlugin::default());
-    app.add_plugins(InputPlugin::default());
+    app.add_plugins(TransformPlugin);
+    app.add_plugins(DiagnosticsPlugin);
+    app.add_plugins(InputPlugin);
     app.add_plugins(ScheduleRunnerPlugin::default());
     app.add_plugins(AssetPlugin::default());
     app.add_plugins(RenderPlugin::default());
-    app.add_plugins(CorePipelinePlugin::default());
-    app.add_plugins(SpritePlugin::default());
-    app.add_plugins(TextPlugin::default());
-    app.add_plugins(UiPlugin::default());
+    app.add_plugins(CorePipelinePlugin);
+    app.add_plugins(SpritePlugin);
+    app.add_plugins(TextPlugin);
+    app.add_plugins(UiPlugin);
     app.add_plugins(PbrPlugin::default());
     app.add_plugins(rust_simulation::graphics::GraphicsPlugin);
     app.add_plugins(MainMenuPlugin);

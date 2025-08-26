@@ -5,8 +5,8 @@ use std::collections::HashMap;
 pub mod q_table_map_format {
     use super::*;
 
-    pub fn serialize<'a, S>(
-        map: &'a HashMap<HighLevelState, HashMap<Goal, f64>>,
+    pub fn serialize<S>(
+        map: &HashMap<HighLevelState, HashMap<Goal, f64>>,
         serializer: S,
     ) -> Result<S::Ok, S::Error>
     where

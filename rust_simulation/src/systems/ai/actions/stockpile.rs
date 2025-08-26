@@ -8,7 +8,12 @@ use bevy_ecs::prelude::*;
 pub fn stockpile_action_system(
     mut commands: Commands,
     mut query: Query<
-        (Entity, &mut BrainComponent, &Position, &IntendsToStockpile),
+        (
+            Entity,
+            &mut BrainComponent,
+            &Position,
+            &IntendsToStockpile,
+        ),
         (Without<CurrentPath>, Without<PathRequest>),
     >,
     chest_query: Query<(Entity, &Position, &Chest)>,

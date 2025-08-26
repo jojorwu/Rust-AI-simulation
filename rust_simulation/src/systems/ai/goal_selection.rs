@@ -15,17 +15,37 @@ use log::info;
 use rand::Rng;
 use std::collections::HashMap;
 
-pub fn goal_selection_system(
-    mut query: Query<(
+// Type alias to simplify the query type
+type GoalSelectionQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
         Entity,
-        &mut BrainComponent,
-        &Health,
-        &Hunger,
-        &Inventory,
-        &KnownResources,
-        &PlayerMemories,
-        &GoalQTable,
-    )>,
+        &'static mut BrainComponent,
+        &'static Health,
+        &'static Hunger,
+        &'static Inventory,
+        &'static KnownResources,
+        &'static PlayerMemories,
+        &'static GoalQTable,
+    ),
+>;
+
+// Struct to hold the arguments for choose_goal, solving the `too_many_arguments` lint.
+struct ChooseGoalArgs<'a, R: Rng + ?Sized> {
+    state: &'a HighLevelState,
+    brain: &'a BrainComponent,
+    inventory: &'a Inventory,
+    known_resources: &'a KnownResources,
+    goal_q_table: &'a GoalQTable,
+    is_day: bool,
+    config: &'a Config,
+    map: &'a Map,
+    rng: &'a mut R,
+}
+
+pub fn goal_selection_system(
+    mut query: GoalSelectionQuery,
     is_day: Res<IsDay>,
     config: Res<Config>,
     map: Res<Map>,
@@ -36,21 +56,23 @@ pub fn goal_selection_system(
                 let high_level_state =
                     get_high_level_state(health, hunger, inventory, player_memories, is_day.0);
 
-                let mut rng = rand::rng();
-                if let Ok(new_high_level_goal) = choose_goal(
-                    &high_level_state,
-                    &brain,
+                let mut rng = rand::thread_rng();
+                let mut args = ChooseGoalArgs {
+                    state: &high_level_state,
+                    brain: &brain,
                     inventory,
                     known_resources,
                     goal_q_table,
-                    is_day.0,
-                    &config,
-                    &map,
-                    &mut rng,
-                ) {
+                    is_day: is_day.0,
+                    config: &config,
+                    map: &map,
+                    rng: &mut rng,
+                };
+
+                if let Ok(new_high_level_goal) = choose_goal(&mut args) {
                     brain.current_goal = Some(new_high_level_goal);
                     if let Some(goal) = &brain.current_goal {
-                        info!("Entity {:?} selected new goal: {:?}", entity, goal);
+                        info!("Entity {entity:?} selected new goal: {goal:?}");
                         brain.goal_commitment_ticks = config.ai.goals.commitment_ticks;
                     }
                 }
@@ -143,54 +165,45 @@ fn get_high_level_state(
 }
 
 /// Chooses a high-level goal for the agent based on the current state.
-fn choose_goal(
-    state: &HighLevelState,
-    brain: &BrainComponent,
-    inventory: &Inventory,
-    known_resources: &KnownResources,
-    goal_q_table: &GoalQTable,
-    is_night: bool,
-    config: &Config,
-    map: &Map,
-    rng: &mut impl Rng,
-) -> Result<Goal, SimulationError> {
+fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, SimulationError> {
     const FLEE_HEALTH_THRESHOLD: u32 = 25;
-    if state.health_level < FLEE_HEALTH_THRESHOLD {
+    if args.state.health_level < FLEE_HEALTH_THRESHOLD {
         return Ok(Goal::Flee);
     }
 
     const HUNGER_THRESHOLD: u32 = 50;
-    if state.hunger_level < HUNGER_THRESHOLD {
-        if inventory.has_item("meat", 1) {
+    if args.state.hunger_level < HUNGER_THRESHOLD {
+        if args.inventory.has_item("meat", 1) {
             return Ok(Goal::EatFood("meat".to_string()));
         } else {
             return Ok(Goal::GatherResource("pig".to_string()));
         }
     }
 
-    let valid_goals: Vec<_> = brain
+    let valid_goals: Vec<_> = args
+        .brain
         .goals
         .iter()
-        .filter(|g| is_goal_valid(g, known_resources, map))
+        .filter(|g| is_goal_valid(g, args.known_resources, args.map))
         .cloned()
         .collect();
     if valid_goals.is_empty() {
         return Ok(Goal::Flee);
     }
 
-    if rng.random::<f64>() < brain.epsilon {
-        let index = rng.random_range(0..valid_goals.len());
+    if args.rng.r#gen::<f64>() < args.brain.epsilon {
+        let index = args.rng.gen_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
-    if let Some(q_values) = goal_q_table.0.get(state) {
+    if let Some(q_values) = args.goal_q_table.0.get(args.state) {
         q_values
             .iter()
-            .filter(|(g, _)| is_goal_valid(g, known_resources, map))
+            .filter(|(g, _)| is_goal_valid(g, args.known_resources, args.map))
             .map(|(goal, q_value)| {
-                let effective_q_value = if is_night {
+                let effective_q_value = if !args.is_day {
                     if let Goal::Build(_) = goal {
-                        *q_value + config.ai.goals.build_bonus
+                        *q_value + args.config.ai.goals.build_bonus
                     } else {
                         *q_value
                     }
@@ -203,11 +216,11 @@ fn choose_goal(
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
-                let index = rng.random_range(0..valid_goals.len());
+                let index = args.rng.gen_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
-        let index = rng.random_range(0..valid_goals.len());
+        let index = args.rng.gen_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
 }
@@ -224,7 +237,7 @@ fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bo
             known_resources
                 .0
                 .get(resource_name)
-                .map_or(false, |s| !s.is_empty())
+                .is_some_and(|s| !s.is_empty())
         }
         _ => true,
     }
