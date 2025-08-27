@@ -151,7 +151,7 @@ goto :end
 :get_version
     set "project_version="
     set "toml_path=%~dp0rust_simulation\Cargo.toml"
-    for /f "usebackq tokens=*" %%i in (`powershell -Command "(Get-Content -Path '%toml_path%' | Select-String -Pattern 'version\s*=').Line.Split('=')[1].Trim().Trim('\"')"`) do (
+    for /f "usebackq tokens=*" %%i in (`powershell -Command "$in_package_section = $false; foreach ($line in (Get-Content -Path '%toml_path%')) { $trimmed_line = $line.Trim(); if ($trimmed_line -eq '[package]') { $in_package_section = $true; continue; }; if ($trimmed_line.StartsWith('[') -and $trimmed_line.EndsWith(']')) { $in_package_section = $false; }; if ($in_package_section -and $trimmed_line -match '^version\s*=\s*') { $version = ($trimmed_line.Split('=')[1]).Trim().Trim('\"'); Write-Output $version; break; } } "`) do (
         set "project_version=%%i"
     )
     if "!project_version!"=="" (
