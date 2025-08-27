@@ -193,8 +193,50 @@ get_project_version() {
     if [ ! -f "$PROJECT_DIR/Cargo.toml" ]; then
         error "Cargo.toml not found in $PROJECT_DIR" "Cargo.toml не найден в $PROJECT_DIR"
     fi
-    local version_line=$(grep "^version" "$PROJECT_DIR/Cargo.toml" | head -n 1)
-    PROJECT_VERSION=$(echo "$version_line" | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
+
+    local version=$(awk '
+        BEGIN { in_package = 0 }
+        /^\s*\[package\]\s*$/ { in_package = 1; next }
+        /^\s*\[.*\]\s*$/ { in_package = 0 }
+        in_package && /^\s*version\s*=/ {
+            match($0, /"(.*)"/);
+            if (RSTART) {
+                print substr($0, RSTART+1, RLENGTH-2);
+                exit;
+            }
+        }
+    ' "$PROJECT_DIR/Cargo.toml")
+
+    if [ -n "$version" ]; then
+        PROJECT_VERSION="$version"
+    else
+        PROJECT_VERSION="unknown"
+        warn "Could not reliably determine project version. Defaulting to 'unknown'." "Не удалось достоверно определить версию проекта. Установлено значение 'unknown'."
+    fi
+}
+
+check_existing_build() {
+    if [ -f "$DIST_PATH/$PACKAGE_NAME" ]; then
+        info "An existing build was found." "Найдена существующая сборка."
+
+        local prompt_en="What would you like to do?
+  1. Launch the existing version
+  2. Rebuild the application
+> "
+        local prompt_ru="Что вы хотите сделать?
+  1. Запустить существующую версию
+  2. Пересобрать приложение
+> "
+        local prompt_text="$prompt_en"
+        [ "$LANG" == "ru" ] && prompt_text="$prompt_ru"
+
+        read -p "$prompt_text" -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[1]$ ]]; then
+            launch_app
+            exit 0
+        fi
+    fi
 }
 
 ask_clean_build() {
@@ -304,6 +346,8 @@ main() {
 
     info "Rust Simulation Linux Launcher" "Лончер Rust Simulation для Linux"
     echo "===================================="
+
+    check_existing_build
 
     check_dependencies
     get_project_version
