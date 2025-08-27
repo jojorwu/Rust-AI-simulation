@@ -223,15 +223,48 @@ goto :end
 
 :package_app
     echo !msg_packaging!
-    if not exist "%~dp0dist" mkdir "%~dp0dist"
-    if not exist "%~dp0dist\windows" mkdir "%~dp0dist\windows"
+
+    if not exist "%~dp0dist" (
+        mkdir "%~dp0dist"
+        if !errorlevel! neq 0 (
+            echo ERROR: Failed to create 'dist' directory.
+            exit /b 1
+        )
+    )
+
+    if not exist "%~dp0dist\windows" (
+        mkdir "%~dp0dist\windows"
+        if !errorlevel! neq 0 (
+            echo ERROR: Failed to create 'dist\windows' directory.
+            exit /b 1
+        )
+    )
+
+    echo   - Copying executable...
     copy "%~dp0rust_simulation\target\release\rust_simulation.exe" "%~dp0dist\windows\" > nul
-    xcopy "%~dp0rust_simulation\data" "%~dp0dist\windows\data\" /E /I /Y /Q
+    if !errorlevel! neq 0 (
+        echo ERROR: Failed to copy the main executable. Was the build successful?
+        exit /b 1
+    )
+
+    echo   - Copying data files...
+    xcopy "%~dp0rust_simulation\data" "%~dp0dist\windows\data\" /E /I /Y /Q > nul
+    if !errorlevel! neq 0 (
+        echo ERROR: Failed to copy the 'data' directory.
+        exit /b 1
+    )
+
     if not exist "%~dp0dist\windows\rust_simulation.exe" (
         echo !msg_copy_failed!
         exit /b 1
     )
+
     call :create_package_readme
+    if !errorlevel! neq 0 (
+        echo ERROR: Failed to create the package README.txt file.
+        exit /b 1
+    )
+
     exit /b 0
 
 :create_package_readme

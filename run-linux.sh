@@ -221,13 +221,28 @@ EOL
 
 package_release() {
     info "Packaging release..."
-    mkdir -p "$DIST_PATH"
 
-    info "Copying files..."
+    mkdir -p "$DIST_PATH"
+    if [ ! -d "$DIST_PATH" ]; then
+        error "Failed to create distribution directory at '$DIST_PATH'. Check permissions."
+    fi
+
+    info "  - Copying executable..."
     cp "$PROJECT_DIR/target/release/$PACKAGE_NAME" "$DIST_PATH/"
+    if [ ! -f "$DIST_PATH/$PACKAGE_NAME" ]; then
+        error "Failed to copy executable to '$DIST_PATH'. Was the build successful?"
+    fi
+
+    info "  - Copying data files..."
     cp -r "$PROJECT_DIR/data" "$DIST_PATH/data"
+    if [ ! -d "$DIST_PATH/data" ]; then
+        error "Failed to copy data directory to '$DIST_PATH'."
+    fi
 
     create_package_readme "$DIST_PATH"
+    if [ ! -f "$DIST_PATH/README.txt" ]; then
+        warn "Failed to create package README.txt."
+    fi
 
     info "Creating .tar.gz archive..."
     local archive_name="${PACKAGE_NAME}_v${PROJECT_VERSION}_linux.tar.gz"
