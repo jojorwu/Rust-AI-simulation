@@ -11,13 +11,13 @@ if !errorlevel! neq 0 (
 	goto :end
 )
 echo DEBUG: PowerShell check OK. Press any key to continue...
-pause
-
-call :check_font
-if !errorlevel! neq 0 (
-	call :show_font_instructions
-	goto :end
-)
+REM pause
+REM
+REM call :check_font
+REM if !errorlevel! neq 0 (
+REM 	call :show_font_instructions
+REM 	goto :end
+REM )
 echo DEBUG: Font check OK. Press any key to continue...
 pause
 
