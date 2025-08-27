@@ -4,21 +4,41 @@ setlocal enabledelayedexpansion
 :: =============================================================================
 :: Main Script Logic
 :: =============================================================================
-
+echo DEBUG: Script starting. Press any key to continue...
+pause
 call :check_powershell
 if !errorlevel! neq 0 (
 	goto :end
 )
+echo DEBUG: PowerShell check OK. Press any key to continue...
+pause
 
 call :check_font
 if !errorlevel! neq 0 (
 	call :show_font_instructions
 	goto :end
 )
+echo DEBUG: Font check OK. Press any key to continue...
+pause
 
 call :initialize
+echo DEBUG: Initialize OK. Press any key to continue...
+pause
 call :get_version
+echo DEBUG: Get version OK. Press any key to continue...
+pause
+
+call :check_existing_build
+if "!rebuild!"=="0" (
+    call :launch_app
+    goto :end
+)
+echo DEBUG: Check existing build OK. Press any key to continue...
+pause
+
 call :ask_clean_build
+echo DEBUG: Ask clean build OK. Press any key to continue...
+pause
 call :check_rust
 if !errorlevel! neq 0 (
     call :install_rust
@@ -29,22 +49,32 @@ if !errorlevel! neq 0 (
     call :post_rust_install_message
     goto :end
 )
+echo DEBUG: Rust check OK. Press any key to continue...
+pause
 call :build_project
 if !errorlevel! neq 0 (
     goto :end
 )
+echo DEBUG: Build project OK. Press any key to continue...
+pause
 call :package_app
 if !errorlevel! neq 0 (
     goto :end
 )
+echo DEBUG: Package app OK. Press any key to continue...
+pause
 call :bundle_redist
 if !errorlevel! neq 0 (
     goto :end
 )
+echo DEBUG: Bundle redist OK. Press any key to continue...
+pause
 call :create_zip
 if !errorlevel! neq 0 (
     goto :end
 )
+echo DEBUG: Create zip OK. Press any key to continue...
+pause
 call :launch_app
 goto :end
 
@@ -144,13 +174,29 @@ goto :end
 :get_version
     set "project_version="
     set "toml_path=%~dp0rust_simulation\Cargo.toml"
-    for /f "usebackq tokens=*" %%i in (`powershell -Command "(Get-Content -Path '%toml_path%' | Select-String -Pattern 'version\s*=').Line.Split('=')[1].Trim().Trim('\"')"`) do (
+    for /f "usebackq tokens=*" %%i in (`powershell -Command "$in_package_section = $false; foreach ($line in (Get-Content -Path '%toml_path%')) { $trimmed_line = $line.Trim(); if ($trimmed_line -eq '[package]') { $in_package_section = $true; continue; }; if ($trimmed_line.StartsWith('[') -and $trimmed_line.EndsWith(']')) { $in_package_section = $false; }; if ($in_package_section -and $trimmed_line -match '^version\s*=\s*') { $version = ($trimmed_line.Split('=')[1]).Trim().Trim('\"'); Write-Output $version; break; } } "`) do (
         set "project_version=%%i"
     )
     if "!project_version!"=="" (
         set "project_version=unknown"
     )
     echo !msg_version_found! !project_version!
+    exit /b 0
+
+:check_existing_build
+    set "rebuild=1"
+    if exist "%~dp0dist\windows\rust_simulation.exe" (
+        echo.
+        echo !msg_existing_build_found!
+        echo  1. Launch the existing version
+        echo  2. Rebuild the application
+        choice /c 12 /n /m "> "
+        if errorlevel 2 (
+            set "rebuild=1"
+        ) else (
+            set "rebuild=0"
+        )
+    )
     exit /b 0
 
 :ask_clean_build
@@ -193,6 +239,7 @@ goto :end
         set "msg_packaged_successfully=Application packaged successfully!"
         set "msg_dist_location=The distributable is in the 'dist/windows' directory and 'dist/rust_simulation_v!project_version!.zip'."
         set "msg_launching=Launching the application..."
+        set "msg_existing_build_found=An existing build was found. What would you like to do?"
     )
     if "!lang!"=="RU" (
         set "msg_welcome=Добро пожаловать в скрипт установки Rust Simulation."
@@ -224,6 +271,7 @@ goto :end
         set "msg_packaged_successfully=Приложение успешно упаковано!"
         set "msg_dist_location=Готовое приложение находится в папке 'dist/windows' и в 'dist/rust_simulation_v!project_version!.zip'."
         set "msg_launching=Запускаю приложение..."
+        set "msg_existing_build_found=Найдена существующая сборка. Что вы хотите сделать?"
     )
     exit /b 0
 
@@ -239,11 +287,18 @@ goto :end
 :install_rust
     echo !msg_cargo_not_found!
     echo.
-    powershell -Command "Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile '%~dp0rustup-init.exe'" >nul 2>&1
+    set "download_log=%~dp0rustup_download.log"
+    if exist "!download_log!" del "!download_log!" >nul 2>&1
+
+    powershell -Command "Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile '%~dp0rustup-init.exe'" > "!download_log!" 2>&1
     if !errorlevel! neq 0 (
         echo.
         echo ====================================================================
         echo !msg_download_failed!
+        echo.
+        echo --- PowerShell Log ---
+        type "!download_log!"
+        echo ----------------------
         echo.
         echo !msg_download_link!
         echo !msg_download_save!
@@ -256,6 +311,7 @@ goto :end
             exit /b 1
         )
     )
+    if exist "!download_log!" del "!download_log!" >nul 2>&1
     echo !msg_starting_installer!
     start /wait "%~dp0rustup-init.exe" --default-toolchain stable -y
     if exist "%~dp0rustup-init.exe" (
@@ -276,24 +332,38 @@ goto :end
 :build_project
     echo !msg_building!
     echo.
+    set "build_log=%~dp0build.log"
+    if exist "!build_log!" del "!build_log!" >nul 2>&1
+
     cd "%~dp0rust_simulation" || exit /b 1
     if "!do_clean!"=="1" (
         echo !msg_cleaning!
         cargo clean > nul
     )
-    cargo build --release > nul
+
+    cargo build --release > "!build_log!" 2>&1
     if !errorlevel! neq 0 (
+        echo.
+        echo ====================================================================
         echo !msg_build_failed!
         echo !msg_build_failed_help!
+        echo ====================================================================
+        echo.
+        echo Build log:
+        type "!build_log!"
+        echo.
         cd "%~dp0"
         exit /b 1
     )
+
     if not exist "target\release\rust_simulation.exe" (
         echo !msg_build_verify_failed!
         cd "%~dp0"
         exit /b 1
     )
+
     cd "%~dp0"
+    if exist "!build_log!" del "!build_log!" >nul 2>&1
     exit /b 0
 
 :package_app
@@ -337,22 +407,35 @@ goto :end
 
 :bundle_redist
     echo !msg_bundling_redist!
+    set "redist_log=%~dp0redist_download.log"
+    if exist "!redist_log!" del "!redist_log!" >nul 2>&1
+
     cd "%~dp0dist\windows" || exit /b 1
-    powershell -Command "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile 'vc_redist.x64.exe'" >nul 2>&1
+    powershell -Command "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile 'vc_redist.x64.exe'" > "!redist_log!" 2>&1
     if !errorlevel! neq 0 (
         echo !msg_bundling_redist_failed!
+        echo.
+        echo Download log:
+        type "!redist_log!"
     )
     cd "%~dp0"
+    if exist "!redist_log!" del "!redist_log!" >nul 2>&1
     exit /b 0
 
 :create_zip
     echo !msg_creating_zip!
+    set "zip_log=%~dp0zip.log"
+    if exist "!zip_log!" del "!zip_log!" >nul 2>&1
     set "zip_path=%~dp0dist\rust_simulation_v!project_version!.zip"
     set "source_path=%~dp0dist\windows"
-    powershell -Command "Compress-Archive -Path '%source_path%\*' -DestinationPath '%zip_path%' -Force" >nul 2>&1
+    powershell -Command "Compress-Archive -Path '%source_path%\*' -DestinationPath '%zip_path%' -Force" > "!zip_log!" 2>&1
     if !errorlevel! neq 0 (
         echo !msg_creating_zip_failed!
+        echo.
+        echo ZIP log:
+        type "!zip_log!"
     )
+    if exist "!zip_log!" del "!zip_log!" >nul 2>&1
     exit /b 0
 
 :launch_app
