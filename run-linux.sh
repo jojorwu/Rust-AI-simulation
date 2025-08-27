@@ -13,10 +13,8 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 PROJECT_DIR="$SCRIPT_DIR/rust_simulation"
 DIST_DIR="$SCRIPT_DIR/dist"
 DIST_PATH="$DIST_DIR/linux"
-LANG_CONFIG_FILE="$SCRIPT_DIR/.lang.cfg"
 
 # --- State Variables ---
-LANG="en"
 DO_CLEAN=0
 PROJECT_VERSION="unknown"
 PACKAGE_NAME="rust_simulation"
@@ -39,108 +37,62 @@ C_BLUE='\033[0;34m'
 
 # --- Logging Helpers ---
 info() {
-    local msg_en="$1"
-    local msg_ru="$2"
-    if [ "$LANG" == "ru" ] && [ -n "$msg_ru" ]; then
-        echo -e "${C_BLUE}INFO:${C_RESET} $msg_ru"
-    else
-        echo -e "${C_BLUE}INFO:${C_RESET} $msg_en"
-    fi
+    echo -e "${C_BLUE}INFO:${C_RESET} $1"
 }
 warn() {
-    local msg_en="$1"
-    local msg_ru="$2"
-    if [ "$LANG" == "ru" ] && [ -n "$msg_ru" ]; then
-        echo -e "${C_YELLOW}WARN:${C_RESET} $msg_ru"
-    else
-        echo -e "${C_YELLOW}WARN:${C_RESET} $msg_en"
-    fi
+    echo -e "${C_YELLOW}WARN:${C_RESET} $1"
 }
 error() {
-    local msg_en="$1"
-    local msg_ru="$2"
-    if [ "$LANG" == "ru" ] && [ -n "$msg_ru" ]; then
-        echo -e "${C_RED}ERROR:${C_RESET} $msg_ru" >&2
-    else
-        echo -e "${C_RED}ERROR:${C_RESET} $msg_en" >&2
-    fi
+    echo -e "${C_RED}ERROR:${C_RESET} $1" >&2
     exit 1
 }
 
 # --- Core Logic Functions ---
 
-select_language() {
-    if [ -f "$LANG_CONFIG_FILE" ]; then
-        LANG=$(cat "$LANG_CONFIG_FILE")
-        return
-    fi
-
-    clear
-    echo "Choose your language / Выберите ваш язык:"
-    echo " 1. English"
-    echo " 2. Русский"
-    read -p "> " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[2]$ ]]; then
-        LANG="ru"
-    else
-        LANG="en" # Default to English
-    fi
-    echo "$LANG" > "$LANG_CONFIG_FILE"
-}
-
 check_dependencies() {
-    info "Checking for required command-line tools..." "Проверка необходимых инструментов..."
+    info "Checking for required command-line tools..."
     local missing_tool=0
-    for tool in curl grep sed tar; do
+    for tool in curl grep sed tar awk; do
         if ! command -v "$tool" &> /dev/null; then
-            warn "Command '$tool' is not found, but is required." "Команда '$tool' не найдена, но она необходима."
+            warn "Command '$tool' is not found, but is required."
             missing_tool=1
         fi
     done
     if [ "$missing_tool" -eq 1 ]; then
-        error "Please install the missing tools and run the script again." "Пожалуйста, установите недостающие инструменты и запустите скрипт снова."
+        error "Please install the missing tools and run the script again."
     fi
 }
 
 install_rust() {
     if command -v "cargo" &> /dev/null; then
-        info "Rust is already installed." "Rust уже установлен."
+        info "Rust is already installed."
         return
     fi
 
-    warn "Rust (cargo) not found." "Rust (cargo) не найден."
-
-    local prompt_en="Would you like to install it now using the official rustup script? (y/N) "
-    local prompt_ru="Хотите установить его сейчас с помощью официального скрипта rustup? (y/N) "
-    local prompt_text=$prompt_en
-    [ "$LANG" == "ru" ] && prompt_text=$prompt_ru
-
-    read -p "$prompt_text" -n 1 -r
+    warn "Rust (cargo) not found."
+    read -p "Would you like to install it now using the official rustup script? (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        info "Downloading and running rustup-init.sh..." "Загрузка и запуск rustup-init.sh..."
+        info "Downloading and running rustup-init.sh..."
         if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; then
-            error "Rust installation failed." "Установка Rust не удалась."
+            error "Rust installation failed."
         fi
         source "$HOME/.cargo/env"
-        info "Rust installed successfully." "Rust успешно установлен."
-        warn "Please restart your terminal after this script finishes for the changes to take full effect." "Пожалуйста, перезапустите терминал после завершения этого скрипта, чтобы изменения вступили в силу."
+        info "Rust installed successfully."
+        warn "Please restart your terminal after this script finishes for the changes to take full effect."
     else
-        error "Rust installation skipped. Cannot proceed." "Установка Rust пропущена. Невозможно продолжить."
+        error "Rust installation skipped. Cannot proceed."
     fi
 }
 
 install_system_deps() {
-    info "Checking for system dependencies..." "Проверка системных зависимостей..."
+    info "Checking for system dependencies..."
 
-    local os_id=""
-    if [ -f /etc/os-release ]; then
-        os_id=$(grep -oP '(?<=^ID=).+' /etc/os-release | tr -d '"')
-    else
-        warn "Could not determine Linux distribution. Cannot automatically check system dependencies." "Не удалось определить дистрибутив Linux. Невозможно проверить системные зависимости."
+    if [ ! -f /etc/os-release ]; then
+        warn "Could not determine Linux distribution. Cannot automatically check system dependencies."
         return
     fi
+    local os_id=$(grep -oP '(?<=^ID=).+' /etc/os-release | tr -d '"')
 
     local pkgs_needed=""
     local pkgs_to_install=""
@@ -155,7 +107,7 @@ install_system_deps() {
         "arch")
             pkgs_needed=$DEPS_ARCH; check_cmd="pacman -Qs"; install_cmd="sudo pacman -S --noconfirm" ;;
         *)
-            warn "Unsupported Linux distribution '$os_id'. Cannot check system dependencies." "Неподдерживаемый дистрибутив Linux '$os_id'. Невозможно проверить системные зависимости."
+            warn "Unsupported Linux distribution '$os_id'. Cannot check system dependencies."
             return ;;
     esac
 
@@ -166,32 +118,26 @@ install_system_deps() {
     done
 
     if [ -n "$pkgs_to_install" ]; then
-        warn "The following system dependencies are required:$pkgs_to_install" "Требуются следующие системные зависимости:$pkgs_to_install"
-
-        local prompt_en="Would you like to install them now? (This will use sudo) (y/N) "
-        local prompt_ru="Хотите установить их сейчас? (Будет использовано sudo) (y/N) "
-        local prompt_text=$prompt_en
-        [ "$LANG" == "ru" ] && prompt_text=$prompt_ru
-
-        read -p "$prompt_text" -n 1 -r
+        warn "The following system dependencies are required:$pkgs_to_install"
+        read -p "Would you like to install them now? (This will use sudo) (y/N) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             if ! $install_cmd $pkgs_to_install; then
-                error "Failed to install system dependencies. Please try to install them manually." "Не удалось установить системные зависимости. Пожалуйста, попробуйте установить их вручную."
+                error "Failed to install system dependencies. Please try to install them manually."
             fi
-            info "System dependencies installed successfully." "Системные зависимости успешно установлены."
+            info "System dependencies installed successfully."
         else
-            warn "Installation of system dependencies skipped. The build may fail." "Установка системных зависимостей пропущена. Сборка может завершиться неудачно."
+            warn "Installation of system dependencies skipped. The build may fail."
         fi
     else
-        info "All required system dependencies are already installed." "Все необходимые системные зависимости уже установлены."
+        info "All required system dependencies are already installed."
     fi
 }
 
 get_project_version() {
-    info "Getting project version..." "Получение версии проекта..."
+    info "Getting project version..."
     if [ ! -f "$PROJECT_DIR/Cargo.toml" ]; then
-        error "Cargo.toml not found in $PROJECT_DIR" "Cargo.toml не найден в $PROJECT_DIR"
+        error "Cargo.toml not found in $PROJECT_DIR"
     fi
 
     local version=$(awk '
@@ -211,26 +157,14 @@ get_project_version() {
         PROJECT_VERSION="$version"
     else
         PROJECT_VERSION="unknown"
-        warn "Could not reliably determine project version. Defaulting to 'unknown'." "Не удалось достоверно определить версию проекта. Установлено значение 'unknown'."
+        warn "Could not reliably determine project version. Defaulting to 'unknown'."
     fi
 }
 
 check_existing_build() {
     if [ -f "$DIST_PATH/$PACKAGE_NAME" ]; then
-        info "An existing build was found." "Найдена существующая сборка."
-
-        local prompt_en="What would you like to do?
-  1. Launch the existing version
-  2. Rebuild the application
-> "
-        local prompt_ru="Что вы хотите сделать?
-  1. Запустить существующую версию
-  2. Пересобрать приложение
-> "
-        local prompt_text="$prompt_en"
-        [ "$LANG" == "ru" ] && prompt_text="$prompt_ru"
-
-        read -p "$prompt_text" -n 1 -r
+        info "An existing build was found."
+        read -p "What would you like to do? (1. Launch existing version, 2. Rebuild the application) > " -n 1 -r
         echo
         if [[ $REPLY =~ ^[1]$ ]]; then
             launch_app
@@ -240,12 +174,7 @@ check_existing_build() {
 }
 
 ask_clean_build() {
-    local prompt_en="Perform a clean build? (This is slower but can fix some issues) (y/N) "
-    local prompt_ru="Выполнить чистую сборку? (Это дольше, но может исправить некоторые проблемы) (y/N) "
-    local prompt_text=$prompt_en
-    [ "$LANG" == "ru" ] && prompt_text=$prompt_ru
-
-    read -p "$prompt_text" -n 1 -r
+    read -p "Perform a clean build? (This is slower but can fix some issues) (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         DO_CLEAN=1
@@ -253,27 +182,26 @@ ask_clean_build() {
 }
 
 build_project() {
-    info "Building project... This may take a few minutes." "Сборка проекта... Это может занять несколько минут."
-
+    info "Building project... This may take a few minutes."
     cd "$PROJECT_DIR"
 
     if [ "$DO_CLEAN" -eq 1 ]; then
-        info "Cleaning previous build artifacts..." "Очистка предыдущих артефактов сборки..."
+        info "Cleaning previous build artifacts..."
         if ! cargo clean; then
-            warn "cargo clean command failed, but continuing anyway." "Команда cargo clean не удалась, но продолжим."
+            warn "cargo clean command failed, but continuing anyway."
         fi
     fi
 
     if ! cargo build --release; then
-        error "Project build failed." "Сборка проекта не удалась."
+        error "Project build failed."
     fi
 
     cd "$SCRIPT_DIR"
-    info "Project built successfully." "Проект успешно собран."
+    info "Project built successfully."
 }
 
 create_package_readme() {
-    info "Creating package README..." "Создание README для пакета..."
+    info "Creating package README..."
     local readme_path="$1/README.txt"
 
     cat > "$readme_path" << EOL
@@ -288,51 +216,30 @@ To run the game, navigate into this directory and run the executable:
 
 If the game does not start, please ensure you have installed the necessary system
 dependencies for your Linux distribution as mentioned in the main project README.
-
----
-
-==================================
-Rust Simulation - Инструкции
-==================================
-
-Спасибо за загрузку Rust Simulation!
-
-Чтобы запустить игру, перейдите в этот каталог и запустите исполняемый файл:
-./${PACKAGE_NAME}
-
-Если игра не запускается, пожалуйста, убедитесь, что вы установили необходимые
-системные зависимости для вашего дистрибутива Linux, как указано в основном
-README проекта.
 EOL
 }
 
 package_release() {
-    info "Packaging release..." "Упаковка релиза..."
-
-    # Create directories
+    info "Packaging release..."
     mkdir -p "$DIST_PATH"
 
-    # Copy files
-    info "Copying files..." "Копирование файлов..."
+    info "Copying files..."
     cp "$PROJECT_DIR/target/release/$PACKAGE_NAME" "$DIST_PATH/"
     cp -r "$PROJECT_DIR/data" "$DIST_PATH/data"
 
-    # Create README
     create_package_readme "$DIST_PATH"
 
-    # Create Tarball
-    info "Creating .tar.gz archive..." "Создание .tar.gz архива..."
+    info "Creating .tar.gz archive..."
     local archive_name="${PACKAGE_NAME}_v${PROJECT_VERSION}_linux.tar.gz"
     if ! tar -czf "$DIST_DIR/$archive_name" -C "$DIST_PATH" .; then
-        error "Failed to create .tar.gz archive." "Не удалось создать .tar.gz архив."
+        error "Failed to create .tar.gz archive."
     fi
 
-    info "Package created at $DIST_DIR/$archive_name" "Пакет создан в $DIST_DIR/$archive_name"
+    info "Package created at $DIST_DIR/$archive_name"
 }
 
 launch_app() {
-    info "Launching application..." "Запуск приложения..."
-
+    info "Launching application..."
     cd "$DIST_PATH"
     "./$PACKAGE_NAME"
 }
@@ -341,10 +248,8 @@ launch_app() {
 # Script Entry Point
 # =============================================================================
 main() {
-    select_language
     clear
-
-    info "Rust Simulation Linux Launcher" "Лончер Rust Simulation для Linux"
+    info "Rust Simulation Linux Launcher"
     echo "===================================="
 
     check_existing_build
@@ -360,7 +265,7 @@ main() {
     package_release
     launch_app
 
-    info "Script finished." "Скрипт завершен."
+    info "Script finished."
 }
 
 main
