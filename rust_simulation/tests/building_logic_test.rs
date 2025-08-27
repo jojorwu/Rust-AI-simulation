@@ -14,8 +14,10 @@ fn test_check_resources_system() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
 
-    let recipe_manager =
-        Arc::new(rust_simulation::recipes::RecipeManager::new("data/recipes.json").unwrap());
+    let recipe_manager = Arc::new(
+        rust_simulation::recipes::RecipeManager::new("data/recipes.json")
+            .expect("Failed to create recipe manager"),
+    );
     app.insert_resource(RecipeManagerResource(recipe_manager));
 
     let mut inventory = Inventory::new();

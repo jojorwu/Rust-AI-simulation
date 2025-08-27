@@ -36,10 +36,17 @@ fn test_storage_system_success() {
     app.update();
 
     // 3. Verify
-    let storer_inv = app.world.get::<Inventory>(storer_entity).unwrap();
+    let storer_inv = app
+        .world
+        .get::<Inventory>(storer_entity)
+        .expect("Storer should have an Inventory component");
     assert_eq!(storer_inv.get_quantity("wood"), 5);
 
-    let chest_inv = &app.world.get::<Chest>(chest_entity).unwrap().inventory;
+    let chest_inv = &app
+        .world
+        .get::<Chest>(chest_entity)
+        .expect("Chest should have a Chest component")
+        .inventory;
     assert_eq!(chest_inv.get_quantity("wood"), 5);
 }
 
@@ -66,10 +73,17 @@ fn test_storage_fails_if_item_not_present() {
     app.update();
 
     // 3. Verify
-    let storer_inv = app.world.get::<Inventory>(storer_entity).unwrap();
+    let storer_inv = app
+        .world
+        .get::<Inventory>(storer_entity)
+        .expect("Storer should have an Inventory component");
     assert_eq!(storer_inv.get_quantity("wood"), 0);
 
-    let chest_inv = &app.world.get::<Chest>(chest_entity).unwrap().inventory;
+    let chest_inv = &app
+        .world
+        .get::<Chest>(chest_entity)
+        .expect("Chest should have a Chest component")
+        .inventory;
     assert_eq!(chest_inv.get_quantity("wood"), 0);
 }
 
@@ -100,6 +114,9 @@ fn test_storage_fails_if_chest_does_not_exist() {
     // 3. Verify
     // This assertion will fail initially, as the item is destroyed.
     // After the fix, the item should remain in the storer's inventory.
-    let storer_inv = app.world.get::<Inventory>(storer_entity).unwrap();
+    let storer_inv = app
+        .world
+        .get::<Inventory>(storer_entity)
+        .expect("Storer should have an Inventory component");
     assert_eq!(storer_inv.get_quantity("wood"), 10);
 }

@@ -15,7 +15,8 @@ fn test_find_resource_system() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
 
-    let map = Map::new(10, 10, "data/biomes.json", "data/resources.json").unwrap();
+    let map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
+        .expect("Failed to create map");
     let resource_pos = Position { x: 5, y: 5 };
     let resource_entity = app
         .world
@@ -49,10 +50,9 @@ fn test_find_resource_system() {
     app.update();
 
     let gatherer = app.world.entity(gatherer_entity);
-    assert!(gatherer.get::<IntendsToGatherFrom>().is_some());
-    assert_eq!(
-        gatherer.get::<IntendsToGatherFrom>().unwrap().0,
-        resource_entity
-    );
+    let intends_to_gather_from = gatherer
+        .get::<IntendsToGatherFrom>()
+        .expect("Gatherer should have IntendsToGatherFrom component");
+    assert_eq!(intends_to_gather_from.0, resource_entity);
     assert!(gatherer.get::<IntendsToGather>().is_none());
 }

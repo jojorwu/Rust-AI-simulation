@@ -13,7 +13,7 @@ fn setup_test_app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
     // Load a default config for the tests
-    let config = Config::load("data/config.toml").unwrap();
+    let config = Config::load("data/config.toml").expect("Failed to load config");
     app.insert_resource(config);
     app.add_systems(Update, (hunger_system, eating_system).chain());
     app
@@ -39,8 +39,14 @@ fn test_hunger_and_starvation() {
     }
 
     // 3. Verify
-    let hunger = app.world.get::<Hunger>(entity).unwrap();
-    let health = app.world.get::<Health>(entity).unwrap();
+    let hunger = app
+        .world
+        .get::<Hunger>(entity)
+        .expect("Entity should have a Hunger component");
+    let health = app
+        .world
+        .get::<Health>(entity)
+        .expect("Entity should have a Health component");
     assert_eq!(hunger.current, 0.0);
     assert_eq!(health.current, 99); // 1 tick of starvation damage
 }
@@ -67,8 +73,14 @@ fn test_eating_restores_hunger() {
 
     // 3. Verify
     let config = app.world.resource::<Config>();
-    let hunger = app.world.get::<Hunger>(entity).unwrap();
-    let inventory = app.world.get::<Inventory>(entity).unwrap();
+    let hunger = app
+        .world
+        .get::<Hunger>(entity)
+        .expect("Entity should have a Hunger component");
+    let inventory = app
+        .world
+        .get::<Inventory>(entity)
+        .expect("Entity should have an Inventory component");
 
     let expected_hunger = initial_hunger - config.survival.hunger_rate + config.survival.meat_hunger_value;
     assert!((hunger.current - expected_hunger).abs() < 1e-6, "Expected hunger to be close to {}, but it was {}", expected_hunger, hunger.current);
@@ -96,7 +108,10 @@ fn test_eating_does_not_exceed_max_hunger() {
     app.update();
 
     // 3. Verify
-    let hunger = app.world.get::<Hunger>(entity).unwrap();
+    let hunger = app
+        .world
+        .get::<Hunger>(entity)
+        .expect("Entity should have a Hunger component");
     // Should be clamped to max
     assert_eq!(hunger.current, 100.0);
 }

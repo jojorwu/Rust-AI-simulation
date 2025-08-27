@@ -116,7 +116,10 @@ fn test_exploration_flow() {
             exploration_frontier,
             // Add an empty brain component to prevent panics
             BrainComponent::new(
-                Arc::new(RecipeManager::new("data/recipes.json").unwrap()),
+                Arc::new(
+                    RecipeManager::new("data/recipes.json")
+                        .expect("Failed to create recipe manager"),
+                ),
                 0.1,
                 0.9,
                 1.0,

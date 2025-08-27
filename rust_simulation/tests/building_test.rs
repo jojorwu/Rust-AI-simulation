@@ -17,11 +17,13 @@ fn test_building_system_sends_build_request() {
     app.add_plugins(MinimalPlugins);
     app.add_event::<Event>();
 
-    let recipe_manager =
-        Arc::new(RecipeManager::new("data/recipes.json").unwrap());
+    let recipe_manager = Arc::new(
+        RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
+    );
     app.insert_resource(RecipeManagerResource(recipe_manager));
 
-    let map = Map::new(10, 10, "data/biomes.json", "data/resources.json").unwrap();
+    let map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
+        .expect("Failed to create map");
     map.set_tile(5, 5, rust_simulation::map::Tile::new('.', "grassland".to_string()));
     app.insert_resource(map);
 

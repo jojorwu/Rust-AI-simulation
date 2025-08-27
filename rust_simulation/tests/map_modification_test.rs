@@ -12,7 +12,10 @@ fn test_map_modification_builds_chest() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
     app.add_event::<Event>();
-    app.insert_resource(Map::new(10, 10, "data/biomes.json", "data/resources.json").unwrap());
+    app.insert_resource(
+        Map::new(10, 10, "data/biomes.json", "data/resources.json")
+            .expect("Failed to create map"),
+    );
     app.add_systems(Update, map_modification_system);
 
     // Create a builder entity (doesn't need any components for this test)
@@ -21,7 +24,12 @@ fn test_map_modification_builds_chest() {
 
     // Verify initial state
     let map = app.world.resource::<Map>();
-    assert_ne!(map.get_tile(build_pos.x, build_pos.y).unwrap().tile_type, 'C');
+    assert_ne!(
+        map.get_tile(build_pos.x, build_pos.y)
+            .expect("Tile should exist")
+            .tile_type,
+        'C'
+    );
 
     // 2. Send build request event
     app.world.send_event(Event::BuildRequest {
@@ -35,10 +43,18 @@ fn test_map_modification_builds_chest() {
     let map_after_update = app.world.resource::<Map>();
 
     // Tile should be changed to 'C'
-    assert_eq!(map_after_update.get_tile(build_pos.x, build_pos.y).unwrap().tile_type, 'C');
+    assert_eq!(
+        map_after_update
+            .get_tile(build_pos.x, build_pos.y)
+            .expect("Tile should exist")
+            .tile_type,
+        'C'
+    );
 
     // A chest entity should exist at the position
-    let entities_at_pos = map_after_update.get_entities_at(build_pos.x, build_pos.y).unwrap();
+    let entities_at_pos = map_after_update
+        .get_entities_at(build_pos.x, build_pos.y)
+        .expect("Entities should be present");
     assert_eq!(entities_at_pos.len(), 1);
 
     // The entity should have a Chest component

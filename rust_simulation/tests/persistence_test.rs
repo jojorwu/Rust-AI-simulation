@@ -64,18 +64,23 @@ fn test_q_table_persistence() {
 
         assert_eq!(deserialized.len(), 1);
         assert!(deserialized.contains_key(&1));
-        let saved_q_table = deserialized.get(&1).unwrap();
-        let saved_goal_map = saved_q_table.0.get(&state).unwrap();
+        let saved_q_table = deserialized
+            .get(&1)
+            .expect("Player 1's Q-table should be present");
+        let saved_goal_map = saved_q_table
+            .0
+            .get(&state)
+            .expect("State should be present in the Q-table");
         assert_eq!(saved_goal_map.get(&goal), Some(&42.0));
     });
 
     // 4. Cleanup
     if fs::metadata(test_file).is_ok() {
-        fs::remove_file(test_file).unwrap();
+        fs::remove_file(test_file).expect("Failed to remove test file");
     }
     let temp_file = "q_tables.json.tmp";
     if fs::metadata(temp_file).is_ok() {
-        fs::remove_file(temp_file).unwrap();
+        fs::remove_file(temp_file).expect("Failed to remove temp file");
     }
 
     assert!(result.is_ok());

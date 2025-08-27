@@ -310,3 +310,92 @@ fn plan_resource_gathering(
     }
     plan
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::recipes::RecipeManager;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_plan_goal_craft_item() {
+        let recipe_manager = Arc::new(
+            RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
+        );
+        let brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
+        let inventory = Inventory::new();
+        let known_resources = KnownResources(HashMap::new());
+        let goal = Goal::CraftItem("stone_axe".to_string());
+
+        let plan = plan_goal(&brain, &inventory, &known_resources, &goal)
+            .expect("Planning should succeed");
+
+        assert_eq!(plan.len(), 5);
+        assert!(plan.contains(&Goal::Explore));
+        assert!(plan.contains(&Goal::GatherResource("wood".to_string())));
+        assert!(plan.contains(&Goal::GatherResource("stone".to_string())));
+        assert_eq!(plan[4], Goal::CraftItem("stone_axe".to_string()));
+    }
+
+    #[test]
+    fn test_plan_goal_build_chest() {
+        let recipe_manager = Arc::new(
+            RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
+        );
+        let brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
+        let inventory = Inventory::new();
+        let known_resources = KnownResources(HashMap::new());
+        let goal = Goal::Build("chest".to_string());
+
+        let plan = plan_goal(&brain, &inventory, &known_resources, &goal)
+            .expect("Planning should succeed");
+
+        assert_eq!(plan.len(), 3);
+        assert!(plan.contains(&Goal::Explore));
+        assert!(plan.contains(&Goal::GatherResource("wood".to_string())));
+        assert_eq!(plan[2], Goal::Build("chest".to_string()));
+    }
+
+    #[test]
+    fn test_choose_goal_flee_when_low_health() {
+        let recipe_manager = Arc::new(
+            RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
+        );
+        let brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
+        let inventory = Inventory::new();
+        let known_resources = KnownResources(HashMap::new());
+        let goal_q_table = GoalQTable(HashMap::new());
+        let config = Config::load("data/config.toml").expect("Failed to load config");
+        let map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
+            .expect("Failed to create map");
+        let mut rng = rand::thread_rng();
+
+        let state = HighLevelState {
+            inventory_summary: InventorySummary {
+                wood: 0,
+                stone: 0,
+                iron_ore: 0,
+                stone_axe: 0,
+            },
+            num_hostile_players: 0,
+            health_level: 10, // Low health
+            hunger_level: 100,
+            is_night: false,
+        };
+
+        let mut args = ChooseGoalArgs {
+            state: &state,
+            brain: &brain,
+            inventory: &inventory,
+            known_resources: &known_resources,
+            goal_q_table: &goal_q_table,
+            is_day: true,
+            config: &config,
+            map: &map,
+            rng: &mut rng,
+        };
+
+        let goal = choose_goal(&mut args).expect("Choose goal should succeed");
+        assert_eq!(goal, Goal::Flee);
+    }
+}

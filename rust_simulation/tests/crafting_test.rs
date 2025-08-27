@@ -12,7 +12,9 @@ fn setup_test_app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
 
-    let recipe_manager = Arc::new(RecipeManager::new("data/recipes.json").unwrap());
+    let recipe_manager = Arc::new(
+        RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
+    );
     app.insert_resource(RecipeManagerResource(recipe_manager));
 
     app.add_systems(Update, crafting_system);
@@ -37,7 +39,10 @@ fn test_crafting_system_success() {
     app.update();
 
     // 3. Verify
-    let inventory = app.world.get::<Inventory>(crafter_entity).unwrap();
+    let inventory = app
+        .world
+        .get::<Inventory>(crafter_entity)
+        .expect("Crafter should have an Inventory component");
     // Resources should be consumed
     assert_eq!(inventory.get_quantity("wood"), 0);
     assert_eq!(inventory.get_quantity("stone"), 0);
@@ -64,7 +69,10 @@ fn test_crafting_system_insufficient_resources() {
     app.update();
 
     // 3. Verify
-    let inventory = app.world.get::<Inventory>(crafter_entity).unwrap();
+    let inventory = app
+        .world
+        .get::<Inventory>(crafter_entity)
+        .expect("Crafter should have an Inventory component");
     // Resources should NOT be consumed
     assert_eq!(inventory.get_quantity("wood"), 1);
     // New item should NOT be added

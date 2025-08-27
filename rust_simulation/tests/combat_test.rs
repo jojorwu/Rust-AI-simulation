@@ -29,7 +29,10 @@ fn test_combat_system_applies_damage() {
     assert!(app.world.get::<WantsToAttack>(attacker).is_none());
 
     // Target's health should be reduced
-    let target_health = app.world.get::<Health>(target).unwrap();
+    let target_health = app
+        .world
+        .get::<Health>(target)
+        .expect("Target should have a Health component");
     assert_eq!(target_health.current, 40); // 50 - 10 damage
 
     // No death event should be sent
@@ -58,7 +61,10 @@ fn test_combat_system_handles_death() {
 
     // 3. Verify
     // Target's health should be <= 0
-    let target_health = app.world.get::<Health>(target).unwrap();
+    let target_health = app
+        .world
+        .get::<Health>(target)
+        .expect("Target should have a Health component");
     assert!(target_health.current <= 0);
 
     // A death event should have been sent
