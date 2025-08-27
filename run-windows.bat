@@ -142,35 +142,77 @@ goto :end
 :install_rust
     echo !msg_cargo_not_found!
     echo.
+    set "installer_path=%~dp0rustup-init.exe"
+    set "checksum_url=https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe.sha256"
+    set "installer_url=https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
     set "download_log=%~dp0rustup_download.log"
+
+    if exist "!installer_path!" del "!installer_path!" >nul 2>&1
     if exist "!download_log!" del "!download_log!" >nul 2>&1
 
-    powershell -Command "Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile '%~dp0rustup-init.exe'" > "!download_log!" 2>&1
+    powershell -Command " \
+        try { \
+            Write-Output 'Downloading installer from !installer_url!...'; \
+            Invoke-WebRequest -Uri '!installer_url!' -OutFile '!installer_path!'; \
+            \
+            Write-Output 'Downloading checksum from !checksum_url!...'; \
+            $official_checksum_line = Invoke-WebRequest -Uri '!checksum_url!'; \
+            $official_checksum = ($official_checksum_line.Content -split ' ')[0].ToUpper(); \
+            \
+            Write-Output 'Calculating local file hash...'; \
+            $local_checksum = (Get-FileHash -Path '!installer_path!' -Algorithm SHA256).Hash.ToUpper(); \
+            \
+            Write-Output ('Official Checksum: ' + $official_checksum); \
+            Write-Output ('Local Checksum:    ' + $local_checksum); \
+            \
+            if ($local_checksum -ne $official_checksum) { \
+                Write-Error 'CHECKSUM MISMATCH! The downloaded file may be corrupt or tampered with. Deleting the file and aborting.'; \
+                Remove-Item -Path '!installer_path!'; \
+                exit 1; \
+            } \
+            \
+            Write-Output 'Checksums match. File is valid.'; \
+        } catch { \
+            Write-Error ('An error occurred during download or verification: ' + $_.Exception.Message); \
+            exit 1; \
+        } \
+    " > "!download_log!" 2>&1
+
     if !errorlevel! neq 0 (
         echo.
         echo ====================================================================
-        echo !msg_download_failed!
-        echo.
-        echo --- PowerShell Log ---
-        type "!download_log!"
-        echo ----------------------
-        echo.
-        echo !msg_download_link!
-        echo !msg_download_save!
-        echo !msg_download_return!
+        echo ERROR: Rust installer download or verification failed.
+        echo Please check the log below for details.
         echo ====================================================================
         echo.
-        pause
-        if not exist "%~dp0rustup-init.exe" (
-            echo !msg_file_not_found!
-            exit /b 1
-        )
+        type "!download_log!"
+        call :handle_manual_download
+        exit /b 1
     )
+
     if exist "!download_log!" del "!download_log!" >nul 2>&1
+
     echo !msg_starting_installer!
-    start /wait "%~dp0rustup-init.exe" --default-toolchain stable -y
-    if exist "%~dp0rustup-init.exe" (
-        del "%~dp0rustup-init.exe"
+    start /wait "!installer_path!" --default-toolchain stable -y
+    if exist "!installer_path!" (
+        del "!installer_path!" >nul 2>&1
+    )
+    exit /b 0
+
+:handle_manual_download
+    echo.
+    echo ====================================================================
+    echo !msg_download_failed!
+    echo.
+    echo !msg_download_link!
+    echo !msg_download_save!
+    echo !msg_download_return!
+    echo ====================================================================
+    echo.
+    pause
+    if not exist "%~dp0rustup-init.exe" (
+        echo !msg_file_not_found!
+        exit /b 1
     )
     exit /b 0
 
