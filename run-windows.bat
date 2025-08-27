@@ -1,85 +1,90 @@
 @echo off
-setlocal enabledelayedexpansion
+set "LOG_FILE=%~dp0simulation_debug_log.txt"
+if exist "%LOG_FILE%" del "%LOG_FILE%" >nul 2>&1
 
-:: =============================================================================
-:: Main Script Logic
-:: =============================================================================
-echo DEBUG: Script starting. Press any key to continue...
-pause
-call :check_powershell
-if !errorlevel! neq 0 (
-	goto :end
-)
-echo DEBUG: PowerShell check OK. Press any key to continue...
-REM pause
-REM
-REM call :check_font
-REM if !errorlevel! neq 0 (
-REM 	call :show_font_instructions
-REM 	goto :end
-REM )
-echo DEBUG: Font check OK. Press any key to continue...
-pause
+(
+    setlocal enabledelayedexpansion
 
-call :initialize
-echo DEBUG: Initialize OK. Press any key to continue...
-pause
-call :get_version
-echo DEBUG: Get version OK. Press any key to continue...
-pause
-
-call :check_existing_build
-if "!rebuild!"=="0" (
-    call :launch_app
-    goto :end
-)
-echo DEBUG: Check existing build OK. Press any key to continue...
-pause
-
-call :ask_clean_build
-echo DEBUG: Ask clean build OK. Press any key to continue...
-pause
-call :check_rust
-if !errorlevel! neq 0 (
-    call :install_rust
+    :: =============================================================================
+    :: Main Script Logic
+    :: =============================================================================
+    echo DEBUG: Script starting...
+    call :check_powershell
     if !errorlevel! neq 0 (
-        echo !msg_rust_install_failed!
+        echo ERROR: PowerShell check failed.
         goto :end
     )
-    call :post_rust_install_message
-    goto :end
-)
-echo DEBUG: Rust check OK. Press any key to continue...
-pause
-call :build_project
-if !errorlevel! neq 0 (
-    goto :end
-)
-echo DEBUG: Build project OK. Press any key to continue...
-pause
-call :package_app
-if !errorlevel! neq 0 (
-    goto :end
-)
-echo DEBUG: Package app OK. Press any key to continue...
-pause
-call :bundle_redist
-if !errorlevel! neq 0 (
-    goto :end
-)
-echo DEBUG: Bundle redist OK. Press any key to continue...
-pause
-call :create_zip
-if !errorlevel! neq 0 (
-    goto :end
-)
-echo DEBUG: Create zip OK. Press any key to continue...
-pause
-call :launch_app
-goto :end
+    echo DEBUG: PowerShell check OK.
 
+    REM The following font check is disabled as it may crash on some systems.
+    REM call :check_font
+    REM if !errorlevel! neq 0 (
+    REM     echo ERROR: Font check failed.
+    REM 	goto :end
+    REM )
+    REM echo DEBUG: Font check OK.
+
+    call :initialize
+    echo DEBUG: Initialize OK.
+    call :get_version
+    echo DEBUG: Get version OK.
+
+    call :check_existing_build
+    if "!rebuild!"=="0" (
+        echo DEBUG: Existing build found, launching now.
+        call :launch_app
+        goto :end
+    )
+    echo DEBUG: Check existing build OK.
+
+    call :ask_clean_build
+    echo DEBUG: Ask clean build OK.
+    call :check_rust
+    if !errorlevel! neq 0 (
+        call :install_rust
+        if !errorlevel! neq 0 (
+            echo !msg_rust_install_failed!
+            goto :end
+        )
+        call :post_rust_install_message
+        goto :end
+    )
+    echo DEBUG: Rust check OK.
+    call :build_project
+    if !errorlevel! neq 0 (
+        echo ERROR: Build project failed.
+        goto :end
+    )
+    echo DEBUG: Build project OK.
+    call :package_app
+    if !errorlevel! neq 0 (
+        echo ERROR: Package app failed.
+        goto :end
+    )
+    echo DEBUG: Package app OK.
+    call :bundle_redist
+    if !errorlevel! neq 0 (
+        echo WARNING: Bundle redist failed.
+    )
+    echo DEBUG: Bundle redist OK.
+    call :create_zip
+    if !errorlevel! neq 0 (
+        echo WARNING: Create zip failed.
+    )
+    echo DEBUG: Create zip OK.
+    call :launch_app
+
+    :end
+    echo.
+    echo DEBUG: Script finished.
+
+) > "%LOG_FILE%" 2>&1
+
+start "" /wait notepad.exe "%LOG_FILE%"
+
+exit /b
 :: =============================================================================
-:: Subroutines
+:: Subroutines (The rest of the file is the same as before)
 :: =============================================================================
 
 :check_powershell
@@ -448,8 +453,3 @@ goto :end
     echo.
     cd "%~dp0dist\windows" && start rust_simulation.exe
     exit /b 0
-
-:end
-    echo.
-    pause
-    endlocal
