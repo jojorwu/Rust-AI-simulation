@@ -165,21 +165,39 @@ fn get_high_level_state(
 }
 
 /// Chooses a high-level goal for the agent based on the current state.
+/// This function prioritizes critical needs (fleeing, eating) before consulting the Q-table.
 fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, SimulationError> {
+    if let Some(critical_goal) = handle_critical_needs(args) {
+        return Ok(critical_goal);
+    }
+
+    choose_q_learning_goal(args)
+}
+
+/// Handles immediate, critical needs like fleeing from low health or eating when starving.
+/// Returns Some(Goal) if a critical action is necessary, otherwise None.
+fn handle_critical_needs<R: Rng + ?Sized>(args: &ChooseGoalArgs<R>) -> Option<Goal> {
     const FLEE_HEALTH_THRESHOLD: u32 = 25;
     if args.state.health_level < FLEE_HEALTH_THRESHOLD {
-        return Ok(Goal::Flee);
+        return Some(Goal::Flee);
     }
 
     const HUNGER_THRESHOLD: u32 = 50;
     if args.state.hunger_level < HUNGER_THRESHOLD {
         if args.inventory.has_item("meat", 1) {
-            return Ok(Goal::EatFood("meat".to_string()));
+            return Some(Goal::EatFood("meat".to_string()));
         } else {
-            return Ok(Goal::GatherResource("pig".to_string()));
+            return Some(Goal::GatherResource("pig".to_string()));
         }
     }
 
+    None
+}
+
+/// Chooses a goal based on the Q-learning model (exploration vs. exploitation).
+fn choose_q_learning_goal<R: Rng + ?Sized>(
+    args: &mut ChooseGoalArgs<R>,
+) -> Result<Goal, SimulationError> {
     let valid_goals: Vec<_> = args
         .brain
         .goals
@@ -188,19 +206,23 @@ fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, Si
         .cloned()
         .collect();
     if valid_goals.is_empty() {
+        // If no goals are valid, fleeing is a safe default.
         return Ok(Goal::Flee);
     }
 
+    // Epsilon-greedy exploration
     if args.rng.random::<f64>() < args.brain.epsilon {
         let index = args.rng.random_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
+    // Exploitation: choose the best goal from the Q-table
     if let Some(q_values) = args.goal_q_table.0.get(args.state) {
         q_values
             .iter()
             .filter(|(g, _)| is_goal_valid(g, args.known_resources, args.map))
             .map(|(goal, q_value)| {
+                // Apply situational bonuses
                 let effective_q_value = if !args.is_day {
                     if let Goal::Build(_) = goal {
                         *q_value + args.config.ai.goals.build_bonus
@@ -216,10 +238,12 @@ fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, Si
             .map(|(goal, _)| goal.clone())
             .map(Ok)
             .unwrap_or_else(|| {
+                // Fallback to random choice if max_by is empty (e.g., no valid goals in q-table)
                 let index = args.rng.random_range(0..valid_goals.len());
                 Ok(valid_goals[index].clone())
             })
     } else {
+        // If there's no entry for the current state in the Q-table, choose a random valid goal.
         let index = args.rng.random_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
     }
