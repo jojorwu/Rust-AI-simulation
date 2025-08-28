@@ -57,7 +57,7 @@ fn setup_app(num_agents: u32) -> App {
 fn benchmark_ai_systems(c: &mut Criterion) {
     let mut group = c.benchmark_group("AI Systems");
     for num_agents in [100, 500, 1000].iter() {
-        group.bench_function(format!("{} agents", num_agents), |b| {
+        group.bench_function(format!("{num_agents} agents"), |b| {
             b.iter_with_setup(
                 || {
                     let mut app = setup_app(*num_agents);

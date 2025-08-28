@@ -70,7 +70,7 @@ fn main() -> Result<(), SimulationError> {
         .num_threads(config.performance.processor_cores as usize)
         .build_global()
     {
-        log::error!("Failed to build global thread pool: {}", e);
+        log::error!("Failed to build global thread pool: {e}");
     }
 
     // --- Bevy App Setup ---

@@ -55,8 +55,8 @@ fn test_building_system_sends_build_request() {
     let events = app.world.resource::<Events<Event>>();
     let mut reader = events.get_reader();
     let mut build_request_sent = false;
-    for event in reader.read(&events) {
-        println!("Event received: {:?}", event);
+    for event in reader.read(events) {
+        println!("Event received: {event:?}");
         if let Event::BuildRequest { .. } = event {
             build_request_sent = true;
             break;

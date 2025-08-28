@@ -12,7 +12,7 @@ use crate::IsDay;
 use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
 use log::info;
-use rand::Rng;
+use rand::prelude::*;
 use std::collections::HashMap;
 
 // Type alias to simplify the query type
@@ -56,7 +56,7 @@ pub fn goal_selection_system(
                 let high_level_state =
                     get_high_level_state(health, hunger, inventory, player_memories, is_day.0);
 
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 let mut args = ChooseGoalArgs {
                     state: &high_level_state,
                     brain: &brain,
@@ -368,7 +368,7 @@ mod tests {
         let config = Config::load("data/config.toml").expect("Failed to load config");
         let map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
             .expect("Failed to create map");
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let state = HighLevelState {
             inventory_summary: InventorySummary {

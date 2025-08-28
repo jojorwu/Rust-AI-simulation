@@ -54,7 +54,7 @@ fn test_death_system_despawns_entity() {
     // Entity should be removed from spatial map
     let map_after_update = app.world.resource::<Map>();
     let entities_after = map_after_update.get_entities_at(entity_pos.x, entity_pos.y);
-    assert!(entities_after.map_or(true, |e| e.is_empty()));
+    assert!(entities_after.is_none_or(|e| e.is_empty()));
 }
 
 #[test]

@@ -17,7 +17,7 @@ pub fn hunting_system(
                 let dist_y = (hunter_pos.y as i32 - pig_pos.y as i32).abs();
                 let dist = (dist_x + dist_y) as f32; // Manhattan distance
 
-                let is_closer = closest_pig.map_or(true, |(_, current_dist)| dist < current_dist);
+                let is_closer = closest_pig.is_none_or(|(_, current_dist)| dist < current_dist);
                 if is_closer {
                     closest_pig = Some((pig_entity, dist));
                 }

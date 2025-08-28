@@ -10,7 +10,7 @@ use log::error;
 
 pub fn generate_roads(mut map: ResMut<Map>, mut road_manager: ResMut<RoadManager>) {
     if let Err(e) = _generate_roads_from_config(&mut map, &mut road_manager) {
-        error!("Failed to generate roads: {}", e);
+        error!("Failed to generate roads: {e}");
     }
 }
 

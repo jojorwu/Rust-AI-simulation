@@ -71,7 +71,7 @@ fn test_combat_system_handles_death() {
     let events = app.world.resource::<Events<Event>>();
     let mut reader = events.get_reader();
     let mut death_event_found = false;
-    for event in reader.read(&events) {
+    for event in reader.read(events) {
         if let Event::EntityDied(e) = event {
             assert_eq!(*e, target);
             death_event_found = true;
