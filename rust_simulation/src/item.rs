@@ -12,6 +12,9 @@ pub struct Item {
     pub properties: Option<HashMap<String, f64>>,
 }
 
+use bevy_ecs::prelude::Resource;
+
+#[derive(Resource)]
 pub struct ItemRegistry {
     pub items: HashMap<String, Item>,
 }
