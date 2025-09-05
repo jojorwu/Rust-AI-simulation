@@ -6,9 +6,10 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+pub mod ai;
 pub mod intents;
 pub mod path;
-pub mod ai;
+pub mod status;
 
 #[derive(Component, Debug, Clone, Copy, Eq)]
 pub struct Position {
@@ -92,6 +93,7 @@ impl BrainComponent {
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
             Goal::Stockpile("wood".to_string()),
+            Goal::EatFood("meat".to_string()),
         ];
         BrainComponent {
             current_goal: None,
@@ -121,12 +123,6 @@ pub struct WantsToPickup {}
 pub struct Resource {
     pub name: String,
     pub quantity: u32,
-}
-
-#[derive(Component, Debug, Clone, Copy)]
-pub struct Health {
-    pub current: i32,
-    pub max: i32,
 }
 
 #[derive(Component, Debug, Clone)]

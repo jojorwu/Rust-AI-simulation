@@ -1,11 +1,12 @@
 use crate::components::{
+    BrainComponent, Position,
     ai::{ExplorationFrontier, MentalMap},
     intents::IntendsToExplore,
     path::{CurrentPath, PathRequest},
-    BrainComponent, Position,
 };
 use bevy_ecs::prelude::*;
 
+#[allow(clippy::type_complexity)]
 pub fn explore_action_system(
     mut commands: Commands,
     mut query: Query<

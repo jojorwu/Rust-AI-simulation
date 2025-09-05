@@ -22,5 +22,11 @@
     "tile_type": "I",
     "biomes": ["mountain"],
     "density": 0.1
+  },
+  {
+    "name": "pig",
+    "biomes": ["plains"],
+    "density": 0.02,
+    "huntable": true
   }
 ]

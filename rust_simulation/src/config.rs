@@ -1,41 +1,100 @@
 use crate::errors::SimulationError;
-use serde::Deserialize;
+use bevy::prelude::Reflect;
+use bevy_ecs::prelude::Resource;
+use serde::{Deserialize, Serialize};
 use std::fs;
 
-// MAP SETTINGS
-pub const WIDTH: u32 = 100;
-pub const HEIGHT: u32 = 100;
+#[derive(Resource, Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct Config {
+    pub map_settings: MapSettings,
+    pub player_settings: PlayerSettings,
+    pub pig_settings: PigSettings,
+    pub training_settings: TrainingSettings,
+    pub day_night_cycle: DayNightCycle,
+    pub ai: Ai,
+    pub performance: PerformanceSettings,
+    pub survival: SurvivalSettings,
+}
 
-// PLAYER/AI SETTINGS
-pub const NUM_PLAYERS: u32 = 2;
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct SurvivalSettings {
+    pub hunger_rate: f32,
+    pub starvation_damage: i32,
+    pub meat_hunger_value: f32,
+}
 
-// TRAINING LOOP SETTINGS
-pub const EPISODES: u32 = 1;
-pub const MAX_STEPS_PER_EPISODE: u32 = 20;
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct PigSettings {
+    pub num_pigs: u32,
+}
 
-// DAY/NIGHT CYCLE SETTINGS
-pub const DAY_LENGTH: u32 = 100;
-pub const NIGHT_LENGTH: u32 = 50;
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct MapSettings {
+    pub width: u32,
+    pub height: u32,
+    pub seed: Option<u32>,
+}
 
-// AI Configuration
-pub const OPPORTUNISTIC_COMMITMENT_THRESHOLD: u32 = 5;
-pub const VALUABLE_RESOURCES: &[&str] = &["iron_ore"];
-pub const DEFENSE_RADIUS: u32 = 10;
-pub const CRITICAL_HEALTH_RATIO: f32 = 0.25;
-pub const STANDARD_HEALTH_RATIO: f32 = 0.5;
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct PlayerSettings {
+    pub num_players: u32,
+}
 
-// Q-learning parameters
-pub const LEARNING_RATE: f64 = 0.1;
-pub const DISCOUNT_FACTOR: f64 = 0.9;
-pub const EPSILON: f64 = 1.0;
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct TrainingSettings {
+    pub episodes: u32,
+    pub max_steps_per_episode: u32,
+}
 
-// GOAL-RELATED CONSTANTS
-pub const GOAL_REWARD: f64 = 10.0;
-pub const GOAL_PENALTY: f64 = -0.1;
-pub const BUILD_GOAL_BONUS: f64 = 10.0;
-pub const GATHER_GOAL_THRESHOLD: u32 = 10;
-pub const GOAL_COMMITMENT_TICKS: u32 = 10;
-pub const THREAT_GOAL_COMMITMENT_TICKS: u32 = 5;
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct DayNightCycle {
+    pub day_length: u32,
+    pub night_length: u32,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct Ai {
+    pub opportunistic_commitment_threshold: u32,
+    pub valuable_resources: Vec<String>,
+    pub defense_radius: u32,
+    pub critical_health_ratio: f32,
+    pub standard_health_ratio: f32,
+    pub q_learning: QLearning,
+    pub goals: Goals,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct QLearning {
+    pub learning_rate: f64,
+    pub discount_factor: f64,
+    pub epsilon: f64,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct Goals {
+    pub reward: f64,
+    pub penalty: f64,
+    pub build_bonus: f64,
+    pub gather_threshold: u32,
+    pub commitment_ticks: u32,
+    pub threat_commitment_ticks: u32,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
+pub struct PerformanceSettings {
+    pub processor_cores: u32,
+    pub ram_limit_gb: u32,
+    pub enable_ram_limit: bool,
+}
+
+impl Config {
+    pub fn load(path: &str) -> Result<Self, SimulationError> {
+        let data = fs::read_to_string(path)?;
+        let config: Config = toml::from_str(&data)?;
+        Ok(config)
+    }
+}
+
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct RoadSetting {

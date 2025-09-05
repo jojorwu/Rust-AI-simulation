@@ -9,6 +9,9 @@ use bevy_ecs::prelude::*;
 pub struct IntendsToGather(pub String);
 
 #[derive(Component)]
+pub struct IntendsToGatherFrom(pub Entity);
+
+#[derive(Component)]
 pub struct IntendsToCraft(pub String);
 
 #[derive(Component)]
@@ -25,3 +28,18 @@ pub struct IntendsToExplore;
 
 #[derive(Component)]
 pub struct IntendsToStockpile(pub String);
+
+#[derive(Component)]
+pub struct WantsToEat(pub String);
+
+#[derive(Component)]
+pub struct CheckResources(pub String);
+
+#[derive(Component)]
+pub struct HasResources;
+
+#[derive(Component)]
+pub struct CheckTile(pub super::Position);
+
+#[derive(Component)]
+pub struct TileIsSuitable;

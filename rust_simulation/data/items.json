@@ -70,5 +70,6 @@
     "properties": {
       "health": 150.0
     }
-  }
+  },
+  { "name": "meat", "stackable": true, "tool": false }
 ]

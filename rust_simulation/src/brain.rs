@@ -8,10 +8,8 @@
 //! The `Brain` uses a Q-learning-based approach to decide on a `Goal`, and then
 //! uses a planner to break that goal down into a series of actions.
 
+use crate::components::{Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
 use bevy_ecs::prelude::*;
-use crate::components::{
-    Velocity, WantsToCraft, WantsToAttack, WantsToStoreItem,
-};
 use serde::{Deserialize, Serialize};
 
 /// A tile as remembered by the agent.
@@ -50,6 +48,8 @@ pub enum Goal {
     Explore,
     /// Stockpile a resource in a chest.
     Stockpile(String),
+    /// Eat a food item.
+    EatFood(String),
 }
 
 /// Represents the concrete actions that an agent's brain can decide to take.
@@ -68,14 +68,14 @@ pub enum BrainAction {
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct InventorySummary {
-    /// Whether the agent has any wood.
-    pub has_wood: bool,
-    /// Whether the agent has any stone.
-    pub has_stone: bool,
-    /// Whether the agent has any iron ore.
-    pub has_iron_ore: bool,
-    /// Whether the agent has a stone axe.
-    pub has_stone_axe: bool,
+    /// The quantity of wood the agent has.
+    pub wood: u32,
+    /// The quantity of stone the agent has.
+    pub stone: u32,
+    /// The quantity of iron ore the agent has.
+    pub iron_ore: u32,
+    /// The quantity of stone axes the agent has.
+    pub stone_axe: u32,
 }
 
 /// Represents the high-level state of the agent and its environment.
@@ -88,7 +88,8 @@ pub struct HighLevelState {
     pub num_hostile_players: u32,
     /// The agent's current health level.
     pub health_level: u32,
+    /// The agent's current hunger level.
+    pub hunger_level: u32,
     /// Whether it is currently night time.
     pub is_night: bool,
 }
-

@@ -1,7 +1,7 @@
 use crate::brain::MemoryTile;
 use crate::components::{
-    ai::{ExplorationFrontier, MentalMap},
     Position,
+    ai::{ExplorationFrontier, MentalMap},
 };
 use crate::fov;
 use crate::map::Map;
@@ -61,7 +61,10 @@ pub fn visibility_system(
         }
         exploration_frontier.0 = new_frontier;
 
-        let new_frontiers = exploration_frontier.0.len() - old_frontier_size;
+        let new_frontiers = exploration_frontier
+            .0
+            .len()
+            .saturating_sub(old_frontier_size);
         if new_frontiers > 0 {
             debug!(
                 "Entity {:?} saw {} tiles, discovered {} new frontier tiles. Total frontier size: {}",

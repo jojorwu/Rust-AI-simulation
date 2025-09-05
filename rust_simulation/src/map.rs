@@ -1,8 +1,6 @@
 //! This module handles the representation of the game world, divided into chunks for concurrent access.
 
 use bevy_ecs::prelude::*;
-use noise::{Fbm, NoiseFn, OpenSimplex, RidgedMulti};
-use rand::Rng;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -47,10 +45,19 @@ pub struct MapChunk {
     pub spatial_map: HashMap<(u32, u32), Vec<Entity>>,
 }
 
+impl Default for MapChunk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MapChunk {
     pub fn new() -> Self {
         MapChunk {
-            tiles: vec![vec![Tile::new(' ', "none".to_string()); CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+            tiles: vec![
+                vec![Tile::new(' ', "none".to_string()); CHUNK_SIZE as usize];
+                CHUNK_SIZE as usize
+            ],
             spatial_map: HashMap::new(),
         }
     }
@@ -70,6 +77,8 @@ pub struct ResourceDef {
     pub name: String,
     pub biomes: Vec<String>,
     pub density: f64,
+    #[serde(default)]
+    pub huntable: bool,
 }
 
 /// The main map resource, containing a grid of map chunks.
@@ -106,7 +115,7 @@ impl Map {
             })
             .collect();
 
-        let mut map = Map {
+        let map = Map {
             width,
             height,
             chunks,
@@ -114,8 +123,15 @@ impl Map {
             resources,
         };
 
-        map.generate_island_map(25.0, 5, 0.5, 2.0);
         Ok(map)
+    }
+
+    pub fn width_in_chunks(&self) -> u32 {
+        (self.width as f32 / CHUNK_SIZE as f32).ceil() as u32
+    }
+
+    pub fn height_in_chunks(&self) -> u32 {
+        (self.height as f32 / CHUNK_SIZE as f32).ceil() as u32
     }
 
     pub fn get_chunk_index(&self, x: u32, y: u32) -> Option<(usize, usize)> {
@@ -127,7 +143,7 @@ impl Map {
 
     pub fn get_tile(&self, x: u32, y: u32) -> Option<Tile> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = (x % CHUNK_SIZE) as usize;
         let local_y = (y % CHUNK_SIZE) as usize;
         chunk.tiles.get(local_y)?.get(local_x).cloned()
@@ -135,7 +151,7 @@ impl Map {
 
     pub fn set_tile(&self, x: u32, y: u32, tile: Tile) -> Option<()> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = (x % CHUNK_SIZE) as usize;
         let local_y = (y % CHUNK_SIZE) as usize;
         if let Some(t) = chunk.tiles.get_mut(local_y)?.get_mut(local_x) {
@@ -146,16 +162,20 @@ impl Map {
 
     pub fn add_entity_to_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = x % CHUNK_SIZE;
         let local_y = y % CHUNK_SIZE;
-        chunk.spatial_map.entry((local_x, local_y)).or_default().push(entity);
+        chunk
+            .spatial_map
+            .entry((local_x, local_y))
+            .or_default()
+            .push(entity);
         Some(())
     }
 
     pub fn remove_entity_from_spatial_map(&self, entity: Entity, x: u32, y: u32) -> Option<()> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let mut chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = x % CHUNK_SIZE;
         let local_y = y % CHUNK_SIZE;
         if let Some(entities) = chunk.spatial_map.get_mut(&(local_x, local_y)) {
@@ -166,66 +186,15 @@ impl Map {
 
     pub fn get_entities_at(&self, x: u32, y: u32) -> Option<Vec<Entity>> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
-        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().unwrap();
+        let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;
         let local_x = x % CHUNK_SIZE;
         let local_y = y % CHUNK_SIZE;
         chunk.spatial_map.get(&(local_x, local_y)).cloned()
     }
 
-
     pub fn is_walkable(&self, x: u32, y: u32) -> bool {
         self.get_tile(x, y)
-            .map_or(false, |tile| matches!(tile.tile_type, '.' | ',' | 'f'))
+            .is_some_and(|tile| matches!(tile.tile_type, '.' | ',' | 'f'))
     }
 
-    fn generate_island_map(
-        &mut self,
-        scale: f64,
-        octaves: i32,
-        persistence: f64,
-        lacunarity: f64,
-    ) {
-        let mut rng = rand::rng();
-        let seed = rng.random::<u32>();
-
-        let mut base_fbm: Fbm<OpenSimplex> = Fbm::new(seed);
-        base_fbm.octaves = octaves as usize;
-        base_fbm.persistence = persistence;
-        base_fbm.lacunarity = lacunarity;
-
-        let ridged_multi: RidgedMulti<OpenSimplex> = RidgedMulti::new(seed.wrapping_add(1));
-
-        for y_abs in 0..self.height {
-            for x_abs in 0..self.width {
-                let nx = 2.0 * x_abs as f64 / self.width as f64 - 1.0;
-                let ny = 2.0 * y_abs as f64 / self.height as f64 - 1.0;
-                let dist = 1.0 - (1.0 - nx.powi(2)) * (1.0 - ny.powi(2));
-
-                let pos = [x_abs as f64 / scale, y_abs as f64 / scale];
-                let base_noise = base_fbm.get(pos);
-                let mountain_pos = [x_abs as f64 / (scale * 2.5), y_abs as f64 / (scale * 2.5)];
-                let mountain_noise = ridged_multi.get(mountain_pos);
-                let combined_noise = base_noise + (mountain_noise.powi(2) * 0.6);
-                let island_val = (combined_noise.clamp(-1.0, 1.5) + 1.0) / 2.5;
-                let height = island_val * (1.0 - dist);
-
-                let mut tile_char = ' ';
-                let mut biome_name = "none".to_string();
-
-                for biome in &self.biomes {
-                    if height >= biome.height_range[0] && height < biome.height_range[1] {
-                        tile_char = biome.tile_type;
-                        biome_name = biome.name.clone();
-                        break;
-                    }
-                }
-
-                if biome_name == "plains" && tile_char == '.' && rng.random_range(0..100) < 5 {
-                    tile_char = 'f';
-                }
-
-                self.set_tile(x_abs, y_abs, Tile::new(tile_char, biome_name));
-            }
-        }
-    }
 }

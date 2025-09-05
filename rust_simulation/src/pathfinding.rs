@@ -57,7 +57,7 @@ pub fn find_path(
                 current = node.parent;
             }
             path.reverse();
-            debug!("Path found from {:?} to {:?}: {:?}", start, goal, path);
+            debug!("Path found from {start:?} to {goal:?}: {path:?}");
             return Some(path);
         }
 
@@ -85,14 +85,11 @@ pub fn find_path(
         }
     }
 
-    debug!("No path found from {:?} to {:?}", start, goal);
+    debug!("No path found from {start:?} to {goal:?}");
     None // No path found
 }
 
-fn get_neighbors(
-    position: (u32, u32),
-    mental_map: &[Vec<Option<MemoryTile>>],
-) -> Vec<(u32, u32)> {
+fn get_neighbors(position: (u32, u32), mental_map: &[Vec<Option<MemoryTile>>]) -> Vec<(u32, u32)> {
     let mut neighbors = Vec::new();
     let (x, y) = position;
 
