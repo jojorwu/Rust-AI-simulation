@@ -6,7 +6,6 @@ use rust_simulation::{
         Inventory,
     },
     config::Config,
-    item::ItemRegistry,
     systems::{eating::eating_system, hunger::hunger_system},
 };
 
@@ -15,10 +14,7 @@ fn setup_test_app() -> App {
     app.add_plugins(MinimalPlugins);
     // Load a default config for the tests
     let config = Config::load("data/config.toml").expect("Failed to load config");
-    let item_registry =
-        ItemRegistry::new("data/items.json").expect("Failed to load item registry");
     app.insert_resource(config);
-    app.insert_resource(item_registry);
     app.add_systems(Update, (hunger_system, eating_system).chain());
     app
 }
@@ -86,48 +82,9 @@ fn test_eating_restores_hunger() {
         .get::<Inventory>(entity)
         .expect("Entity should have an Inventory component");
 
-    let meat_hunger_value = 25.0; // From items.json
-    let expected_hunger = initial_hunger - config.survival.hunger_rate + meat_hunger_value;
+    let expected_hunger = initial_hunger - config.survival.hunger_rate + config.survival.meat_hunger_value;
     assert!((hunger.current - expected_hunger).abs() < 1e-6, "Expected hunger to be close to {}, but it was {}", expected_hunger, hunger.current);
     assert_eq!(inventory.get_quantity("meat"), 0);
-    assert!(app.world.get::<WantsToEat>(entity).is_none());
-}
-
-#[test]
-fn test_eating_berries_restores_hunger() {
-    // 1. Setup
-    let mut app = setup_test_app();
-    let mut inventory = Inventory::new();
-    inventory.add_item("berries", 1);
-
-    let initial_hunger = 50.0;
-    let entity = app
-        .world
-        .spawn((
-            Hunger { current: initial_hunger, max: 100.0 },
-            inventory,
-            WantsToEat("berries".to_string()),
-        ))
-        .id();
-
-    // 2. Run system
-    app.update();
-
-    // 3. Verify
-    let config = app.world.resource::<Config>();
-    let hunger = app
-        .world
-        .get::<Hunger>(entity)
-        .expect("Entity should have a Hunger component");
-    let inventory = app
-        .world
-        .get::<Inventory>(entity)
-        .expect("Entity should have an Inventory component");
-
-    let berries_hunger_value = 10.0; // From items.json
-    let expected_hunger = initial_hunger - config.survival.hunger_rate + berries_hunger_value;
-    assert!((hunger.current - expected_hunger).abs() < 1e-6, "Expected hunger to be close to {}, but it was {}", expected_hunger, hunger.current);
-    assert_eq!(inventory.get_quantity("berries"), 0);
     assert!(app.world.get::<WantsToEat>(entity).is_none());
 }
 

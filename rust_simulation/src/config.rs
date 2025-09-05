@@ -20,6 +20,7 @@ pub struct Config {
 pub struct SurvivalSettings {
     pub hunger_rate: f32,
     pub starvation_damage: i32,
+    pub meat_hunger_value: f32,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]

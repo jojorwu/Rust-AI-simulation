@@ -20,11 +20,11 @@ pub fn combat_system(
             if health.current <= 0 {
                 target_dead = true;
             }
+            commands.entity(attacker).remove::<WantsToAttack>();
         }
 
         if target_dead {
             event_writer.send(Event::EntityDied(target));
         }
-        commands.entity(attacker).remove::<WantsToAttack>();
     }
 }

@@ -44,3 +44,4 @@ enable_ram_limit = false
 [survival]
 hunger_rate = 0.01
 starvation_damage = 1
+meat_hunger_value = 25.0

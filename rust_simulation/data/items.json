@@ -71,6 +71,5 @@
       "health": 150.0
     }
   },
-  { "name": "meat", "stackable": true, "tool": false, "properties": { "hunger": 25.0 } },
-  { "name": "berries", "stackable": true, "tool": false, "properties": { "hunger": 10.0 } }
+  { "name": "meat", "stackable": true, "tool": false }
 ]

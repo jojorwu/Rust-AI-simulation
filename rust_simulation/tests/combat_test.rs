@@ -79,3 +79,27 @@ fn test_combat_system_handles_death() {
     }
     assert!(death_event_found);
 }
+
+#[test]
+fn test_attacking_target_without_health_does_not_consume_attack() {
+    // 1. Setup
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.add_event::<Event>();
+    app.add_systems(Update, combat_system);
+
+    // Create target without a Health component
+    let target = app.world.spawn_empty().id();
+    // Create attacker
+    let attacker = app
+        .world
+        .spawn((WantsToAttack { target }, Damage(10)))
+        .id();
+
+    // 2. Run the system
+    app.update();
+
+    // 3. Verify
+    // Attacker should still want to attack, as the target was invalid
+    assert!(app.world.get::<WantsToAttack>(attacker).is_some());
+}
