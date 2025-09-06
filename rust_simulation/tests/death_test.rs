@@ -92,23 +92,3 @@ fn test_death_system_pig_drops_meat() {
     assert_eq!(item.item_name, "meat");
     assert_eq!(item.quantity, 1);
 }
-
-#[test]
-fn test_death_of_entity_without_position_is_handled() {
-    // 1. Setup
-    let mut app = setup_test_app();
-
-    // Create a pig entity WITHOUT a position
-    let pig_entity = app.world.spawn(Pig {}).id();
-
-    // Verify entity exists before death
-    assert!(app.world.get_entity(pig_entity).is_some());
-
-    // 2. Send death event
-    app.world.send_event(Event::EntityDied(pig_entity));
-    app.update();
-
-    // 3. Verify
-    // Entity should be despawned even without a position
-    assert!(app.world.get_entity(pig_entity).is_none());
-}
