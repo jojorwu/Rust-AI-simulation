@@ -20,13 +20,13 @@ fn test_q_table_persistence() {
         app.add_systems(Update, save_q_tables_on_exit.run_if(on_event::<AppExit>()));
 
         // Create a mock HighLevelState
-        let mut items = HashMap::new();
-        items.insert("wood".to_string(), 1);
-        items.insert("stone".to_string(), 2);
-        items.insert("iron_ore".to_string(), 3);
-        items.insert("stone_axe".to_string(), 4);
         let state = HighLevelState {
-            inventory_summary: InventorySummary { items },
+            inventory_summary: InventorySummary {
+                wood: 1,
+                stone: 2,
+                iron_ore: 3,
+                stone_axe: 4,
+            },
             num_hostile_players: 0,
             health_level: 100,
             hunger_level: 0,

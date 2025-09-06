@@ -20,8 +20,6 @@ pub fn check_resources_system(
         if inventory.has_resources(&required) {
             commands.entity(entity).insert(HasResources);
         }
-        // Always remove the CheckResources component after the check.
-        commands.entity(entity).remove::<CheckResources>();
     }
 }
 
@@ -38,10 +36,6 @@ pub fn check_tile_system(
                 let tile = &chunk.tiles[local_y][local_x];
                 if tile.tile_type == '.' {
                     commands.entity(entity).insert(TileIsSuitable);
-                } else {
-                    // Tile is not suitable, so remove the HasResources component
-                    // to prevent the build_system from running.
-                    commands.entity(entity).remove::<HasResources>();
                 }
             }
         }
