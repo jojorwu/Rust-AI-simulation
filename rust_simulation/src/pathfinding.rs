@@ -25,25 +25,7 @@ impl PartialOrd for Node {
 }
 
 fn heuristic(a: (u32, u32), b: (u32, u32)) -> u32 {
-    let dx = (a.0 as i32 - b.0 as i32).unsigned_abs();
-    let dy = (a.1 as i32 - b.1 as i32).unsigned_abs();
-    // Using Chebyshev distance for 8-way movement. This is a common and simple
-    // heuristic when diagonal movement has the same cost as cardinal movement.
-    // For variable costs, a different heuristic like Diagonal Distance would be better.
-    dx.max(dy)
-}
-
-fn is_impassable(x: i32, y: i32, mental_map: &[Vec<Option<MemoryTile>>]) -> bool {
-    if let Some(Some(memory_tile)) = mental_map
-        .get(y as usize)
-        .and_then(|row| row.get(x as usize))
-    {
-        // Tile is known, check if it's a wall type
-        matches!(memory_tile.tile.tile_type, '#' | 'T' | 'M')
-    } else {
-        // Tile is None (unknown), so it's not known to be impassable.
-        false
-    }
+    (a.0 as i32 - b.0 as i32).unsigned_abs() + (a.1 as i32 - b.1 as i32).unsigned_abs()
 }
 
 pub fn find_path(
@@ -111,10 +93,7 @@ fn get_neighbors(position: (u32, u32), mental_map: &[Vec<Option<MemoryTile>>]) -
     let mut neighbors = Vec::new();
     let (x, y) = position;
 
-    let directions = [
-        (0, 1), (0, -1), (1, 0), (-1, 0), // Cardinal
-        (1, 1), (1, -1), (-1, 1), (-1, -1), // Diagonal
-    ];
+    let directions = [(0, 1), (0, -1), (1, 0), (-1, 0)];
 
     for (dx, dy) in &directions {
         let new_x = x as i32 + dx;
@@ -127,17 +106,19 @@ fn get_neighbors(position: (u32, u32), mental_map: &[Vec<Option<MemoryTile>>]) -
         {
             let new_pos = (new_x as u32, new_y as u32);
 
-            if !is_impassable(new_x, new_y, mental_map) {
-                // If moving diagonally, check for corner-cutting
-                if dx.abs() == 1 && dy.abs() == 1 {
-                    let adjacent_x_clear = !is_impassable(x as i32 + dx, y as i32, mental_map);
-                    let adjacent_y_clear = !is_impassable(x as i32, y as i32 + dy, mental_map);
-                    if adjacent_x_clear && adjacent_y_clear {
-                        neighbors.push(new_pos);
-                    }
-                } else {
-                    neighbors.push(new_pos);
-                }
+            let tile_is_known_impassable = if let Some(Some(memory_tile)) = mental_map
+                .get(new_y as usize)
+                .and_then(|row| row.get(new_x as usize))
+            {
+                // Tile is known, check if it's a wall type
+                matches!(memory_tile.tile.tile_type, '#' | 'T' | 'M')
+            } else {
+                // Tile is None (unknown), so it's not known to be impassable.
+                false
+            };
+
+            if !tile_is_known_impassable {
+                neighbors.push(new_pos);
             }
         }
     }
