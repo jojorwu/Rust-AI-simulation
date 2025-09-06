@@ -11,8 +11,11 @@ fn save_q_tables(query: &Query<(&Player, &GoalQTable)>) -> Result<(), anyhow::Er
         q_tables_map.insert(player.id, q_table.clone());
     }
 
-    // If the map is empty, we will write an empty JSON object `{}`,
-    // which correctly overwrites any stale data from a previous run.
+    // Don't try to save if there's nothing to save.
+    if q_tables_map.is_empty() {
+        info!("Q-tables map is empty. Not saving.");
+        return Ok(());
+    }
 
     let final_path = "q_tables.json";
     let temp_path = "q_tables.json.tmp";

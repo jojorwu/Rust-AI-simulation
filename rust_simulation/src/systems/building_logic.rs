@@ -20,6 +20,8 @@ pub fn check_resources_system(
         if inventory.has_resources(&required) {
             commands.entity(entity).insert(HasResources);
         }
+        // Always remove the CheckResources component after the check.
+        commands.entity(entity).remove::<CheckResources>();
     }
 }
 
