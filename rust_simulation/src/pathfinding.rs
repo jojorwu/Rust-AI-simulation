@@ -1,12 +1,15 @@
 use super::brain::MemoryTile;
 use log::debug;
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Node {
     position: (u32, u32),
+    g_cost: u32,
+    h_cost: u32,
     f_cost: u32,
+    parent: Option<Box<Node>>,
 }
 
 impl Ord for Node {
@@ -31,41 +34,53 @@ pub fn find_path(
     mental_map: &[Vec<Option<MemoryTile>>],
 ) -> Option<Vec<(u32, u32)>> {
     let mut open_list = BinaryHeap::new();
-    let mut came_from = HashMap::new();
+    let mut closed_list = HashSet::new();
     let mut g_costs = HashMap::new();
 
-    g_costs.insert(start, 0);
-    open_list.push(Node {
+    let start_node = Node {
         position: start,
+        g_cost: 0,
+        h_cost: heuristic(start, goal),
         f_cost: heuristic(start, goal),
-    });
+        parent: None,
+    };
+
+    open_list.push(start_node);
+    g_costs.insert(start, 0);
 
     while let Some(current_node) = open_list.pop() {
         if current_node.position == goal {
             let mut path = Vec::new();
-            let mut current = goal;
-            while current != start {
-                path.push(current);
-                current = came_from[&current];
+            let mut current = Some(Box::new(current_node));
+            while let Some(node) = current {
+                path.push(node.position);
+                current = node.parent;
             }
-            path.push(start);
             path.reverse();
             debug!("Path found from {start:?} to {goal:?}: {path:?}");
             return Some(path);
         }
 
+        closed_list.insert(current_node.position);
+
         for neighbor_pos in get_neighbors(current_node.position, mental_map) {
-            let current_g_cost = g_costs.get(&current_node.position).unwrap_or(&u32::MAX);
-            let tentative_g_cost = current_g_cost + 1;
+            if closed_list.contains(&neighbor_pos) {
+                continue;
+            }
+
+            let tentative_g_cost = current_node.g_cost + 1;
 
             if tentative_g_cost < *g_costs.get(&neighbor_pos).unwrap_or(&u32::MAX) {
-                came_from.insert(neighbor_pos, current_node.position);
                 g_costs.insert(neighbor_pos, tentative_g_cost);
                 let h_cost = heuristic(neighbor_pos, goal);
-                open_list.push(Node {
+                let neighbor_node = Node {
                     position: neighbor_pos,
+                    g_cost: tentative_g_cost,
+                    h_cost,
                     f_cost: tentative_g_cost + h_cost,
-                });
+                    parent: Some(Box::new(current_node.clone())),
+                };
+                open_list.push(neighbor_node);
             }
         }
     }
