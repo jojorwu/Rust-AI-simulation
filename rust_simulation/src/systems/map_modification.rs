@@ -30,12 +30,6 @@ pub fn map_modification_system(
                 let local_x = (position.x % CHUNK_SIZE) as usize;
                 let local_y = (position.y % CHUNK_SIZE) as usize;
 
-                // Re-check the tile to prevent race conditions
-                if chunk.tiles[local_y][local_x].tile_type != '.' {
-                    // Tile is already occupied, so we skip this build request.
-                    continue;
-                }
-
                 match structure.as_str() {
                     "chest" => {
                         // Spawn a chest entity

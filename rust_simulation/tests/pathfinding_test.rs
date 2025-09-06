@@ -137,3 +137,50 @@ fn test_exploration_flow() {
         "PathRequest was not generated"
     );
 }
+
+#[test]
+fn test_pathfinding_uses_diagonal_path() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+
+    let mut mental_map = MentalMap(vec![vec![None; 5]; 5]);
+    // Create a clear map
+    for y in 0..5 {
+        for x in 0..5 {
+            mental_map.0[y][x] = Some(MemoryTile {
+                tile: Tile::new('.', "grassland".to_string()),
+            });
+        }
+    }
+
+    app.add_systems(
+        Update,
+        (
+            pathfinding_system,
+            pathfinding_completion_system,
+        ),
+    );
+
+    let start_pos = (0, 0);
+    let goal_pos = (2, 2);
+    let player_entity = app
+        .world
+        .spawn((
+            Position { x: start_pos.0, y: start_pos.1 },
+            PathRequest { start: start_pos, goal: goal_pos },
+            mental_map,
+        ))
+        .id();
+
+    for _ in 0..10 {
+        app.update();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    let player_entity_ref = app.world.entity(player_entity);
+    let current_path = player_entity_ref.get::<CurrentPath>().expect("Path was not found");
+
+    // With diagonal movement, the path should be 3 steps (e.g., (0,0)->(1,1)->(2,2)).
+    // Without it, it would be 5 steps (e.g., (0,0)->(1,0)->(2,0)->(2,1)->(2,2)).
+    assert_eq!(current_path.nodes.len(), 3);
+}
