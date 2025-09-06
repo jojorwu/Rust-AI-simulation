@@ -7,25 +7,22 @@
 set -e
 
 # =============================================================================
-# Configuration
-# =============================================================================
-APP_NAME="rust_simulation"
-DEPS_DEBIAN="build-essential libasound2-dev libudev-dev"
-DEPS_FEDORA="alsa-lib-devel libudev-devel systemd-devel"
-DEPS_ARCH="base-devel alsa-lib"
-
-# =============================================================================
-# Global Variables
+# Global Variables and Configuration
 # =============================================================================
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROJECT_DIR="$SCRIPT_DIR/$APP_NAME"
+PROJECT_DIR="$SCRIPT_DIR/rust_simulation"
 DIST_DIR="$SCRIPT_DIR/dist"
 DIST_PATH="$DIST_DIR/linux"
-PACKAGE_NAME="$APP_NAME"
 
 # --- State Variables ---
 DO_CLEAN=0
 PROJECT_VERSION="unknown"
+PACKAGE_NAME="rust_simulation"
+
+# Required packages for different Linux distributions
+DEPS_DEBIAN="build-essential libasound2-dev libudev-dev"
+DEPS_FEDORA="alsa-lib-devel libudev-devel systemd-devel"
+DEPS_ARCH="base-devel alsa-lib"
 
 # --- Color Codes ---
 C_RESET='\033[0m'
@@ -137,7 +134,7 @@ install_system_deps() {
     fi
 }
 
-get_version() {
+get_project_version() {
     info "Getting project version..."
     if [ ! -f "$PROJECT_DIR/Cargo.toml" ]; then
         error "Cargo.toml not found in $PROJECT_DIR"
@@ -186,19 +183,20 @@ ask_clean_build() {
 
 build_project() {
     info "Building project... This may take a few minutes."
-    pushd "$PROJECT_DIR" > /dev/null
+    cd "$PROJECT_DIR"
 
     if [ "$DO_CLEAN" -eq 1 ]; then
         info "Cleaning previous build artifacts..."
-        cargo clean
+        if ! cargo clean; then
+            warn "cargo clean command failed, but continuing anyway."
+        fi
     fi
 
     if ! cargo build --release; then
-        popd > /dev/null
         error "Project build failed."
     fi
 
-    popd > /dev/null
+    cd "$SCRIPT_DIR"
     info "Project built successfully."
 }
 
@@ -272,7 +270,7 @@ main() {
     check_existing_build
 
     check_dependencies
-    get_version
+    get_project_version
     ask_clean_build
 
     install_rust

@@ -148,12 +148,7 @@ fn get_high_level_state(
         .filter(|m| m.relationship == crate::brain::RelationshipStatus::Hostile)
         .count() as u32;
 
-    let inventory_summary = InventorySummary {
-        wood: inventory.get_quantity("wood"),
-        stone: inventory.get_quantity("stone"),
-        iron_ore: inventory.get_quantity("iron_ore"),
-        stone_axe: inventory.get_quantity("stone_axe"),
-    };
+    let inventory_summary = InventorySummary::from(inventory);
 
     HighLevelState {
         inventory_summary,
@@ -396,10 +391,7 @@ mod tests {
 
         let state = HighLevelState {
             inventory_summary: InventorySummary {
-                wood: 0,
-                stone: 0,
-                iron_ore: 0,
-                stone_axe: 0,
+                items: HashMap::new(),
             },
             num_hostile_players: 0,
             health_level: 10, // Low health

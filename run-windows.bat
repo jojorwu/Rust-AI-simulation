@@ -2,17 +2,9 @@
 setlocal enabledelayedexpansion
 
 :: =============================================================================
-:: Configuration
+:: Configuration & Strings
 :: =============================================================================
-set "APP_NAME=rust_simulation"
-set "RUSTUP_URL=https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
-set "RUSTUP_CHECKSUM_URL=https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe.sha256"
-set "VC_REDIST_URL=https://aka.ms/vs/17/release/vc_redist.x64.exe"
-
-:: =============================================================================
-:: Strings
-:: =============================================================================
-set "msg_welcome=Welcome to the %APP_NAME% setup script."
+set "msg_welcome=Welcome to the Rust Simulation setup script."
 set "msg_version_found=Project version found:"
 set "msg_existing_build_found=An existing build was found. What would you like to do?"
 set "msg_clean_build_prompt=Perform a clean build? (This is slower but can fix some issues)"
@@ -20,7 +12,7 @@ set "msg_cleaning=Cleaning previous build artifacts..."
 set "msg_cargo_found=Cargo found."
 set "msg_cargo_not_found=Cargo not found. Attempting to download the Rust installer."
 set "msg_download_failed=! AUTOMATIC DOWNLOAD FAILED. Please download the Rust installer manually."
-set "msg_download_link=1. Download from: %RUSTUP_URL%"
+set "msg_download_link=1. Download from: https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
 set "msg_download_save=2. Save 'rustup-init.exe' in the same folder as this script."
 set "msg_download_return=3. Return to this window when the download is complete."
 set "msg_file_not_found='rustup-init.exe' still not found. Please try again."
@@ -40,7 +32,7 @@ set "msg_bundling_redist_failed=Warning: Failed to download VC++ Redistributable
 set "msg_creating_zip=Creating ZIP archive..."
 set "msg_creating_zip_failed=Warning: Failed to create ZIP archive."
 set "msg_packaged_successfully=Application packaged successfully!"
-set "msg_dist_location=The distributable is in the 'dist/windows' directory and 'dist/%APP_NAME%_v!project_version!.zip'."
+set "msg_dist_location=The distributable is in the 'dist/windows' directory and 'dist/rust_simulation_v!project_version!.zip'."
 set "msg_launching=Launching the application..."
 
 :: =============================================================================
@@ -50,7 +42,7 @@ cls
 echo !msg_welcome!
 echo.
 
-call :check_tools
+call :check_powershell
 if !errorlevel! neq 0 ( goto :end )
 
 call :get_version
@@ -91,25 +83,15 @@ goto :end
 :: Subroutines
 :: =============================================================================
 
-:check_tools
-    where where >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo ERROR: The 'where' command is not available on this system.
-        exit /b 1
-    )
-    where choice >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo ERROR: The 'choice' command is not available on this system.
-        exit /b 1
-    )
-    where powershell >nul 2>&1
-    if !errorlevel! neq 0 (
+:check_powershell
+	where powershell >nul 2>&1
+	if !errorlevel! neq 0 (
 		echo ERROR: PowerShell is not found on this system.
 		echo This script requires PowerShell to download and package files.
 		echo Please install PowerShell or run it from a modern Windows system.
-        exit /b 1
-    )
-    exit /b 0
+		exit /b 1
+	)
+	exit /b 0
 
 :get_version
     set "project_version="
@@ -125,7 +107,7 @@ goto :end
 
 :check_existing_build
     set "rebuild=1"
-    if exist "%~dp0dist\windows\%APP_NAME%.exe" (
+    if exist "%~dp0dist\windows\rust_simulation.exe" (
         echo.
         echo !msg_existing_build_found!
         echo  1. Launch the existing version
@@ -161,8 +143,8 @@ goto :end
     echo !msg_cargo_not_found!
     echo.
     set "installer_path=%~dp0rustup-init.exe"
-    set "checksum_url=!RUSTUP_CHECKSUM_URL!"
-    set "installer_url=!RUSTUP_URL!"
+    set "checksum_url=https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe.sha256"
+    set "installer_url=https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
     set "download_log=%~dp0rustup_download.log"
 
     if exist "!installer_path!" del "!installer_path!" >nul 2>&1
@@ -250,32 +232,35 @@ goto :end
     set "build_log=%~dp0build.log"
     if exist "!build_log!" del "!build_log!" >nul 2>&1
 
-    pushd "%~dp0rust_simulation"
-    if !errorlevel! neq 0 ( exit /b 1 )
-
+    cd "%~dp0rust_simulation" || exit /b 1
     if "!do_clean!"=="1" (
         echo !msg_cleaning!
-        cargo clean
+        cargo clean > nul
     )
 
-    cargo build --release
+    cargo build --release > "!build_log!" 2>&1
     if !errorlevel! neq 0 (
         echo.
         echo ====================================================================
         echo !msg_build_failed!
         echo !msg_build_failed_help!
         echo ====================================================================
-        popd
+        echo.
+        echo Build log:
+        type "!build_log!"
+        echo.
+        cd "%~dp0"
         exit /b 1
     )
 
-    if not exist "target\release\%APP_NAME%.exe" (
+    if not exist "target\release\rust_simulation.exe" (
         echo !msg_build_verify_failed!
-        popd
+        cd "%~dp0"
         exit /b 1
     )
 
-    popd
+    cd "%~dp0"
+    if exist "!build_log!" del "!build_log!" >nul 2>&1
     exit /b 0
 
 :package_app
@@ -298,20 +283,20 @@ goto :end
     )
 
     echo   - Copying executable...
-    copy "%~dp0%APP_NAME%\target\release\%APP_NAME%.exe" "%~dp0dist\windows\" > nul
+    copy "%~dp0rust_simulation\target\release\rust_simulation.exe" "%~dp0dist\windows\" > nul
     if !errorlevel! neq 0 (
         echo ERROR: Failed to copy the main executable. Was the build successful?
         exit /b 1
     )
 
     echo   - Copying data files...
-    xcopy "%~dp0%APP_NAME%\data" "%~dp0dist\windows\data\" /E /I /Y /Q > nul
+    xcopy "%~dp0rust_simulation\data" "%~dp0dist\windows\data\" /E /I /Y /Q > nul
     if !errorlevel! neq 0 (
         echo ERROR: Failed to copy the 'data' directory.
         exit /b 1
     )
 
-    if not exist "%~dp0dist\windows\%APP_NAME%.exe" (
+    if not exist "%~dp0dist\windows\rust_simulation.exe" (
         echo !msg_copy_failed!
         exit /b 1
     )
@@ -332,7 +317,7 @@ goto :end
         echo.
         echo Thank you for downloading Rust Simulation!
         echo.
-        echo To run the game, simply run the `%APP_NAME%.exe` file.
+        echo To run the game, simply run the `rust_simulation.exe` file.
         echo.
         echo If the game does not start and you see an error about a missing DLL ^(like VCRUNTIME140.dll^), please run the included `vc_redist.x64.exe` installer first. This is the official Microsoft C++ library installer and is required by the game engine.
     ) > "%~dp0dist\windows\README.txt"
@@ -343,42 +328,23 @@ goto :end
     set "redist_log=%~dp0redist_download.log"
     if exist "!redist_log!" del "!redist_log!" >nul 2>&1
 
-    pushd "%~dp0dist\windows"
-    if !errorlevel! neq 0 ( exit /b 1 )
-
-    powershell -Command "Invoke-WebRequest -Uri '!VC_REDIST_URL!' -OutFile 'vc_redist.x64.exe'" > "!redist_log!" 2>&1
+    cd "%~dp0dist\windows" || exit /b 1
+    powershell -Command "Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile 'vc_redist.x64.exe'" > "!redist_log!" 2>&1
     if !errorlevel! neq 0 (
         echo !msg_bundling_redist_failed!
         echo.
         echo Download log:
         type "!redist_log!"
-    ) else (
-        call :offer_install_redist
     )
-
-    popd
+    cd "%~dp0"
     if exist "!redist_log!" del "!redist_log!" >nul 2>&1
-    exit /b 0
-
-:offer_install_redist
-    echo.
-    echo The Microsoft VC++ Redistributable has been downloaded.
-    echo This is required to run the application on many systems.
-    echo Would you like to run the installer now?
-    choice /c YN /n /m "> "
-    if errorlevel 2 (
-        echo Skipping installation. You can run 'vc_redist.x64.exe' from the 'dist/windows' folder later.
-        exit /b 0
-    )
-    echo Starting the VC++ Redistributable installer...
-    start /wait vc_redist.x64.exe
     exit /b 0
 
 :create_zip
     echo !msg_creating_zip!
     set "zip_log=%~dp0zip.log"
     if exist "!zip_log!" del "!zip_log!" >nul 2>&1
-    set "zip_path=%~dp0dist\%APP_NAME%_v!project_version!.zip"
+    set "zip_path=%~dp0dist\rust_simulation_v!project_version!.zip"
     set "source_path=%~dp0dist\windows"
     powershell -Command "Compress-Archive -Path '%source_path%\*' -DestinationPath '%zip_path%' -Force" > "!zip_log!" 2>&1
     if !errorlevel! neq 0 (
@@ -398,7 +364,7 @@ goto :end
     echo  !msg_launching!
     echo ======================================================
     echo.
-    cd "%~dp0dist\windows" && start %APP_NAME%.exe
+    cd "%~dp0dist\windows" && start rust_simulation.exe
     exit /b 0
 
 :end
