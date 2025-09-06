@@ -8,9 +8,11 @@
 //! The `Brain` uses a Q-learning-based approach to decide on a `Goal`, and then
 //! uses a planner to break that goal down into a series of actions.
 
-use crate::components::{Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
+use crate::components::{Inventory, Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 /// A tile as remembered by the agent.
 #[derive(Debug, Clone)]
@@ -66,16 +68,28 @@ pub enum BrainAction {
 }
 
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InventorySummary {
-    /// The quantity of wood the agent has.
-    pub wood: u32,
-    /// The quantity of stone the agent has.
-    pub stone: u32,
-    /// The quantity of iron ore the agent has.
-    pub iron_ore: u32,
-    /// The quantity of stone axes the agent has.
-    pub stone_axe: u32,
+    pub items: HashMap<String, u32>,
+}
+
+impl Hash for InventorySummary {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let mut pairs: Vec<_> = self.items.iter().collect();
+        pairs.sort_by_key(|(k, _)| *k);
+        for (key, value) in pairs {
+            key.hash(state);
+            value.hash(state);
+        }
+    }
+}
+
+impl From<&Inventory> for InventorySummary {
+    fn from(inventory: &Inventory) -> Self {
+        InventorySummary {
+            items: inventory.items.clone(),
+        }
+    }
 }
 
 /// Represents the high-level state of the agent and its environment.

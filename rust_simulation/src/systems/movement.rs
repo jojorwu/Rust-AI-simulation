@@ -23,7 +23,7 @@ pub fn movement_system(
         let new_y = (pos.y as i32 + vel.dy) as u32;
 
         // Basic boundary check
-        if new_x < map.width && new_y < map.height && map.is_walkable(new_x, new_y) {
+        if new_x < map.width && new_y < map.height {
             // Update the entity's position component.
             pos.x = new_x;
             pos.y = new_y;
