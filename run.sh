@@ -44,7 +44,14 @@ error() {
 # =============================================================================
 
 run_linux() {
-    info "Linux operating system detected."
+    # --- OS Version Detection ---
+    local os_pretty_name="Linux (Unknown Version)"
+    if [ -f /etc/os-release ]; then
+        # Source the file to get variables like PRETTY_NAME
+        . /etc/os-release
+        os_pretty_name="$PRETTY_NAME"
+    fi
+    info "Linux operating system detected: $os_pretty_name"
 
     # --- Configuration ---
     local project_dir="$SCRIPT_DIR/rust_simulation"
@@ -192,16 +199,58 @@ run_linux() {
         "./$package_name"
     }
 
-    check_existing_build_linux() {
-        if [ -f "$dist_path/$package_name" ]; then
-            info "An existing build was found."
-            read -p "What would you like to do? (1. Launch existing version, 2. Rebuild the application) > " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[1]$ ]]; then
+    update_app_linux() {
+        info "Checking for updates..."
+        if ! command -v git &> /dev/null; then
+            error "Git command not found. Please install Git to use the update feature."
+        fi
+        if [ ! -d "$SCRIPT_DIR/.git" ]; then
+            warn "This does not appear to be a Git repository."
+            warn "Cannot update automatically. Please download the latest version manually."
+            read -p "Press Enter to continue with a rebuild of the current version, or Ctrl+C to abort."
+            return
+        fi
+
+        info "Attempting to pull the latest changes..."
+        cd "$SCRIPT_DIR"
+        if ! git pull; then
+            error "git pull failed. Please resolve any conflicts or issues and run the script again."
+        fi
+        cd - > /dev/null
+        info "Successfully pulled latest changes. The application will now be rebuilt."
+    }
+
+    show_menu_linux() {
+        if [ ! -f "$dist_path/$package_name" ]; then
+            # No existing build, so we just continue to the build process
+            return
+        fi
+
+        info "An existing build was found."
+        echo "What would you like to do?"
+        echo "  1. Launch existing version"
+        echo "  2. Rebuild the application"
+        echo "  3. Check for Updates and Rebuild"
+        read -p "> " -n 1 -r
+        echo
+        case "$REPLY" in
+            1)
                 launch_app_linux
                 exit 0
-            fi
-        fi
+                ;;
+            2)
+                info "Proceeding with rebuild..."
+                # Let the script continue
+                ;;
+            3)
+                update_app_linux # This function will run git pull
+                # After update, the script will continue to the rebuild phase
+                ;;
+            *)
+                warn "Invalid option. Aborting."
+                exit 1
+                ;;
+        esac
     }
 
     ask_clean_build_linux() {
@@ -259,7 +308,7 @@ EOL
     # =========================================================================
     # Main Linux Execution Logic
     # =========================================================================
-    check_existing_build_linux
+    show_menu_linux
     check_linux_dependencies
     get_project_version_linux
     ask_clean_build_linux
@@ -285,9 +334,19 @@ run_windows() {
 }
 
 run_macos() {
-    info "macOS operating system detected."
-    # macOS shares some similarities with Linux, but may have different dependencies.
-    error "macOS is not yet supported."
+    # --- OS Version Detection ---
+    local product_name=$(sw_vers -productName)
+    local product_version=$(sw_vers -productVersion)
+    local build_version=$(sw_vers -buildVersion)
+    info "macOS detected: $product_name $product_version (Build $build_version)"
+
+    warn "macOS support is experimental."
+    warn "This script will attempt to install Rust and build the project, but system dependency installation is not implemented."
+    warn "Please ensure you have the necessary development tools (like Xcode Command Line Tools) installed."
+
+    # For now, we can reuse the Linux logic since it's very similar.
+    # A more mature script might have a dedicated run_macos function.
+    run_linux
 }
 
 # =============================================================================

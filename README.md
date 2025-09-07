@@ -23,6 +23,14 @@ The script will handle the following steps for you:
 3.  **Package:** It will package the game into a `dist` folder, specific to your operating system.
 4.  **Launch:** It will launch the application automatically.
 
+### Script Features
+
+-   **OS Version Detection:** The script begins by detecting and displaying your specific OS version, which can be helpful for debugging.
+-   **Interactive Menu:** If you have an existing build, the script will present a menu with the following options:
+    -   **Launch existing version:** Skips the build process and runs the app immediately.
+    -   **Rebuild the application:** Deletes the old build and creates a new one from the current source code.
+    -   **Check for Updates and Rebuild:** If you cloned the project using Git, this option will run `git pull` to fetch the latest changes from the repository and then automatically start the rebuild process. If not installed via Git, it will advise you to update manually.
+
 ### Manual Development
 
 If you are a developer and have already installed Rust and all the required dependencies, you can run the simulation directly with Cargo:

@@ -58,16 +58,58 @@ function Get-ProjectVersion {
     }
 }
 
-function Check-ExistingBuild {
+function Update-App {
+    Write-Log "Checking for updates..."
+    if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) {
+        throw "Git command not found. Please install Git and ensure it's in your PATH to use the update feature."
+    }
+    $gitPath = Join-Path $ScriptDir ".git"
+    if (-not (Test-Path $gitPath)) {
+        Write-Log "This does not appear to be a Git repository." -Level "WARN"
+        Write-Log "Cannot update automatically. Please download the latest version manually." -Level "WARN"
+        Read-Host "Press Enter to continue with a rebuild of the current version, or press Ctrl+C to abort."
+        return
+    }
+
+    Write-Log "Attempting to pull the latest changes..."
+    Set-Location $ScriptDir
+    try {
+        git pull
+        Write-Log "Successfully pulled latest changes. The application will now be rebuilt." -Level "SUCCESS"
+    }
+    catch {
+        throw "git pull failed. Please resolve any conflicts or issues and run the script again."
+    }
+    finally {
+        Set-Location $ScriptDir
+    }
+}
+
+function Show-MainMenu {
     $exePath = Join-Path $DistPath "$PackageName.exe"
-    if (Test-Path $exePath) {
-        Write-Log "An existing build was found."
-        $choice = Read-Host "What would you like to do? (1) Launch existing version (2) Rebuild the application"
-        if ($choice -eq "1") {
-            return $false # Do not rebuild
+    if (-not (Test-Path $exePath)) {
+        return "rebuild" # No existing build, must rebuild
+    }
+
+    Write-Log "An existing build was found."
+    Write-Host "What would you like to do?"
+    Write-Host "  1. Launch existing version"
+    Write-Host "  2. Rebuild the application"
+    Write-Host "  3. Check for Updates and Rebuild"
+    $choice = Read-Host ">"
+
+    switch ($choice) {
+        "1" { return "launch" }
+        "2" { return "rebuild" }
+        "3" {
+            Update-App
+            return "rebuild" # After updating, we must rebuild
+        }
+        default {
+            Write-Log "Invalid option. Aborting." -Level "WARN"
+            return "exit"
         }
     }
-    return $true # Rebuild
 }
 
 function Ask-CleanBuild {
@@ -214,6 +256,24 @@ function Launch-App {
     Start-Process -FilePath $exePath -WorkingDirectory $DistPath
 }
 
+function Get-OSVersion {
+    try {
+        # Modern approach for PowerShell 5.1+
+        $osInfo = Get-ComputerInfo | Select-Object "WindowsProductName", "WindowsVersion", "OsBuildNumber"
+        Write-Log "OS Detected: $($osInfo.WindowsProductName), Version $($osInfo.WindowsVersion), Build $($osInfo.OsBuildNumber)"
+    }
+    catch {
+        # Fallback for older PowerShell versions
+        try {
+            $osInfo = Get-CimInstance Win32_OperatingSystem | Select-Object "Caption", "Version"
+            Write-Log "OS Detected: $($osInfo.Caption), Version $($osInfo.Version)"
+        }
+        catch {
+            Write-Log "Could not determine detailed Windows version." -Level "WARN"
+        }
+    }
+}
+
 # =============================================================================
 # Main Script
 # =============================================================================
@@ -221,12 +281,18 @@ Clear-Host
 Write-Log "Welcome to the Rust Simulation Setup Script"
 Write-Log "=========================================="
 
+Get-OSVersion
+
 try {
-    # Check for existing build and ask user what to do
-    if (-not (Check-ExistingBuild)) {
+    $action = Show-MainMenu
+    if ($action -eq "launch") {
         Launch-App
         exit
     }
+    if ($action -eq "exit") {
+        exit
+    }
+    # If the action is "rebuild", the script continues...
 
     # Get project version
     $projectVersion = Get-ProjectVersion
