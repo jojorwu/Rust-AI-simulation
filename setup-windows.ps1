@@ -1,3 +1,11 @@
+param(
+    [switch]$Build,
+    [switch]$Run,
+    [switch]$Test,
+    [switch]$Clean,
+    [switch]$Help
+)
+
 # =============================================================================
 # PowerShell Setup & Build Script for Rust Simulation
 # =============================================================================
@@ -97,6 +105,25 @@ function Update-App {
     }
 }
 
+function Invoke-Tests {
+    Write-Log "Running test suite..."
+    if (-not (Check-Rust)) {
+        Install-Rust
+    }
+
+    Set-Location $ProjectDir
+    try {
+        cargo test
+        Write-Log "All tests passed successfully." -Level "SUCCESS"
+    }
+    catch {
+        throw "Tests failed."
+    }
+    finally {
+        Set-Location $ScriptDir
+    }
+}
+
 function Show-MainMenu {
     $exePath = Join-Path $DistPath "$PackageName.exe"
     if (-not (Test-Path $exePath)) {
@@ -108,6 +135,7 @@ function Show-MainMenu {
     Write-Host "  1. Launch existing version"
     Write-Host "  2. Rebuild the application"
     Write-Host "  3. Check for Updates and Rebuild"
+    Write-Host "  4. Run Tests"
     $choice = Read-Host ">"
 
     switch ($choice) {
@@ -117,6 +145,7 @@ function Show-MainMenu {
             Update-App
             return "rebuild" # After updating, we must rebuild
         }
+        "4" { return "test" }
         default {
             Write-Log "Invalid option. Aborting." -Level "WARN"
             return "exit"
@@ -286,9 +315,32 @@ function Get-OSVersion {
     }
 }
 
+function Show-Help {
+    Write-Host "Usage: ./setup-windows.ps1 [options]"
+    Write-Host
+    Write-Host "This script builds, runs, and tests the Rust Simulation project."
+    Write-Host
+    Write-Host "Options:"
+    Write-Host "  -Build          Build the application."
+    Write-Host "  -Run            Run the application after building. Implies -Build."
+    Write-Host "  -Test           Run the project's test suite."
+    Write-Host "  -Clean          Perform a clean build before any action."
+    Write-Host "  -Help           Display this help message and exit."
+    Write-Host
+    Write-Host "If no options are provided, the script will start in interactive mode."
+    exit 0
+}
+
 # =============================================================================
 # Main Script
 # =============================================================================
+if ($Help) { Show-Help }
+
+# Determine run mode
+$Interactive = ($PSBoundParameters.Keys.Count -eq 0)
+
+if ($Run) { $Build = $true } # -Run implies -Build
+
 Clear-Host
 Write-Log "Welcome to the Rust Simulation Setup Script"
 Write-Log "=========================================="
@@ -296,32 +348,53 @@ Write-Log "=========================================="
 Get-OSVersion
 
 try {
-    $action = Show-MainMenu
-    if ($action -eq "launch") {
+    if ($Interactive) {
+        $action = Show-MainMenu
+        switch ($action) {
+            "launch" { Launch-App; exit }
+            "exit"   { exit }
+            "test"   { $Test = $true }
+            # "rebuild" will just fall through
+        }
+    }
+
+    # --- Non-Interactive and Post-Menu Logic ---
+
+    if ($Test) {
+        Invoke-Tests
+    }
+
+    if ($Build) {
+        $projectVersion = Get-ProjectVersion
+        $doClean = $false
+        if ($Interactive) {
+            $doClean = Ask-CleanBuild
+        } elseif ($Clean) {
+            $doClean = $true
+        }
+        if (-not (Check-Rust)) {
+            Install-Rust
+        }
+        Build-Project -Clean $doClean
+        Package-App -Version $projectVersion
+
+        if ($Run) {
+            Launch-App
+        } else {
+            Write-Log "Build complete. Use -Run to launch the application."
+        }
+    } elseif ($Interactive -and $action -eq "rebuild") {
+        # This handles the case where the user chose "rebuild" from the menu
+        # without any non-interactive flags being set.
+        $projectVersion = Get-ProjectVersion
+        $doClean = Ask-CleanBuild
+        if (-not (Check-Rust)) {
+            Install-Rust
+        }
+        Build-Project -Clean $doClean
+        Package-App -Version $projectVersion
         Launch-App
-        exit
     }
-    if ($action -eq "exit") {
-        exit
-    }
-    # If the action is "rebuild", the script continues...
-
-    # Get project version
-    $projectVersion = Get-ProjectVersion
-
-    # Ask about clean build
-    $doClean = Ask-CleanBuild
-
-    # Check for and install Rust
-    if (-not (Check-Rust)) {
-        Install-Rust
-        # The script will exit inside Install-Rust if it runs the installer
-    }
-
-    # Build, package, and launch
-    Build-Project -Clean $doClean
-    Package-App -Version $projectVersion
-    Launch-App
 
     Write-Log "Script finished successfully." -Level "SUCCESS"
 }

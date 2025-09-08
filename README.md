@@ -31,6 +31,41 @@ The script will handle the following steps for you:
     -   **Rebuild the application:** Deletes the old build and creates a new one from the current source code.
     -   **Check for Updates and Rebuild:** If you cloned the project using Git, this option will run `git pull` to fetch the latest changes from the repository and then automatically start the rebuild process. If not installed via Git, it will advise you to update manually.
 
+### Non-Interactive Mode / Automation
+
+For power users or automated environments, the script can be run non-interactively using command-line flags.
+
+**On Linux/macOS:**
+```bash
+# Build the project but do not run it
+./run.sh --build
+
+# Perform a clean build and then run the application
+./run.sh --clean --run
+
+# Run the test suite
+./run.sh --test
+```
+
+**On Windows (from PowerShell or `cmd`):**
+```powershell
+# Build the project but do not run it
+./run-windows.bat -Build
+
+# Perform a clean build and then run the application
+./run-windows.bat -Clean -Run
+
+# Run the test suite
+./run-windows.bat -Test
+```
+
+Available flags:
+-   `--build` / `-Build`: Build the application.
+-   `--run` / `-Run`: Run the application after building. Implies build.
+-   `--test` / `-Test`: Run the project's test suite.
+-   `--clean` / `-Clean`: Perform a clean build.
+-   `--help` / `-Help`: Display a help message.
+
 ### Manual Development
 
 If you are a developer and have already installed Rust and all the required dependencies, you can run the simulation directly with Cargo:

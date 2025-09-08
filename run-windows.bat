@@ -12,7 +12,7 @@ set "SCRIPT_DIR=%~dp0"
 :: -NoProfile: Speeds up the start time by not loading user profiles.
 :: -File: Specifies the script to run.
 echo Launching the PowerShell setup script...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%setup-windows.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%setup-windows.ps1" %*
 
 echo.
 echo Script finished. Press any key to exit.

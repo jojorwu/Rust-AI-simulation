@@ -239,10 +239,23 @@ run_linux() {
         info "Successfully pulled latest changes. The application will now be rebuilt."
     }
 
+    run_tests_linux() {
+        info "Running test suite..."
+        check_linux_dependencies
+        install_rust_linux
+        install_system_deps_linux
+
+        cd "$project_dir"
+        if ! cargo test; then
+            error "Tests failed."
+        fi
+        info "All tests passed successfully."
+    }
+
     show_menu_linux() {
         if [ ! -f "$dist_path/$package_name" ]; then
             # No existing build, so we just continue to the build process
-            return
+            return "rebuild"
         fi
 
         info "An existing build was found."
@@ -250,24 +263,20 @@ run_linux() {
         echo "  1. Launch existing version"
         echo "  2. Rebuild the application"
         echo "  3. Check for Updates and Rebuild"
+        echo "  4. Run Tests"
         read -p "> " -n 1 -r
         echo
         case "$REPLY" in
-            1)
-                launch_app_linux
-                exit 0
-                ;;
-            2)
-                info "Proceeding with rebuild..."
-                # Let the script continue
-                ;;
+            1) return "launch" ;;
+            2) return "rebuild" ;;
             3)
-                update_app_linux # This function will run git pull
-                # After update, the script will continue to the rebuild phase
+                update_app_linux
+                return "rebuild"
                 ;;
+            4) return "test" ;;
             *)
                 warn "Invalid option. Aborting."
-                exit 1
+                return "exit"
                 ;;
         esac
     }
@@ -327,15 +336,43 @@ EOL
     # =========================================================================
     # Main Linux Execution Logic
     # =========================================================================
-    show_menu_linux
-    check_linux_dependencies
-    get_project_version_linux
-    ask_clean_build_linux
-    install_rust_linux
-    install_system_deps_linux
-    build_project_linux
-    package_release_linux
-    launch_app_linux
+    if [ "$INTERACTIVE" -eq 1 ]; then
+        local action=$(show_menu_linux)
+        case "$action" in
+            launch) launch_app_linux; exit 0 ;;
+            test) run_tests_linux; exit 0 ;;
+            exit) exit 1 ;;
+            rebuild)
+                # This is the rebuild path for interactive mode
+                check_linux_dependencies
+                get_project_version_linux
+                ask_clean_build_linux
+                install_rust_linux
+                install_system_deps_linux
+                build_project_linux
+                package_release_linux
+                launch_app_linux
+                ;;
+        esac
+    else
+        # Non-interactive mode
+        if [ "$ACTION_TEST" -eq 1 ]; then
+            run_tests_linux
+        fi
+        if [ "$ACTION_BUILD" -eq 1 ]; then
+            check_linux_dependencies
+            get_project_version_linux
+            install_rust_linux
+            install_system_deps_linux
+            build_project_linux
+            package_release_linux
+            if [ "$ACTION_RUN" -eq 1 ]; then
+                launch_app_linux
+            else
+                info "Build complete. Use --run to launch the application."
+            fi
+        fi
+    fi
 }
 
 run_windows() {
@@ -347,9 +384,18 @@ run_windows() {
         error "PowerShell is not found. Please run the 'run-windows.bat' script directly or install PowerShell."
     fi
 
+    local ps_args=""
+    if [ "$INTERACTIVE" -eq 0 ]; then
+        info "Running in non-interactive mode."
+        if [ "$ACTION_BUILD" -eq 1 ]; then ps_args="$ps_args -Build"; fi
+        if [ "$ACTION_RUN" -eq 1 ]; then ps_args="$ps_args -Run"; fi
+        if [ "$ACTION_TEST" -eq 1 ]; then ps_args="$ps_args -Test"; fi
+        if [ "$DO_CLEAN" -eq 1 ]; then ps_args="$ps_args -Clean"; fi
+    fi
+
     # Execute the PowerShell script
     # The -ExecutionPolicy Bypass is used to ensure the script can run on systems with restrictive policies.
-    powershell.exe -ExecutionPolicy Bypass -File "$SCRIPT_DIR/setup-windows.ps1"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SCRIPT_DIR/setup-windows.ps1" $ps_args
 }
 
 run_macos() {
@@ -389,10 +435,55 @@ run_macos() {
     run_linux
 }
 
+show_help() {
+    echo "Usage: $0 [options]"
+    echo
+    echo "This script builds, runs, and tests the Rust Simulation project."
+    echo
+    echo "Options:"
+    echo "  --build         Build the application (default action if --run is specified)."
+    echo "  --run           Run the application after building."
+    echo "  --test          Run the project's test suite."
+    echo "  --clean         Perform a clean build before any action."
+    echo "  --help          Display this help message and exit."
+    echo
+    echo "If no options are provided, the script will start in interactive mode."
+    exit 0
+}
+
 # =============================================================================
 # Main Script Entry Point
 # =============================================================================
 main() {
+    # --- Argument Parsing ---
+    # Non-interactive mode variables
+    ACTION_BUILD=0
+    ACTION_RUN=0
+    ACTION_TEST=0
+    # This variable is already used by the build functions
+    DO_CLEAN=0
+    INTERACTIVE=1
+
+    if [ "$#" -gt 0 ]; then
+        INTERACTIVE=0
+        # If any arguments are passed, we are in non-interactive mode.
+        # We need to parse them.
+        for arg in "$@"; do
+            case $arg in
+                --build) ACTION_BUILD=1; shift ;;
+                --run) ACTION_RUN=1; ACTION_BUILD=1; shift ;; # --run implies --build
+                --test) ACTION_TEST=1; shift ;;
+                --clean) DO_CLEAN=1; shift ;;
+                --help) show_help ;;
+                *) error "Unknown option: $arg. Use --help for more information." ;;
+            esac
+        done
+    fi
+
+    # Pass the parsed flags to the OS-specific function
+    # We will need to modify the run_* functions to accept these
+    # For now, this structure sets up the parsing logic.
+
     info "Starting the Rust Simulation launcher..."
 
     # --- Detect Operating System ---
@@ -405,6 +496,8 @@ main() {
             run_macos
             ;;
         CYGWIN*|MINGW*|MSYS*)
+            # Non-interactive mode for Windows would need to pass these flags
+            # to the PowerShell script. This will be handled in a later step.
             run_windows
             ;;
         *)
