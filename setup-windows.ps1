@@ -71,8 +71,20 @@ function Update-App {
         return
     }
 
-    Write-Log "Attempting to pull the latest changes..."
     Set-Location $ScriptDir
+
+    # Check for local changes before pulling
+    $status = git status --porcelain
+    if ($status) {
+        Write-Log "You have uncommitted local changes." -Level "WARN"
+        Write-Log "Pulling updates may result in conflicts." -Level "WARN"
+        $choice = Read-Host "Do you want to proceed with the update anyway? (y/N)"
+        if ($choice -ne "y") {
+            throw "Update cancelled by user. Please commit or stash your changes first."
+        }
+    }
+
+    Write-Log "Attempting to pull the latest changes..."
     try {
         git pull
         Write-Log "Successfully pulled latest changes. The application will now be rebuilt." -Level "SUCCESS"

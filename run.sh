@@ -18,6 +18,13 @@ set -e
 # --- Script directory ---
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
+# --- Cleanup ---
+RUSTUP_INSTALLER="/tmp/rustup-init.sh"
+cleanup() {
+    rm -f "$RUSTUP_INSTALLER" "${RUSTUP_INSTALLER}.sha256"
+}
+trap cleanup EXIT
+
 # --- Color Codes for logging ---
 C_RESET='\033[0m'
 C_RED='\033[0;31m'
@@ -47,11 +54,10 @@ run_linux() {
     # --- OS Version Detection ---
     local os_pretty_name="Linux (Unknown Version)"
     if [ -f /etc/os-release ]; then
-        # Source the file to get variables like PRETTY_NAME
-        . /etc/os-release
-        os_pretty_name="$PRETTY_NAME"
+        # Use grep for safety, don't source the file.
+        os_pretty_name=$(grep -oP '(?<=^PRETTY_NAME=")[^"]*' /etc/os-release)
     fi
-    info "Linux operating system detected: $os_pretty_name"
+    info "Linux operating system detected: ${os_pretty_name:-Linux (Unknown Version)}"
 
     # --- Configuration ---
     local project_dir="$SCRIPT_DIR/rust_simulation"
@@ -98,20 +104,19 @@ run_linux() {
         fi
 
         info "Downloading rustup-init.sh and its checksum..."
-        local installer_path="/tmp/rustup-init.sh"
         local installer_url="https://static.rust-lang.org/rustup/rustup-init.sh"
         local checksum_url="${installer_url}.sha256"
 
-        if ! curl -sSf -o "$installer_path" "$installer_url"; then
+        if ! curl -sSf -o "$RUSTUP_INSTALLER" "$installer_url"; then
             error "Failed to download the Rust installer script."
         fi
-        if ! curl -sSf -o "${installer_path}.sha256" "$checksum_url"; then
+        if ! curl -sSf -o "${RUSTUP_INSTALLER}.sha256" "$checksum_url"; then
             error "Failed to download the checksum file."
         fi
 
         info "Verifying installer checksum..."
-        local expected_checksum=$(cat "${installer_path}.sha256" | cut -d' ' -f1)
-        local actual_checksum=$(sha256sum "$installer_path" | cut -d' ' -f1)
+        local expected_checksum=$(cat "${RUSTUP_INSTALLER}.sha256" | cut -d' ' -f1)
+        local actual_checksum=$(sha256sum "$RUSTUP_INSTALLER" | cut -d' ' -f1)
 
         if [ "$expected_checksum" != "$actual_checksum" ]; then
             error "Checksum mismatch for rustup-init.sh. Aborting installation."
@@ -119,12 +124,10 @@ run_linux() {
         info "Checksum verified successfully."
 
         info "Running the Rust installer..."
-        if ! sh "$installer_path" -y; then
+        # The trap will automatically clean up the installer files afterwards
+        if ! sh "$RUSTUP_INSTALLER" -y; then
             error "Rust installation failed."
         fi
-
-        # Clean up
-        rm "$installer_path" "${installer_path}.sha256"
 
         # Source Cargo environment to make it available in the current session
         source "$HOME/.cargo/env"
@@ -211,8 +214,24 @@ run_linux() {
             return
         fi
 
-        info "Attempting to pull the latest changes..."
         cd "$SCRIPT_DIR"
+
+        # Check for local changes before pulling
+        if [ -n "$(git status --porcelain)" ]; then
+            warn "You have uncommitted local changes."
+            warn "Pulling updates may result in conflicts."
+            read -p "Do you want to proceed with the update anyway? (y/N) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                warn "Update aborted. Please commit or stash your changes first."
+                cd - > /dev/null
+                # We still return, allowing a rebuild of the current (modified) version if the user wishes.
+                # The menu will be re-displayed, which is not ideal. Let's exit instead.
+                error "Update cancelled by user."
+            fi
+        fi
+
+        info "Attempting to pull the latest changes..."
         if ! git pull; then
             error "git pull failed. Please resolve any conflicts or issues and run the script again."
         fi
@@ -341,8 +360,29 @@ run_macos() {
     info "macOS detected: $product_name $product_version (Build $build_version)"
 
     warn "macOS support is experimental."
-    warn "This script will attempt to install Rust and build the project, but system dependency installation is not implemented."
     warn "Please ensure you have the necessary development tools (like Xcode Command Line Tools) installed."
+
+    # --- macOS Dependency Check (Homebrew) ---
+    if command -v brew &> /dev/null; then
+        info "Homebrew detected. Checking for dependencies..."
+        if ! brew list pkg-config &> /dev/null; then
+            warn "The 'pkg-config' dependency is not installed. It is often required for building Rust projects."
+            read -p "Would you like to install it now using Homebrew? (y/N) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                if ! brew install pkg-config; then
+                    error "Failed to install pkg-config with Homebrew. Please try to install it manually."
+                fi
+                info "pkg-config installed successfully."
+            else
+                warn "Skipping installation of pkg-config. The build may fail."
+            fi
+        else
+            info "'pkg-config' is already installed."
+        fi
+    else
+        warn "Homebrew not detected. Cannot check for system dependencies automatically."
+    fi
 
     # For now, we can reuse the Linux logic since it's very similar.
     # A more mature script might have a dedicated run_macos function.
