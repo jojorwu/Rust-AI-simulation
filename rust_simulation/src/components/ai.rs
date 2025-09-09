@@ -6,10 +6,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A component representing the agent's memory of the map layout.
 ///
-/// The `MentalMap` is a 2D grid that stores the agent's knowledge of the world tiles.
-/// Tiles that have not been observed are `None`.
+/// The `MentalMap` is a sparse representation of the world, storing only the
+/// tiles that the agent has actually observed. This is much more memory-efficient
+/// than storing a copy of the entire map for every agent.
 #[derive(Component, Clone)]
-pub struct MentalMap(pub Vec<Vec<Option<MemoryTile>>>);
+pub struct MentalMap(pub HashMap<(u32, u32), MemoryTile>);
 
 /// A component representing the agent's knowledge of resource locations.
 ///
