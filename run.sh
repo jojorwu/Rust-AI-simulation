@@ -50,324 +50,240 @@ error() {
 # OS-Specific Logic Placeholder Functions
 # =============================================================================
 
-run_linux() {
-    # --- OS Version Detection ---
-    local os_pretty_name="Linux (Unknown Version)"
-    if [ -f /etc/os-release ]; then
-        # Use grep for safety, don't source the file.
-        os_pretty_name=$(grep -oP '(?<=^PRETTY_NAME=")[^"]*' /etc/os-release)
+# =============================================================================
+# Generic Helper Functions
+# =============================================================================
+
+# --- Configuration (these are now global) ---
+PROJECT_DIR="$SCRIPT_DIR/rust_simulation"
+DIST_DIR="$SCRIPT_DIR/dist"
+PACKAGE_NAME="rust_simulation"
+PROJECT_VERSION="unknown"
+
+check_base_dependencies() {
+    info "Checking for required command-line tools..."
+    local missing_tool=0
+    for tool in curl grep sed tar awk sha256sum; do
+        if ! command -v "$tool" &> /dev/null; then
+            warn "Command '$tool' is not found, but is required."
+            missing_tool=1
+        fi
+    done
+    if [ "$missing_tool" -eq 1 ]; then
+        error "Please install the missing tools and run the script again."
     fi
-    info "Linux operating system detected: ${os_pretty_name:-Linux (Unknown Version)}"
+}
 
-    # --- Configuration ---
-    local project_dir="$SCRIPT_DIR/rust_simulation"
-    local dist_dir="$SCRIPT_DIR/dist"
-    local dist_path="$dist_dir/linux"
-    local package_name="rust_simulation"
-    local project_version="unknown"
-    local do_clean=0
+install_rust() {
+    if command -v "cargo" &> /dev/null; then
+        info "Rust is already installed."
+        return
+    fi
 
-    # --- Dependency Definitions ---
-    local deps_debian="build-essential libasound2-dev libudev-dev"
-    local deps_fedora="alsa-lib-devel libudev-devel systemd-devel"
-    local deps_arch="base-devel alsa-lib"
+    warn "Rust (cargo) not found."
+    read -p "Would you like to install it now using the official rustup script? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        error "Rust installation skipped. Cannot proceed."
+    fi
 
-    # =========================================================================
-    # Linux-Specific Helper Functions
-    # =========================================================================
+    info "Downloading rustup-init.sh and its checksum..."
+    local installer_url="https://static.rust-lang.org/rustup/rustup-init.sh"
+    local checksum_url="${installer_url}.sha256"
 
-    check_linux_dependencies() {
-        info "Checking for required command-line tools..."
-        local missing_tool=0
-        for tool in curl grep sed tar awk sha256sum; do
-            if ! command -v "$tool" &> /dev/null; then
-                warn "Command '$tool' is not found, but is required."
-                missing_tool=1
-            fi
-        done
-        if [ "$missing_tool" -eq 1 ]; then
-            error "Please install the missing tools and run the script again."
-        fi
-    }
+    if ! curl -sSf -o "$RUSTUP_INSTALLER" "$installer_url"; then
+        error "Failed to download the Rust installer script."
+    fi
+    if ! curl -sSf -o "${RUSTUP_INSTALLER}.sha256" "$checksum_url"; then
+        error "Failed to download the checksum file."
+    fi
 
-    install_rust_linux() {
-        if command -v "cargo" &> /dev/null; then
-            info "Rust is already installed."
-            return
-        fi
+    info "Verifying installer checksum..."
+    local expected_checksum=$(cat "${RUSTUP_INSTALLER}.sha256" | cut -d' ' -f1)
+    local actual_checksum=$(sha256sum "$RUSTUP_INSTALLER" | cut -d' ' -f1)
 
-        warn "Rust (cargo) not found."
-        read -p "Would you like to install it now using the official rustup script? (y/N) " -n 1 -r
+    if [ "$expected_checksum" != "$actual_checksum" ]; then
+        error "Checksum mismatch for rustup-init.sh. Aborting installation."
+    fi
+    info "Checksum verified successfully."
+
+    info "Running the Rust installer..."
+    if ! sh "$RUSTUP_INSTALLER" -y; then
+        error "Rust installation failed."
+    fi
+
+    source "$HOME/.cargo/env"
+    info "Rust installed successfully."
+    warn "Please restart your terminal after this script finishes for the changes to take full effect."
+}
+
+get_project_version() {
+    info "Getting project version..."
+    if [ ! -f "$PROJECT_DIR/Cargo.toml" ]; then
+        error "Cargo.toml not found in $PROJECT_DIR"
+    fi
+    local version=$(awk 'BEGIN{in_pkg=0} /\[package\]/{in_pkg=1} /^\[/{if(!/\[package\]/)in_pkg=0} in_pkg&&/version/{match($0,/"([^"]+)"/);print substr($0,RSTART+1,RLENGTH-2);exit}' "$PROJECT_DIR/Cargo.toml")
+    if [ -n "$version" ]; then
+        PROJECT_VERSION="$version"
+    else
+        warn "Could not reliably determine project version. Defaulting to 'unknown'."
+    fi
+}
+
+launch_app() {
+    # This needs to be OS-aware
+    local dist_path="$DIST_DIR/$(uname -s | tr '[:upper:]' '[:lower:]')"
+    info "Launching application from $dist_path..."
+    cd "$dist_path"
+    "./$PACKAGE_NAME"
+}
+
+update_app() {
+    info "Checking for updates..."
+    if ! command -v git &> /dev/null; then
+        error "Git command not found. Please install Git to use the update feature."
+    fi
+    if [ ! -d "$SCRIPT_DIR/.git" ]; then
+        warn "This does not appear to be a Git repository."
+        warn "Cannot update automatically. Please download the latest version manually."
+        read -p "Press Enter to continue with a rebuild of the current version, or Ctrl+C to abort."
+        return
+    fi
+
+    cd "$SCRIPT_DIR"
+    if [ -n "$(git status --porcelain)" ]; then
+        warn "You have uncommitted local changes. Pulling updates may result in conflicts."
+        read -p "Do you want to proceed with the update anyway? (y/N) " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            error "Rust installation skipped. Cannot proceed."
+            error "Update cancelled by user."
         fi
+    fi
 
-        info "Downloading rustup-init.sh and its checksum..."
-        local installer_url="https://static.rust-lang.org/rustup/rustup-init.sh"
-        local checksum_url="${installer_url}.sha256"
+    info "Attempting to pull the latest changes..."
+    if ! git pull; then
+        error "git pull failed. Please resolve any conflicts or issues and run the script again."
+    fi
+    cd - > /dev/null
+    info "Successfully pulled latest changes. The application will now be rebuilt."
+}
 
-        if ! curl -sSf -o "$RUSTUP_INSTALLER" "$installer_url"; then
-            error "Failed to download the Rust installer script."
-        fi
-        if ! curl -sSf -o "${RUSTUP_INSTALLER}.sha256" "$checksum_url"; then
-            error "Failed to download the checksum file."
-        fi
+run_tests() {
+    info "Running test suite..."
+    install_rust
 
-        info "Verifying installer checksum..."
-        local expected_checksum=$(cat "${RUSTUP_INSTALLER}.sha256" | cut -d' ' -f1)
-        local actual_checksum=$(sha256sum "$RUSTUP_INSTALLER" | cut -d' ' -f1)
+    cd "$PROJECT_DIR"
+    if ! cargo test; then
+        error "Tests failed."
+    fi
+    info "All tests passed successfully."
+}
 
-        if [ "$expected_checksum" != "$actual_checksum" ]; then
-            error "Checksum mismatch for rustup-init.sh. Aborting installation."
-        fi
-        info "Checksum verified successfully."
+show_menu() {
+    local dist_path="$DIST_DIR/$(uname -s | tr '[:upper:]' '[:lower:]')"
+    if [ ! -f "$dist_path/$PACKAGE_NAME" ]; then
+        return "rebuild"
+    fi
 
-        info "Running the Rust installer..."
-        # The trap will automatically clean up the installer files afterwards
-        if ! sh "$RUSTUP_INSTALLER" -y; then
-            error "Rust installation failed."
-        fi
+    info "An existing build was found."
+    echo "What would you like to do?"
+    echo "  1. Launch existing version"
+    echo "  2. Rebuild the application"
+    echo "  3. Check for Updates and Rebuild"
+    echo "  4. Run Tests"
+    read -p "> " -n 1 -r
+    echo
+    case "$REPLY" in
+        1) return "launch" ;;
+        2) return "rebuild" ;;
+        3) update_app; return "rebuild" ;;
+        4) return "test" ;;
+        *) warn "Invalid option. Aborting."; return "exit" ;;
+    esac
+}
 
-        # Source Cargo environment to make it available in the current session
-        source "$HOME/.cargo/env"
-        info "Rust installed successfully."
-        warn "Please restart your terminal after this script finishes for the changes to take full effect."
-    }
+ask_clean_build() {
+    read -p "Perform a clean build? (This is slower but can fix some issues) (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        DO_CLEAN=1
+    fi
+}
 
-    install_system_deps_linux() {
-        info "Checking for system dependencies..."
-        if [ ! -f /etc/os-release ]; then
-            warn "Could not determine Linux distribution. Cannot automatically check system dependencies."
-            return
-        fi
-        local os_id=$(grep -oP '(?<=^ID=).+' /etc/os-release | tr -d '"')
+build_project() {
+    info "Building project... This may take a few minutes."
+    cd "$PROJECT_DIR"
+    if [ "$DO_CLEAN" -eq 1 ]; then
+        info "Cleaning previous build artifacts..."
+        cargo clean || warn "cargo clean command failed, but continuing anyway."
+    fi
+    if ! cargo build --release; then
+        error "Project build failed."
+    fi
+    cd "$SCRIPT_DIR"
+    info "Project built successfully."
+}
 
-        local pkgs_needed=""
-        local pkgs_to_install=""
-        local check_cmd=""
-        local install_cmd=""
-
-        case "$os_id" in
-            "ubuntu" | "debian" | "pop")
-                pkgs_needed=$deps_debian; check_cmd="dpkg -s"; install_cmd="sudo apt-get install -y" ;;
-            "fedora")
-                pkgs_needed=$deps_fedora; check_cmd="rpm -q"; install_cmd="sudo dnf install -y" ;;
-            "arch")
-                pkgs_needed=$deps_arch; check_cmd="pacman -Qs"; install_cmd="sudo pacman -S --noconfirm" ;;
-            *)
-                warn "Unsupported Linux distribution '$os_id'. Cannot check system dependencies."
-                return ;;
-        esac
-
-        for pkg in $pkgs_needed; do
-            if ! $check_cmd "$pkg" &> /dev/null; then
-                pkgs_to_install="$pkgs_to_install $pkg"
-            fi
-        done
-
-        if [ -n "$pkgs_to_install" ]; then
-            warn "The following system dependencies are required:$pkgs_to_install"
-            read -p "Would you like to install them now? (This will use sudo) (y/N) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                if ! $install_cmd $pkgs_to_install; then
-                    error "Failed to install system dependencies. Please try to install them manually."
-                fi
-                info "System dependencies installed successfully."
-            else
-                warn "Installation of system dependencies skipped. The build may fail."
-            fi
-        else
-            info "All required system dependencies are already installed."
-        fi
-    }
-
-    get_project_version_linux() {
-        info "Getting project version..."
-        if [ ! -f "$project_dir/Cargo.toml" ]; then
-            error "Cargo.toml not found in $project_dir"
-        fi
-        local version=$(awk 'BEGIN{in_pkg=0} /\[package\]/{in_pkg=1} /^\[/{if(!/\[package\]/)in_pkg=0} in_pkg&&/version/{match($0,/"([^"]+)"/);print substr($0,RSTART+1,RLENGTH-2);exit}' "$project_dir/Cargo.toml")
-        if [ -n "$version" ]; then
-            project_version="$version"
-        else
-            warn "Could not reliably determine project version. Defaulting to 'unknown'."
-        fi
-    }
-
-    launch_app_linux() {
-        info "Launching application..."
-        cd "$dist_path"
-        "./$package_name"
-    }
-
-    update_app_linux() {
-        info "Checking for updates..."
-        if ! command -v git &> /dev/null; then
-            error "Git command not found. Please install Git to use the update feature."
-        fi
-        if [ ! -d "$SCRIPT_DIR/.git" ]; then
-            warn "This does not appear to be a Git repository."
-            warn "Cannot update automatically. Please download the latest version manually."
-            read -p "Press Enter to continue with a rebuild of the current version, or Ctrl+C to abort."
-            return
-        fi
-
-        cd "$SCRIPT_DIR"
-
-        # Check for local changes before pulling
-        if [ -n "$(git status --porcelain)" ]; then
-            warn "You have uncommitted local changes."
-            warn "Pulling updates may result in conflicts."
-            read -p "Do you want to proceed with the update anyway? (y/N) " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                warn "Update aborted. Please commit or stash your changes first."
-                cd - > /dev/null
-                # We still return, allowing a rebuild of the current (modified) version if the user wishes.
-                # The menu will be re-displayed, which is not ideal. Let's exit instead.
-                error "Update cancelled by user."
-            fi
-        fi
-
-        info "Attempting to pull the latest changes..."
-        if ! git pull; then
-            error "git pull failed. Please resolve any conflicts or issues and run the script again."
-        fi
-        cd - > /dev/null
-        info "Successfully pulled latest changes. The application will now be rebuilt."
-    }
-
-    run_tests_linux() {
-        info "Running test suite..."
-        check_linux_dependencies
-        install_rust_linux
-        install_system_deps_linux
-
-        cd "$project_dir"
-        if ! cargo test; then
-            error "Tests failed."
-        fi
-        info "All tests passed successfully."
-    }
-
-    show_menu_linux() {
-        if [ ! -f "$dist_path/$package_name" ]; then
-            # No existing build, so we just continue to the build process
-            return "rebuild"
-        fi
-
-        info "An existing build was found."
-        echo "What would you like to do?"
-        echo "  1. Launch existing version"
-        echo "  2. Rebuild the application"
-        echo "  3. Check for Updates and Rebuild"
-        echo "  4. Run Tests"
-        read -p "> " -n 1 -r
-        echo
-        case "$REPLY" in
-            1) return "launch" ;;
-            2) return "rebuild" ;;
-            3)
-                update_app_linux
-                return "rebuild"
-                ;;
-            4) return "test" ;;
-            *)
-                warn "Invalid option. Aborting."
-                return "exit"
-                ;;
-        esac
-    }
-
-    ask_clean_build_linux() {
-        read -p "Perform a clean build? (This is slower but can fix some issues) (y/N) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            do_clean=1
-        fi
-    }
-
-    build_project_linux() {
-        info "Building project... This may take a few minutes."
-        cd "$project_dir"
-        if [ "$do_clean" -eq 1 ]; then
-            info "Cleaning previous build artifacts..."
-            cargo clean || warn "cargo clean command failed, but continuing anyway."
-        fi
-        if ! cargo build --release; then
-            error "Project build failed."
-        fi
-        cd "$SCRIPT_DIR"
-        info "Project built successfully."
-    }
-
-    create_package_readme_linux() {
-        info "Creating package README..."
-        cat > "$1/README.txt" << EOL
+create_package_readme() {
+    info "Creating package README..."
+    cat > "$1/README.txt" << EOL
 ==================================
 Rust Simulation - Instructions
 ==================================
 Thank you for downloading Rust Simulation!
 To run the game, navigate into this directory and run the executable:
-./${package_name}
+./${PACKAGE_NAME}
 If the game does not start, please ensure you have installed the necessary system
 dependencies for your Linux distribution as mentioned in the main project README.
 EOL
-    }
+}
 
-    package_release_linux() {
-        info "Packaging release..."
-        mkdir -p "$dist_path"
-        info "  - Copying executable..."
-        cp "$project_dir/target/release/$package_name" "$dist_path/"
-        info "  - Copying data files..."
-        cp -r "$project_dir/data" "$dist_path/data"
-        create_package_readme_linux "$dist_path"
-        info "Creating .tar.gz archive..."
-        local archive_name="${package_name}_v${project_version}_linux.tar.gz"
-        if ! tar -czf "$dist_dir/$archive_name" -C "$dist_path" .; then
-            error "Failed to create .tar.gz archive."
-        fi
-        info "Package created at $dist_dir/$archive_name"
-    }
+package_release() {
+    local os_name_lower=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local dist_path="$DIST_DIR/$os_name_lower"
+    mkdir -p "$dist_path"
 
-    # =========================================================================
-    # Main Linux Execution Logic
-    # =========================================================================
+    info "Packaging release for $os_name_lower..."
+    cp "$PROJECT_DIR/target/release/$PACKAGE_NAME" "$dist_path/"
+    cp -r "$PROJECT_DIR/data" "$dist_path/data"
+    create_package_readme "$dist_path"
+
+    info "Creating .tar.gz archive..."
+    local archive_name="${PACKAGE_NAME}_v${PROJECT_VERSION}_${os_name_lower}.tar.gz"
+    if ! tar -czf "$DIST_DIR/$archive_name" -C "$dist_path" .; then
+        error "Failed to create .tar.gz archive."
+    fi
+    info "Package created at $DIST_DIR/$archive_name"
+}
+
+run_common_logic() {
     if [ "$INTERACTIVE" -eq 1 ]; then
-        local action=$(show_menu_linux)
+        local action=$(show_menu)
         case "$action" in
-            launch) launch_app_linux; exit 0 ;;
-            test) run_tests_linux; exit 0 ;;
+            launch) launch_app; exit 0 ;;
+            test) run_tests; exit 0 ;;
             exit) exit 1 ;;
             rebuild)
-                # This is the rebuild path for interactive mode
-                check_linux_dependencies
-                get_project_version_linux
-                ask_clean_build_linux
-                install_rust_linux
-                install_system_deps_linux
-                build_project_linux
-                package_release_linux
-                launch_app_linux
+                get_project_version
+                ask_clean_build
+                install_rust
+                build_project
+                package_release
+                launch_app
                 ;;
         esac
     else
         # Non-interactive mode
         if [ "$ACTION_TEST" -eq 1 ]; then
-            run_tests_linux
+            run_tests
         fi
         if [ "$ACTION_BUILD" -eq 1 ]; then
-            check_linux_dependencies
-            get_project_version_linux
-            install_rust_linux
-            install_system_deps_linux
-            build_project_linux
-            package_release_linux
+            get_project_version
+            install_rust
+            build_project
+            package_release
             if [ "$ACTION_RUN" -eq 1 ]; then
-                launch_app_linux
+                launch_app
             else
                 info "Build complete. Use --run to launch the application."
             fi
@@ -432,7 +348,74 @@ run_macos() {
 
     # For now, we can reuse the Linux logic since it's very similar.
     # A more mature script might have a dedicated run_macos function.
-    run_linux
+    run_common_logic
+}
+
+install_system_deps_linux() {
+    info "Checking for Linux system dependencies..."
+    if [ ! -f /etc/os-release ]; then
+        warn "Could not determine Linux distribution. Cannot automatically check system dependencies."
+        return
+    fi
+    local os_id=$(grep -oP '(?<=^ID=).+' /etc/os-release | tr -d '"')
+
+    local deps_debian="build-essential libasound2-dev libudev-dev"
+    local deps_fedora="alsa-lib-devel libudev-devel systemd-devel"
+    local deps_arch="base-devel alsa-lib"
+    local pkgs_needed=""
+    local pkgs_to_install=""
+    local check_cmd=""
+    local install_cmd=""
+
+    case "$os_id" in
+        "ubuntu" | "debian" | "pop")
+            pkgs_needed=$deps_debian; check_cmd="dpkg -s"; install_cmd="sudo apt-get install -y" ;;
+        "fedora")
+            pkgs_needed=$deps_fedora; check_cmd="rpm -q"; install_cmd="sudo dnf install -y" ;;
+        "arch")
+            pkgs_needed=$deps_arch; check_cmd="pacman -Qs"; install_cmd="sudo pacman -S --noconfirm" ;;
+        *)
+            warn "Unsupported Linux distribution '$os_id'. Cannot check system dependencies."
+            return ;;
+    esac
+
+    for pkg in $pkgs_needed; do
+        if ! $check_cmd "$pkg" &> /dev/null; then
+            pkgs_to_install="$pkgs_to_install $pkg"
+        fi
+    done
+
+    if [ -n "$pkgs_to_install" ]; then
+        warn "The following system dependencies are required:$pkgs_to_install"
+        read -p "Would you like to install them now? (This will use sudo) (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            if ! $install_cmd $pkgs_to_install; then
+                error "Failed to install system dependencies. Please try to install them manually."
+            fi
+            info "System dependencies installed successfully."
+        else
+            warn "Installation of system dependencies skipped. The build may fail."
+        fi
+    else
+        info "All required system dependencies are already installed."
+    fi
+}
+
+run_linux() {
+    # --- OS Version Detection ---
+    local os_pretty_name="Linux (Unknown Version)"
+    if [ -f /etc/os-release ]; then
+        os_pretty_name=$(grep -oP '(?<=^PRETTY_NAME=")[^"]*' /etc/os-release)
+    fi
+    info "Linux operating system detected: ${os_pretty_name:-Linux (Unknown Version)}"
+
+    # --- Dependency Checks ---
+    check_base_dependencies
+    install_system_deps_linux
+
+    # --- Run Common Logic ---
+    run_common_logic
 }
 
 show_help() {
