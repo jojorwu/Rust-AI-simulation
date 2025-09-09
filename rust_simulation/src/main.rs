@@ -1,3 +1,13 @@
+//! The main entry point for the Rust Simulation application.
+//!
+//! This binary is responsible for:
+//! - Parsing command-line arguments.
+//! - Setting up application paths for data storage.
+//! - Loading configuration files.
+//! - Initializing the Bevy application (`App`).
+//! - Adding all necessary plugins, resources, and systems from the `rust_simulation` library.
+//! - Running the Bevy application.
+
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use rust_simulation::config::Config;

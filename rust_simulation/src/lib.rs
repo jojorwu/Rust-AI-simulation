@@ -1,6 +1,15 @@
-//! A simulation of a simple world with agents that can gather resources,
-//! craft items, and build structures. The simulation is based on an
-//! Entity-Component-System (ECS) architecture using `bevy_ecs`.
+//! # Rust Simulation Library
+//!
+//! This library contains the core logic for a simulation of a simple world
+//! where agents can gather resources, craft items, and build structures.
+//! It is built using the Bevy game engine's Entity-Component-System (ECS)
+//! architecture.
+//!
+//! The main components of the simulation are:
+//! - **Entities**: Agents, resources, items, etc.
+//! - **Components**: Data associated with entities (e.g., `Position`, `Health`).
+//! - **Systems**: Logic that operates on entities with specific components.
+//! - **AI**: A Q-learning based decision-making system for agents.
 
 use bevy::prelude::*;
 use std::collections::{HashMap, VecDeque};
@@ -44,36 +53,51 @@ use systems::ai::{actions, goal_selection, q_learning};
 use systems::*;
 
 // --- System Sets ---
+
+/// Defines the primary system sets used for ordering in the simulation.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SimulationSet {
+    /// Systems that run once at the beginning of the simulation.
     Setup,
+    /// Systems that run on every tick of the `FixedUpdate` schedule.
     Logic,
 }
 
 // --- Resources ---
 
+/// A resource that indicates whether it is currently day or night.
 #[derive(Resource)]
 pub struct IsDay(pub bool);
 
+/// A resource that tracks the number of ticks that have passed.
 #[derive(Resource)]
 pub struct TickCount(pub u32);
 
+/// A resource to hold the shared `RecipeManager`.
 #[derive(Resource)]
 pub struct RecipeManagerResource(pub Arc<RecipeManager>);
 
+/// A resource to hold the shared `ItemRegistry`.
 #[derive(Resource)]
 pub struct ItemRegistryResource(pub Arc<ItemRegistry>);
 
+/// A resource holding the paths to static data files.
 #[derive(Resource)]
 pub struct DataPaths {
+    /// Path to `biomes.json`.
     pub biomes: String,
+    /// Path to `resources.json`.
     pub resources: String,
+    /// Path to `items.json`.
     pub items: String,
+    /// Path to `recipes.json`.
     pub recipes: String,
 }
 
+/// A resource holding the paths to user-specific application directories.
 #[derive(Resource)]
 pub struct AppPaths {
+    /// The directory where persistent data (like `q_tables.json`) is stored.
     pub data_dir: PathBuf,
 }
 
@@ -83,6 +107,13 @@ use std::fs;
 
 use crate::systems::monitoring::MemoryLimitReached;
 
+/// A Bevy startup system that sets up the initial state of the simulation.
+///
+/// This system is responsible for:
+/// - Creating the game map.
+/// - Loading registries for items and recipes.
+/// - Loading saved AI state (Q-tables).
+/// - Spawning the initial set of player agents.
 pub fn setup_simulation(
     mut commands: Commands,
     paths: Res<DataPaths>,
@@ -172,16 +203,22 @@ fn update_day_night(
         < day_night_cycle.day_length;
 }
 
+/// Adds all the simulation's systems to the Bevy `App`.
+///
+/// This function organizes the systems into a coherent execution order using
+/// system sets and chaining to prevent race conditions and ensure logical consistency.
 pub fn add_simulation_systems(app: &mut App) {
     app.add_systems(
         FixedUpdate,
         (
             // --- Perception and State Updates ---
+            // These systems update the agent's internal state and perception of the world.
             update_day_night,
             visibility_system::visibility_system,
             hunger::hunger_system,
             eating::eating_system,
             // --- AI Decision Making ---
+            // This chain handles the core AI loop from goal selection to planning.
             (
                 goal_selection::goal_selection_system,
                 goal_selection::goal_planning_system,
@@ -189,6 +226,8 @@ pub fn add_simulation_systems(app: &mut App) {
             )
                 .chain(),
             // --- Action Systems ---
+            // These systems execute the intents produced by the AI.
+            // They are grouped to run in parallel where possible.
             (
                 actions::craft::craft_action_system,
                 actions::attack::attack_action_system,
@@ -206,6 +245,7 @@ pub fn add_simulation_systems(app: &mut App) {
                 map_modification::map_modification_system,
             ),
             // --- Pathfinding and Movement ---
+            // This chain handles calculating and following paths.
             (
                 pathfinding_system::pathfinding_system,
                 pathfinding_completion_system::pathfinding_completion_system,
@@ -214,7 +254,7 @@ pub fn add_simulation_systems(app: &mut App) {
             )
                 .chain(),
             // --- Learning ---
-            // This should run after all actions and state changes have occurred.
+            // The Q-table is updated last, based on the results of the turn's actions.
             q_learning::update_q_table_system,
         )
             .in_set(SimulationSet::Logic),

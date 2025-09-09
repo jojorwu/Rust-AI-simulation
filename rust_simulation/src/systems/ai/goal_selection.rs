@@ -222,13 +222,15 @@ fn choose_q_learning_goal<R: Rng + ?Sized>(
         return Ok(Goal::Flee);
     }
 
-    // Epsilon-greedy exploration
+    // Epsilon-greedy strategy for exploration vs. exploitation.
+    // With a probability of epsilon, we choose a random valid action (explore).
     if args.rng.random::<f64>() < args.brain.epsilon {
+        // Exploration: Choose a random valid goal.
         let index = args.rng.random_range(0..valid_goals.len());
         return Ok(valid_goals[index].clone());
     }
 
-    // Exploitation: choose the best goal from the Q-table
+    // Exploitation: choose the best-known goal from the Q-table.
     if let Some(q_values) = args.goal_q_table.0.get(args.state) {
         q_values
             .iter()
@@ -280,6 +282,7 @@ fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bo
 }
 
 /// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
+/// This is a simple hierarchical planner.
 pub fn plan_goal(
     brain: &BrainComponent,
     inventory: &Inventory,
@@ -289,12 +292,14 @@ pub fn plan_goal(
     let mut plan = Vec::new();
     match goal {
         Goal::CraftItem(item_name) | Goal::Build(item_name) => {
+            // For crafting or building, first plan to gather the required resources.
             plan.extend(plan_crafting_or_building(
                 item_name,
                 brain,
                 inventory,
                 known_resources,
             ));
+            // Then, add the final craft/build goal itself.
             plan.push(goal.clone());
         }
         Goal::Stockpile(resource) => {

@@ -34,43 +34,53 @@ pub struct PlayerMemory {
 }
 
 /// Represents the high-level goals that an agent can have.
+///
+/// This enum is used by the Q-learning model to represent the possible objectives
+/// an agent can choose to pursue.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
-    /// Gather a specific resource.
+    /// A goal to gather a specific resource (e.g., "wood", "stone").
     GatherResource(String),
-    /// Craft a specific item.
+    /// A goal to craft a specific item from a recipe (e.g., "stone_axe").
     CraftItem(String),
-    /// Build a specific structure.
+    /// A goal to build a specific structure (e.g., "chest").
     Build(String),
-    /// Attack a specific entity.
+    /// A goal to attack another entity.
     Attack(Entity),
-    /// Flee from a threat.
+    /// A goal to flee from a perceived threat.
     Flee,
-    /// Explore the map to find resources.
+    /// A goal to explore the map to discover new resources.
     Explore,
-    /// Stockpile a resource in a chest.
+    /// A goal to stockpile a resource in a storage container.
     Stockpile(String),
-    /// Eat a food item.
+    /// A goal to eat a food item to restore hunger.
     EatFood(String),
 }
 
 /// Represents the concrete actions that an agent's brain can decide to take.
+///
+/// These actions are the output of the AI's planning process and are translated
+/// into commands that modify the agent's state or the game world.
 #[derive(Debug)]
 pub enum BrainAction {
-    /// Move in a specific direction.
+    /// An action to move the agent in a specific direction.
     Move(Velocity),
-    /// Craft an item.
+    /// An action to craft a specific item.
     Craft(WantsToCraft),
-    /// Attack a target entity.
+    /// An action to attack a target entity.
     Attack(WantsToAttack),
-    /// Store an item in a chest.
+    /// An action to store an item in a storage container.
     Store(WantsToStoreItem),
 }
 
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
-/// Uses a BTreeMap to ensure that the hash is deterministic.
+///
+/// This summary is a simplified representation of the agent's inventory,
+/// mapping item names to their quantities. It uses a `BTreeMap` to ensure
+/// that the hash is deterministic, which is crucial for the Q-learning state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct InventorySummary {
+    /// A map of item names to their counts.
     pub items: BTreeMap<String, u32>,
 }
 
@@ -82,26 +92,32 @@ impl From<&Inventory> for InventorySummary {
     }
 }
 
-/// Represents a discretized level for continuous stats like health or hunger.
+/// Represents a discretized level for a continuous statistic like health or hunger.
+/// This is used to simplify the state space for the Q-learning algorithm.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum DiscretizedLevel {
-    Low,    // 0-33%
-    Medium, // 34-66%
-    High,   // 67-100%
+    /// Represents a low level of the statistic (e.g., 0-33%).
+    Low,
+    /// Represents a medium level of the statistic (e.g., 34-66%).
+    Medium,
+    /// Represents a high level of the statistic (e.g., 67-100%).
+    High,
 }
 
-/// Represents the high-level state of the agent and its environment.
-/// This is used as the input to the Q-learning model for goal selection.
+/// Represents the high-level, discretized state of an agent and its environment.
+///
+/// This struct is used as the key in the Q-table for the Q-learning algorithm.
+/// All its fields must be discrete and hashable to define a finite state space.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct HighLevelState {
-    /// A summary of the agent's inventory.
+    /// A summary of the agent's current inventory.
     pub inventory_summary: InventorySummary,
     /// The number of hostile players the agent is aware of.
     pub num_hostile_players: u32,
-    /// The agent's current health level.
+    /// The agent's discretized health level.
     pub health_level: DiscretizedLevel,
-    /// The agent's current hunger level.
+    /// The agent's discretized hunger level.
     pub hunger_level: DiscretizedLevel,
-    /// Whether it is currently night time.
+    /// Whether it is currently night time in the simulation.
     pub is_night: bool,
 }
