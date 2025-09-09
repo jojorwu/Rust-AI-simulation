@@ -131,8 +131,9 @@ pub fn intent_creation_system(
     query.par_iter().for_each(|(entity, brain)| {
         if let Some(goal) = &brain.current_goal {
             commands.command_scope(|mut c| match goal {
-                Goal::GatherResource(res) => {
-                    c.entity(entity).insert(IntendsToGather(res.clone()));
+                Goal::GatherResource(res, amount) => {
+                    c.entity(entity)
+                        .insert(IntendsToGather(res.clone(), *amount));
                 }
                 Goal::CraftItem(item) => {
                     c.entity(entity).insert(IntendsToCraft(item.clone()));
@@ -365,13 +366,13 @@ pub fn plan_goal(args: &mut PlannerArgs, goal: &Goal) -> Result<Vec<Goal>, Simul
             plan.push(goal.clone());
         }
         Goal::Stockpile(resource) => {
-            let has_enough = inventory.has_item(resource, 1);
+            let has_enough = args.inventory.has_item(resource, 1);
             if !has_enough {
-                plan.extend(plan_goal(args, &Goal::GatherResource(resource.clone()))?);
+                plan.extend(plan_goal(args, &Goal::GatherResource(resource.clone(), 1))?);
             }
             plan.push(goal.clone());
         }
-        Goal::GatherResource(resource_name) => {
+        Goal::GatherResource(resource_name, amount) => {
             // This is the core of the tool-aware and dependency logic.
             // First, plan to acquire the necessary tool, if any.
             plan.extend(plan_tool_for_resource(args, resource_name)?);
@@ -380,7 +381,7 @@ pub fn plan_goal(args: &mut PlannerArgs, goal: &Goal) -> Result<Vec<Goal>, Simul
                 plan.push(Goal::Explore);
             }
             // Finally, add the goal to gather the resource itself.
-            plan.push(goal.clone());
+            plan.push(Goal::GatherResource(resource_name.clone(), *amount));
         }
         _ => {
             // For simple goals, the plan is just the goal itself.
@@ -412,9 +413,10 @@ fn plan_crafting_or_building(
                 )?);
             } else {
                 // Otherwise, it's a raw resource that needs to be gathered.
+                let amount_needed = required_amount - has_amount;
                 plan.extend(plan_goal(
                     args,
-                    &Goal::GatherResource(resource_name.clone()),
+                    &Goal::GatherResource(resource_name.clone(), amount_needed),
                 )?);
             }
         }
@@ -488,13 +490,13 @@ mod tests {
 
         let plan = plan_goal(&mut planner_args, &goal).expect("Planning should succeed");
 
-        // The plan should be: Explore (for stone), Gather stone, Explore (for wood), Gather wood, Craft stone_axe
+        // The plan should be: Explore (for stone), Gather 1 stone, Explore (for wood), Gather 3 wood, Craft stone_axe
         // Note: The planner is simple and doesn't know that exploring once might find both.
         assert_eq!(plan.len(), 5);
         assert_eq!(plan[0], Goal::Explore);
-        assert_eq!(plan[1], Goal::GatherResource("stone".to_string()));
+        assert_eq!(plan[1], Goal::GatherResource("stone".to_string(), 1));
         assert_eq!(plan[2], Goal::Explore);
-        assert_eq!(plan[3], Goal::GatherResource("wood".to_string()));
+        assert_eq!(plan[3], Goal::GatherResource("wood".to_string(), 3));
         assert_eq!(plan[4], Goal::CraftItem("stone_axe".to_string()));
     }
 
@@ -508,7 +510,7 @@ mod tests {
         let brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
         let inventory = Inventory::new();
         let known_resources = KnownResources(HashMap::new());
-        let goal = Goal::GatherResource("tree".to_string()); // Trees require an axe
+        let goal = Goal::GatherResource("tree".to_string(), 1); // Trees require an axe
 
         let mut planner_args = PlannerArgs {
             brain: &brain,
@@ -522,10 +524,10 @@ mod tests {
         let plan = plan_goal(&mut planner_args, &goal).expect("Planning should succeed");
 
         // The plan should be to craft a stone_axe first, which itself requires resources.
-        // Explore -> Gather stone -> Explore -> Gather wood -> Craft stone_axe -> Explore -> Gather tree
+        // Explore -> Gather 1 stone -> Explore -> Gather 3 wood -> Craft stone_axe -> Explore -> Gather 1 tree
         assert_eq!(plan.len(), 7);
         assert_eq!(plan[4], Goal::CraftItem("stone_axe".to_string()));
-        assert_eq!(plan[6], Goal::GatherResource("tree".to_string()));
+        assert_eq!(plan[6], Goal::GatherResource("tree".to_string(), 1));
     }
 
     #[test]

@@ -8,13 +8,24 @@
 
 use bevy_ecs::prelude::*;
 
-/// An intent to gather a resource of the specified type (e.g., "wood").
+/// An intent to gather a resource of the specified type to a target amount.
 #[derive(Component)]
-pub struct IntendsToGather(pub String);
+pub struct IntendsToGather(pub String, pub u32);
 
 /// An intent to gather a resource from a specific target entity (e.g., a tree).
 #[derive(Component)]
 pub struct IntendsToGatherFrom(pub Entity);
+
+/// A component indicating that an agent is in the process of gathering a resource.
+#[derive(Component)]
+pub struct IsGathering {
+    /// The specific entity being gathered from.
+    pub target: Entity,
+    /// The name of the resource being gathered.
+    pub resource: String,
+    /// The target amount to gather.
+    pub amount: u32,
+}
 
 /// An intent to craft an item with the specified name.
 #[derive(Component)]

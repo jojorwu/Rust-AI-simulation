@@ -1,6 +1,6 @@
 use crate::components::{
     ai::KnownResources,
-    intents::IntendsToGatherFrom,
+    intents::IsGathering,
     path::{CurrentPath, PathRequest},
     Inventory, Position, Resource as ResourceComponent,
 };
@@ -15,15 +15,18 @@ pub fn gathering_system(
             &mut KnownResources,
             &Position,
             &mut Inventory,
-            &IntendsToGatherFrom,
+            &IsGathering,
         ),
         (Without<CurrentPath>, Without<PathRequest>),
     >,
     mut resource_query: Query<(Entity, &mut ResourceComponent, &Position)>,
 ) {
-    for (entity, mut known_resources, position, mut inventory, intent) in gatherer_query.iter_mut()
+    for (entity, mut known_resources, position, mut inventory, gathering_state) in
+        gatherer_query.iter_mut()
     {
-        let target_entity = intent.0;
+        let target_entity = gathering_state.target;
+        let resource_name = &gathering_state.resource;
+        let target_amount = gathering_state.amount;
 
         if let Ok((_, mut resource, target_pos)) = resource_query.get_mut(target_entity) {
             let is_adjacent = (position.x.abs_diff(target_pos.x) <= 1)
@@ -32,18 +35,22 @@ pub fn gathering_system(
             if is_adjacent {
                 if resource.quantity > 0 {
                     resource.quantity -= 1;
-                    inventory.add_item(&resource.name, 1);
+                    inventory.add_item(resource_name, 1);
 
                     if resource.quantity == 0 {
                         commands.entity(target_entity).despawn();
                         // Remove the resource from the agent's known resources.
-                        if let Some(positions) = known_resources.0.get_mut(&resource.name) {
+                        if let Some(positions) = known_resources.0.get_mut(resource_name) {
                             positions.retain(|&p| p != *target_pos);
                         }
                     }
                 }
-                // The action is complete, so we can remove the intent.
-                commands.entity(entity).remove::<IntendsToGatherFrom>();
+
+                // Check if the goal is complete.
+                if inventory.get_quantity(resource_name) >= target_amount || resource.quantity == 0 {
+                    // The action is complete, so we can remove the state.
+                    commands.entity(entity).remove::<IsGathering>();
+                }
             } else {
                 // Not adjacent, request a path.
                 commands.entity(entity).insert(PathRequest {
@@ -52,9 +59,8 @@ pub fn gathering_system(
                 });
             }
         } else {
-            // The target entity does not have a ResourceComponent, so it's not a resource.
-            // This should not happen if the find_resource_system is working correctly.
-            commands.entity(entity).remove::<IntendsToGatherFrom>();
+            // The target entity no longer exists, so the gathering state is invalid.
+            commands.entity(entity).remove::<IsGathering>();
         }
     }
 }

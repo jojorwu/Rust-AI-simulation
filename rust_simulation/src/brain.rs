@@ -39,8 +39,8 @@ pub struct PlayerMemory {
 /// an agent can choose to pursue.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Goal {
-    /// A goal to gather a specific resource (e.g., "wood", "stone").
-    GatherResource(String),
+    /// A goal to gather a specific resource to a target amount.
+    GatherResource(String, u32),
     /// A goal to craft a specific item from a recipe (e.g., "stone_axe").
     CraftItem(String),
     /// A goal to build a specific structure (e.g., "chest").
