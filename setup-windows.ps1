@@ -244,6 +244,15 @@ function Package-App {
     param([string]$Version)
 
     Write-Log "Packaging the application..."
+
+    # --- Resilience Checks ---
+    if (Test-Path $DistDir -PathType Leaf) {
+        throw "A file named 'dist' exists in the project root. Please remove it before packaging."
+    }
+    if (-not (Test-Path (Join-Path $ProjectDir "data") -PathType Container)) {
+        throw "Source data directory not found at '$ProjectDir\data'. Cannot package release."
+    }
+
     New-Item -ItemType Directory -Path $DistPath -Force | Out-Null
 
     $sourceExe = Join-Path $ProjectDir "target/release/$PackageName.exe"

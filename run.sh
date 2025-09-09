@@ -241,6 +241,18 @@ EOL
 package_release() {
     local os_name_lower=$(uname -s | tr '[:upper:]' '[:lower:]')
     local dist_path="$DIST_DIR/$os_name_lower"
+
+    # --- Resilience Checks ---
+    if [ -f "$DIST_DIR" ]; then
+        error "A file named 'dist' exists in the project root. Please remove it before packaging."
+    fi
+    if [ -f "$dist_path" ]; then
+        error "A file named '$dist_path' exists. Please remove it before packaging."
+    fi
+    if [ ! -d "$PROJECT_DIR/data" ]; then
+        error "Source data directory not found at '$PROJECT_DIR/data'. Cannot package release."
+    fi
+
     mkdir -p "$dist_path"
 
     info "Packaging release for $os_name_lower..."
