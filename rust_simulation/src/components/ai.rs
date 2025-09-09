@@ -3,14 +3,18 @@ use crate::components::Position;
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
 
 /// A component representing the agent's memory of the map layout.
 ///
 /// The `MentalMap` is a sparse representation of the world, storing only the
 /// tiles that the agent has actually observed. This is much more memory-efficient
 /// than storing a copy of the entire map for every agent.
+///
+/// It is wrapped in an `Arc` to allow cheap cloning for sharing between threads,
+/// such as the pathfinding tasks.
 #[derive(Component, Clone)]
-pub struct MentalMap(pub HashMap<(u32, u32), MemoryTile>);
+pub struct MentalMap(pub Arc<HashMap<(u32, u32), MemoryTile>>);
 
 /// A component representing the agent's knowledge of resource locations.
 ///

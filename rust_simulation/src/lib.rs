@@ -180,7 +180,7 @@ pub fn setup_simulation(
                 config.ai.q_learning.discount_factor,
                 config.ai.q_learning.epsilon,
             ),
-            MentalMap(HashMap::new()),
+            MentalMap(Arc::new(HashMap::new())),
             KnownResources(HashMap::new()),
             PlayerMemories(HashMap::new()),
             q_table,

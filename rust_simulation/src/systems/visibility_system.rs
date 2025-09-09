@@ -9,6 +9,7 @@ use bevy_ecs::prelude::*;
 use log::debug;
 use rayon::prelude::*;
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 const VISION_RADIUS: i32 = 8; // TODO: Move to config.rs
 
@@ -22,12 +23,17 @@ pub fn visibility_system(
             let visible_tiles = fov::field_of_view(pos, VISION_RADIUS, &map);
         let old_frontier_size = exploration_frontier.0.len();
 
+        // Get a mutable reference to the HashMap inside the Arc.
+        // This will create a copy if the map is currently being shared (e.g., by a pathfinding task),
+        // ensuring that we don't cause data races. This is a copy-on-write strategy.
+        let mental_map_mut = Arc::make_mut(&mut mental_map.0);
+
         for visible_pos in &visible_tiles {
             let tile_coords = (visible_pos.x, visible_pos.y);
             // If we haven't seen this tile before, add it to our mental map.
-            if !mental_map.0.contains_key(&tile_coords) {
+            if !mental_map_mut.contains_key(&tile_coords) {
                 if let Some(tile) = map.get_tile(visible_pos.x, visible_pos.y) {
-                    mental_map.0.insert(tile_coords, MemoryTile { tile });
+                    mental_map_mut.insert(tile_coords, MemoryTile { tile });
                 }
 
                 // Check neighbors of the newly visible tile to add them to the exploration frontier.
@@ -48,7 +54,7 @@ pub fn visibility_system(
                             let ny = neighbor_y as u32;
                             let neighbor_coords = (nx, ny);
                             // If we haven't seen the neighbor, it's a candidate for the frontier.
-                            if !mental_map.0.contains_key(&neighbor_coords) {
+                            if !mental_map_mut.contains_key(&neighbor_coords) {
                                 let frontier_pos = Position { x: nx, y: ny };
                                 if !exploration_frontier.0.contains(&frontier_pos) {
                                     exploration_frontier.0.push_back(frontier_pos);
@@ -63,7 +69,7 @@ pub fn visibility_system(
         // Prune the exploration frontier of any tiles that have now been seen.
         exploration_frontier
             .0
-            .retain(|p| !mental_map.0.contains_key(&(p.x, p.y)));
+            .retain(|p| !mental_map_mut.contains_key(&(p.x, p.y)));
 
         let new_frontiers = exploration_frontier
             .0
