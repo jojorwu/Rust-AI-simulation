@@ -16,6 +16,7 @@ use rand::prelude::*;
 use std::collections::HashMap;
 
 // Type alias to simplify the query type
+use crate::components::Position;
 type GoalSelectionQuery<'w, 's> = Query<
     'w,
     's,
@@ -28,6 +29,7 @@ type GoalSelectionQuery<'w, 's> = Query<
         &'static KnownResources,
         &'static PlayerMemories,
         &'static GoalQTable,
+        &'static Position,
     ),
 >;
 
@@ -41,6 +43,8 @@ struct ChooseGoalArgs<'a, R: Rng + ?Sized> {
     is_day: bool,
     config: &'a Config,
     map: &'a Map,
+    position: &'a Position,
+    player_memories: &'a PlayerMemories,
     rng: &'a mut R,
 }
 
@@ -52,7 +56,7 @@ pub fn goal_selection_system(
     item_registry: Res<crate::ItemRegistryResource>,
 ) {
     query.par_iter_mut().for_each(
-        |(entity, mut brain, health, hunger, inventory, known_resources, player_memories, goal_q_table)| {
+        |(entity, mut brain, health, hunger, inventory, known_resources, player_memories, goal_q_table, position)| {
             if brain.current_goal.is_none() && brain.goal_commitment_ticks == 0 {
                 let high_level_state =
                     get_high_level_state(health, hunger, inventory, player_memories, is_day.0);
@@ -67,6 +71,8 @@ pub fn goal_selection_system(
                     is_day: is_day.0,
                     config: &config,
                     map: &map,
+                    position,
+                    player_memories,
                     rng: &mut rng,
                 };
 
@@ -276,16 +282,37 @@ fn choose_q_learning_goal<R: Rng + ?Sized>(
             .iter()
             .filter(|(g, _)| is_goal_valid(g, args.known_resources, args.map))
             .map(|(goal, q_value)| {
-                // Apply situational bonuses
-                let effective_q_value = if !args.is_day {
+                let mut effective_q_value = *q_value;
+
+                // Apply situational bonuses/penalties
+                // 1. Bonus for building at night
+                if !args.is_day {
                     if let Goal::Build(_) = goal {
-                        *q_value + args.config.ai.goals.build_bonus
-                    } else {
-                        *q_value
+                        effective_q_value += args.config.ai.goals.build_bonus;
                     }
-                } else {
-                    *q_value
-                };
+                }
+
+                // 2. Proximity bonus for gathering resources
+                if let Goal::GatherResource(resource) = goal {
+                    if let Some(positions) = args.known_resources.0.get(resource) {
+                        if let Some(closest_pos) = positions
+                            .iter()
+                            .min_by_key(|pos| pos.distance_squared(args.position))
+                        {
+                            let dist = closest_pos.distance(args.position);
+                            // Simple bonus: higher for closer resources. Capped at a max bonus.
+                            let proximity_bonus = (1.0 / (dist + 1.0)) * 5.0; // Example bonus calculation
+                            effective_q_value += proximity_bonus;
+                        }
+                    }
+                }
+
+                // 3. Safety penalty if hostile players are nearby
+                if args.player_memories.0.values().any(|m| m.relationship == crate::brain::RelationshipStatus::Hostile) {
+                    // Simple penalty if any hostile is known, could be refined by distance.
+                    effective_q_value -= 20.0; // Large penalty
+                }
+
                 (goal, effective_q_value)
             })
             .max_by(|a, b| a.1.total_cmp(&b.1))

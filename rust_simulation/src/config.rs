@@ -68,6 +68,8 @@ pub struct QLearning {
     pub learning_rate: f64,
     pub discount_factor: f64,
     pub epsilon: f64,
+    pub epsilon_decay: f64,
+    pub min_epsilon: f64,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]

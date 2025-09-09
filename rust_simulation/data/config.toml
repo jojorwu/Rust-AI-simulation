@@ -27,6 +27,8 @@ standard_health_ratio = 0.75
 learning_rate = 0.1
 discount_factor = 0.9
 epsilon = 0.1
+epsilon_decay = 0.9995
+min_epsilon = 0.01
 
 [ai.goals]
 reward = 10.0
