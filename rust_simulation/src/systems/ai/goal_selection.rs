@@ -1,4 +1,4 @@
-use crate::brain::{Goal, HighLevelState, InventorySummary};
+use crate::brain::{DiscretizedLevel, Goal, HighLevelState, InventorySummary};
 use crate::components::{
     ai::{GoalQTable, KnownResources, PlayerMemories},
     intents::*,
@@ -150,11 +150,29 @@ fn get_high_level_state(
 
     let inventory_summary = InventorySummary::from(inventory);
 
+    let health_percent = (health.current / health.max) * 100.0;
+    let health_level = if health_percent < 34.0 {
+        DiscretizedLevel::Low
+    } else if health_percent < 67.0 {
+        DiscretizedLevel::Medium
+    } else {
+        DiscretizedLevel::High
+    };
+
+    let hunger_percent = (hunger.current / hunger.max) * 100.0;
+    let hunger_level = if hunger_percent < 34.0 {
+        DiscretizedLevel::Low
+    } else if hunger_percent < 67.0 {
+        DiscretizedLevel::Medium
+    } else {
+        DiscretizedLevel::High
+    };
+
     HighLevelState {
         inventory_summary,
         num_hostile_players,
-        health_level: health.current as u32,
-        hunger_level: hunger.current as u32,
+        health_level,
+        hunger_level,
         is_night: !is_day,
     }
 }
@@ -172,16 +190,15 @@ fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, Si
 /// Handles immediate, critical needs like fleeing from low health or eating when starving.
 /// Returns Some(Goal) if a critical action is necessary, otherwise None.
 fn handle_critical_needs<R: Rng + ?Sized>(args: &ChooseGoalArgs<R>) -> Option<Goal> {
-    const FLEE_HEALTH_THRESHOLD: u32 = 25;
-    if args.state.health_level < FLEE_HEALTH_THRESHOLD {
+    if args.state.health_level == DiscretizedLevel::Low {
         return Some(Goal::Flee);
     }
 
-    const HUNGER_THRESHOLD: u32 = 50;
-    if args.state.hunger_level < HUNGER_THRESHOLD {
+    if args.state.hunger_level == DiscretizedLevel::Low {
         if args.inventory.has_item("meat", 1) {
             return Some(Goal::EatFood("meat".to_string()));
         } else {
+            // This is a simplification. A better AI might look for other food.
             return Some(Goal::GatherResource("pig".to_string()));
         }
     }
@@ -334,6 +351,7 @@ fn plan_resource_gathering(
 mod tests {
     use super::*;
     use crate::recipes::RecipeManager;
+    use std::collections::BTreeMap;
     use std::sync::Arc;
 
     #[test]
@@ -391,11 +409,11 @@ mod tests {
 
         let state = HighLevelState {
             inventory_summary: InventorySummary {
-                items: HashMap::new(),
+                items: BTreeMap::new(),
             },
             num_hostile_players: 0,
-            health_level: 10, // Low health
-            hunger_level: 100,
+            health_level: DiscretizedLevel::Low,
+            hunger_level: DiscretizedLevel::High,
             is_night: false,
         };
 

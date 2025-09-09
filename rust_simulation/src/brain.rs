@@ -11,7 +11,7 @@
 use crate::components::{Inventory, Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 
 /// A tile as remembered by the agent.
@@ -68,28 +68,26 @@ pub enum BrainAction {
 }
 
 /// A summary of the agent's inventory, used as part of the `HighLevelState`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// Uses a BTreeMap to ensure that the hash is deterministic.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct InventorySummary {
-    pub items: HashMap<String, u32>,
-}
-
-impl Hash for InventorySummary {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let mut pairs: Vec<_> = self.items.iter().collect();
-        pairs.sort_by_key(|(k, _)| *k);
-        for (key, value) in pairs {
-            key.hash(state);
-            value.hash(state);
-        }
-    }
+    pub items: BTreeMap<String, u32>,
 }
 
 impl From<&Inventory> for InventorySummary {
     fn from(inventory: &Inventory) -> Self {
-        InventorySummary {
-            items: inventory.items.clone(),
-        }
+        // Collect into a BTreeMap to ensure deterministic ordering for hashing.
+        let items = inventory.items.clone().into_iter().collect();
+        InventorySummary { items }
     }
+}
+
+/// Represents a discretized level for continuous stats like health or hunger.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum DiscretizedLevel {
+    Low,    // 0-33%
+    Medium, // 34-66%
+    High,   // 67-100%
 }
 
 /// Represents the high-level state of the agent and its environment.
@@ -101,9 +99,9 @@ pub struct HighLevelState {
     /// The number of hostile players the agent is aware of.
     pub num_hostile_players: u32,
     /// The agent's current health level.
-    pub health_level: u32,
+    pub health_level: DiscretizedLevel,
     /// The agent's current hunger level.
-    pub hunger_level: u32,
+    pub hunger_level: DiscretizedLevel,
     /// Whether it is currently night time.
     pub is_night: bool,
 }

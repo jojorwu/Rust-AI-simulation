@@ -95,7 +95,16 @@ pub fn setup_simulation(
 
     // Load Q-tables if they exist
     let q_tables: HashMap<u32, GoalQTable> = if let Ok(data) = fs::read_to_string("q_tables.json") {
-        serde_json::from_str(&data).unwrap_or_default()
+        match serde_json::from_str(&data) {
+            Ok(tables) => tables,
+            Err(e) => {
+                log::warn!(
+                    "Failed to parse q_tables.json: {}. Starting with empty Q-tables.",
+                    e
+                );
+                HashMap::new()
+            }
+        }
     } else {
         HashMap::new()
     };
@@ -158,93 +167,48 @@ fn update_day_night(
 pub fn add_simulation_systems(app: &mut App) {
     app.add_systems(
         FixedUpdate,
-        (update_day_night, systems::visibility_system::visibility_system)
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
         (
+            // --- Perception and State Updates ---
+            update_day_night,
+            visibility_system::visibility_system,
+            hunger::hunger_system,
+            eating::eating_system,
+            // --- AI Decision Making ---
+            (
+                goal_selection::goal_selection_system,
+                goal_selection::goal_planning_system,
+                goal_selection::intent_creation_system,
+            )
+                .chain(),
+            // --- Action Systems ---
+            (
+                actions::craft::craft_action_system,
+                actions::attack::attack_action_system,
+                actions::flee::flee_action_system,
+                actions::explore::explore_action_system,
+                actions::stockpile::stockpile_action_system,
+                find_resource::find_resource_system,
+                gathering::gathering_system,
+                crafting::crafting_system,
+                building_logic::check_resources_system,
+                building_logic::build_system,
+                storage::storage_system,
+                combat::combat_system,
+                death::death_system,
+                map_modification::map_modification_system,
+            ),
+            // --- Pathfinding and Movement ---
+            (
+                pathfinding_system::pathfinding_system,
+                pathfinding_completion_system::pathfinding_completion_system,
+                path_movement_system::path_movement_system,
+                movement::movement_system,
+            )
+                .chain(),
+            // --- Learning ---
+            // This should run after all actions and state changes have occurred.
             q_learning::update_q_table_system,
-            goal_selection::goal_selection_system,
         )
             .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            actions::craft::craft_action_system,
-            actions::attack::attack_action_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        actions::flee::flee_action_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        actions::explore::explore_action_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        actions::stockpile::stockpile_action_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        systems::pathfinding_system::pathfinding_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            systems::pathfinding_completion_system::pathfinding_completion_system,
-            systems::path_movement_system::path_movement_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            movement::movement_system,
-            find_resource::find_resource_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        gathering::gathering_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        crafting::crafting_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            building_logic::check_resources_system,
-            building_logic::check_tile_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (building_logic::build_system, storage::storage_system)
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (combat::combat_system, death::death_system)
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            goal_selection::goal_planning_system,
-            goal_selection::intent_creation_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (map_modification::map_modification_system,).in_set(SimulationSet::Logic),
     );
 }
