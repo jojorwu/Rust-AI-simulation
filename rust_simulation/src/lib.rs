@@ -4,6 +4,7 @@
 
 use bevy::prelude::*;
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 pub mod animals;
@@ -71,6 +72,11 @@ pub struct DataPaths {
     pub recipes: String,
 }
 
+#[derive(Resource)]
+pub struct AppPaths {
+    pub data_dir: PathBuf,
+}
+
 // --- Simulation Setup ---
 
 use std::fs;
@@ -80,6 +86,7 @@ use crate::systems::monitoring::MemoryLimitReached;
 pub fn setup_simulation(
     mut commands: Commands,
     paths: Res<DataPaths>,
+    app_paths: Res<AppPaths>,
     config: Res<Config>,
     memory_limit_reached: Res<MemoryLimitReached>,
 ) {
@@ -94,7 +101,8 @@ pub fn setup_simulation(
     let recipe_manager = Arc::new(RecipeManager::new(&paths.recipes).expect("Failed to create RecipeManager"));
 
     // Load Q-tables if they exist
-    let q_tables: HashMap<u32, GoalQTable> = if let Ok(data) = fs::read_to_string("q_tables.json") {
+    let q_table_path = app_paths.data_dir.join("q_tables.json");
+    let q_tables: HashMap<u32, GoalQTable> = if let Ok(data) = fs::read_to_string(q_table_path) {
         match serde_json::from_str(&data) {
             Ok(tables) => tables,
             Err(e) => {
