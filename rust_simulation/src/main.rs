@@ -87,17 +87,6 @@ fn main() {
         }
     };
 
-    // --- Validate and Clamp Config ---
-    let num_cpus = num_cpus::get();
-    if config.performance.processor_cores as usize > num_cpus {
-        log::warn!(
-            "Processor cores setting ({}) is higher than the number of available cores ({}). Clamping to {}.",
-            config.performance.processor_cores,
-            num_cpus,
-            num_cpus
-        );
-        config.performance.processor_cores = num_cpus as u32;
-    }
 
     // --- Bevy App Setup ---
     let mut app = App::new();
@@ -127,8 +116,7 @@ fn main() {
         .register_type::<rust_simulation::config::DayNightCycle>()
         .register_type::<rust_simulation::config::Ai>()
         .register_type::<rust_simulation::config::QLearning>()
-        .register_type::<rust_simulation::config::Goals>()
-        .register_type::<rust_simulation::config::PerformanceSettings>();
+    app.register_type::<rust_simulation::config::Goals>();
 
     // --- Simulation Setup ---
     // Insert resources

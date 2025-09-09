@@ -38,11 +38,6 @@ gather_threshold = 5
 commitment_ticks = 100
 threat_commitment_ticks = 200
 
-[performance]
-processor_cores = 4
-ram_limit_gb = 4
-enable_ram_limit = false
-
 [survival]
 hunger_rate = 0.01
 starvation_damage = 1

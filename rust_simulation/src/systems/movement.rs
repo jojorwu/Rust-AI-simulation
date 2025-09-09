@@ -1,15 +1,17 @@
 use crate::components::{Position, Velocity};
 use crate::map::Map;
+use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
+use rayon::prelude::*;
 
 use log::debug;
 
 pub fn movement_system(
-    mut commands: Commands,
+    commands: ParallelCommands,
     mut query: Query<(Entity, &mut Position, &Velocity)>,
     map: Res<Map>,
 ) {
-    for (entity, mut pos, vel) in query.iter_mut() {
+    query.par_iter_mut().for_each(|(entity, mut pos, vel)| {
         debug!(
             "Movement system running for entity {entity:?} with velocity {vel:?}"
         );
@@ -29,11 +31,15 @@ pub fn movement_system(
             pos.y = new_y;
 
             // Update the spatial map in the corresponding map chunks.
+            // This is safe to do in parallel because the Map uses Mutexes on its chunks.
             map.remove_entity_from_spatial_map(entity, old_pos.x, old_pos.y);
             map.add_entity_to_spatial_map(entity, pos.x, pos.y);
         }
 
-        // Remove the Velocity component, as it represents a one-time movement intent.
-        commands.entity(entity).remove::<Velocity>();
-    }
+        // Use command_scope for safe parallel command buffering.
+        commands.command_scope(|mut c| {
+            // Remove the Velocity component, as it represents a one-time movement intent.
+            c.entity(entity).remove::<Velocity>();
+        });
+    });
 }
