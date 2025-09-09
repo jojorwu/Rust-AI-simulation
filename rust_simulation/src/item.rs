@@ -5,11 +5,24 @@ use std::fs;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Item {
+    /// The unique name of the item.
     pub name: String,
+    /// Whether this item can be stacked in the inventory.
     pub stackable: bool,
+    /// Whether this item is a tool.
     pub tool: bool,
+    /// Whether this item can be eaten.
+    #[serde(default)]
+    pub is_food: bool,
+    /// The amount of hunger this item restores when eaten.
+    #[serde(default)]
+    pub food_value: f32,
+    /// A map of other properties, such as damage for tools or health for structures.
     #[serde(default)]
     pub properties: Option<HashMap<String, f64>>,
+    /// The category of the item, used for tasks like checking for a required tool type.
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 pub struct ItemRegistry {

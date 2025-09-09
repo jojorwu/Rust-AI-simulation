@@ -49,6 +49,7 @@ pub fn goal_selection_system(
     is_day: Res<IsDay>,
     config: Res<Config>,
     map: Res<Map>,
+    item_registry: Res<crate::ItemRegistryResource>,
 ) {
     query.par_iter_mut().for_each(
         |(entity, mut brain, health, hunger, inventory, known_resources, player_memories, goal_q_table)| {
@@ -69,7 +70,7 @@ pub fn goal_selection_system(
                     rng: &mut rng,
                 };
 
-                if let Ok(new_high_level_goal) = choose_goal(&mut args) {
+                if let Ok(new_high_level_goal) = choose_goal(&mut args, &item_registry) {
                     brain.current_goal = Some(new_high_level_goal);
                     if let Some(goal) = &brain.current_goal {
                         info!("Entity {entity:?} selected new goal: {goal:?}");
@@ -81,13 +82,34 @@ pub fn goal_selection_system(
     );
 }
 
+use std::collections::HashSet;
+
+struct PlannerArgs<'a> {
+    brain: &'a BrainComponent,
+    inventory: &'a Inventory,
+    known_resources: &'a KnownResources,
+    item_registry: &'a ItemRegistryResource,
+    map: &'a Map,
+    processed_goals: &'a mut HashSet<Goal>,
+}
+
 pub fn goal_planning_system(
     mut query: Query<(Entity, &mut BrainComponent, &Inventory, &KnownResources)>,
+    item_registry: Res<ItemRegistryResource>,
+    map: Res<Map>,
 ) {
     for (_entity, mut brain, inventory, known_resources) in query.iter_mut() {
         if let Some(goal) = &brain.current_goal {
             if brain.goal_stack.is_empty() {
-                if let Ok(mut plan) = plan_goal(&brain, inventory, known_resources, goal) {
+                let mut planner_args = PlannerArgs {
+                    brain: &brain,
+                    inventory,
+                    known_resources,
+                    item_registry: &item_registry,
+                    map: &map,
+                    processed_goals: &mut HashSet::new(),
+                };
+                if let Ok(mut plan) = plan_goal(&mut planner_args, goal) {
                     plan.reverse();
                     brain.goal_stack = plan;
                 }
@@ -179,8 +201,11 @@ fn get_high_level_state(
 
 /// Chooses a high-level goal for the agent based on the current state.
 /// This function prioritizes critical needs (fleeing, eating) before consulting the Q-table.
-fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, SimulationError> {
-    if let Some(critical_goal) = handle_critical_needs(args) {
+fn choose_goal<R: Rng + ?Sized>(
+    args: &mut ChooseGoalArgs<R>,
+    item_registry: &crate::ItemRegistryResource,
+) -> Result<Goal, SimulationError> {
+    if let Some(critical_goal) = handle_critical_needs(args, item_registry) {
         return Ok(critical_goal);
     }
 
@@ -189,17 +214,32 @@ fn choose_goal<R: Rng + ?Sized>(args: &mut ChooseGoalArgs<R>) -> Result<Goal, Si
 
 /// Handles immediate, critical needs like fleeing from low health or eating when starving.
 /// Returns Some(Goal) if a critical action is necessary, otherwise None.
-fn handle_critical_needs<R: Rng + ?Sized>(args: &ChooseGoalArgs<R>) -> Option<Goal> {
+fn handle_critical_needs<R: Rng + ?Sized>(
+    args: &ChooseGoalArgs<R>,
+    item_registry: &crate::ItemRegistryResource,
+) -> Option<Goal> {
     if args.state.health_level == DiscretizedLevel::Low {
         return Some(Goal::Flee);
     }
 
     if args.state.hunger_level == DiscretizedLevel::Low {
-        if args.inventory.has_item("meat", 1) {
-            return Some(Goal::EatFood("meat".to_string()));
+        // 1. Find any food in inventory
+        let food_in_inventory = args.inventory.items.keys().find(|item_name| {
+            item_registry
+                .0
+                .get_item(item_name)
+                .map_or(false, |item| item.is_food)
+        });
+
+        if let Some(food_name) = food_in_inventory {
+            return Some(Goal::EatFood(food_name.clone()));
         } else {
-            // This is a simplification. A better AI might look for other food.
-            return Some(Goal::GatherResource("pig".to_string()));
+            // 2. If no food, find a known resource that is a food source.
+            // This is a simplification. A better AI would check the loot table of resources.
+            // For now, we'll check for any huntable resource.
+            if let Some(huntable) = args.map.resources.iter().find(|r| r.huntable) {
+                return Some(Goal::GatherResource(huntable.name.clone()));
+            }
         }
     }
 
@@ -282,74 +322,113 @@ fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bo
 }
 
 /// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
-/// This is a simple hierarchical planner.
-pub fn plan_goal(
-    brain: &BrainComponent,
-    inventory: &Inventory,
-    known_resources: &KnownResources,
-    goal: &Goal,
-) -> Result<Vec<Goal>, SimulationError> {
+/// This is a simple hierarchical planner that can now handle nested dependencies.
+pub fn plan_goal(args: &mut PlannerArgs, goal: &Goal) -> Result<Vec<Goal>, SimulationError> {
+    // Prevent infinite recursion if there's a circular dependency.
+    if !args.processed_goals.insert(goal.clone()) {
+        return Ok(Vec::new());
+    }
+
     let mut plan = Vec::new();
     match goal {
         Goal::CraftItem(item_name) | Goal::Build(item_name) => {
             // For crafting or building, first plan to gather the required resources.
-            plan.extend(plan_crafting_or_building(
-                item_name,
-                brain,
-                inventory,
-                known_resources,
-            ));
+            plan.extend(plan_crafting_or_building(args, item_name)?);
             // Then, add the final craft/build goal itself.
             plan.push(goal.clone());
         }
         Goal::Stockpile(resource) => {
             let has_enough = inventory.has_item(resource, 1);
             if !has_enough {
-                plan.push(Goal::GatherResource(resource.clone()));
+                plan.extend(plan_goal(args, &Goal::GatherResource(resource.clone()))?);
             }
             plan.push(goal.clone());
         }
+        Goal::GatherResource(resource_name) => {
+            // This is the core of the tool-aware and dependency logic.
+            // First, plan to acquire the necessary tool, if any.
+            plan.extend(plan_tool_for_resource(args, resource_name)?);
+            // Then, plan to find the resource if its location is unknown.
+            if !args.known_resources.0.contains_key(resource_name) {
+                plan.push(Goal::Explore);
+            }
+            // Finally, add the goal to gather the resource itself.
+            plan.push(goal.clone());
+        }
         _ => {
+            // For simple goals, the plan is just the goal itself.
             plan.push(goal.clone());
         }
     }
     Ok(plan)
 }
 
-/// Helper function to plan the gathering of resources for crafting or building.
+/// Helper function to create a plan for crafting dependencies.
 fn plan_crafting_or_building(
+    args: &mut PlannerArgs,
     item_name: &str,
-    brain: &BrainComponent,
-    inventory: &Inventory,
-    known_resources: &KnownResources,
-) -> Vec<Goal> {
+) -> Result<Vec<Goal>, SimulationError> {
     let mut plan = Vec::new();
-    let required = brain.recipe_manager.get_required_resources(item_name, 1);
-    plan.extend(plan_resource_gathering(
-        inventory,
-        known_resources,
-        &required,
-    ));
-    plan
-}
+    let required = args
+        .brain
+        .recipe_manager
+        .get_required_resources(item_name, 1);
 
-/// Plans the gathering of resources required for a crafting recipe.
-fn plan_resource_gathering(
-    inventory: &Inventory,
-    known_resources: &KnownResources,
-    required: &HashMap<String, u32>,
-) -> Vec<Goal> {
-    let mut plan = Vec::new();
-    for (resource, &required_amount) in required {
-        let has_enough = inventory.get_quantity(resource) >= required_amount;
-        if !has_enough {
-            if !known_resources.0.contains_key(resource) {
-                plan.push(Goal::Explore);
+    for (resource_name, &required_amount) in &required {
+        let has_amount = args.inventory.get_quantity(resource_name);
+        if has_amount < required_amount {
+            // If the required resource is itself a craftable item, recurse.
+            if args.brain.recipe_manager.is_craftable(resource_name) {
+                plan.extend(plan_goal(
+                    args,
+                    &Goal::CraftItem(resource_name.clone()),
+                )?);
+            } else {
+                // Otherwise, it's a raw resource that needs to be gathered.
+                plan.extend(plan_goal(
+                    args,
+                    &Goal::GatherResource(resource_name.clone()),
+                )?);
             }
-            plan.push(Goal::GatherResource(resource.clone()));
         }
     }
-    plan
+    Ok(plan)
+}
+
+/// Helper function to create a plan to acquire a necessary tool for a resource.
+fn plan_tool_for_resource(
+    args: &mut PlannerArgs,
+    resource_name: &str,
+) -> Result<Vec<Goal>, SimulationError> {
+    let mut plan = Vec::new();
+    if let Some(resource_def) = args.map.resources.iter().find(|r| &r.name == resource_name) {
+        if let Some(tool_category) = &resource_def.required_tool {
+            // Check if the agent has a tool of the required category.
+            let has_tool = args.inventory.items.keys().any(|item_name| {
+                args.item_registry
+                    .0
+                    .get_item(item_name)
+                    .map_or(false, |item| item.category.as_deref() == Some(tool_category))
+            });
+
+            if !has_tool {
+                // Plan to craft a default tool if one isn't available.
+                // This is a simplification; a more advanced AI could choose the best tool to craft.
+                let default_tool = match tool_category.as_str() {
+                    "axe" => "stone_axe",
+                    "pickaxe" => "stone_pickaxe",
+                    _ => "",
+                };
+                if !default_tool.is_empty() {
+                    plan.extend(plan_goal(
+                        args,
+                        &Goal::CraftItem(default_tool.to_string()),
+                    )?);
+                }
+            }
+        }
+    }
+    Ok(plan)
 }
 
 #[cfg(test)]
@@ -360,42 +439,66 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn test_plan_goal_craft_item() {
+    fn test_plan_goal_craft_item_with_recursive_planning() {
         let recipe_manager = Arc::new(
             RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
         );
+        let item_registry = Arc::new(crate::item::ItemRegistry::new("data/items.json").unwrap());
+        let map = Map::new(10, 10, "data/biomes.json", "data/resources.json").unwrap();
         let brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
         let inventory = Inventory::new();
         let known_resources = KnownResources(HashMap::new());
         let goal = Goal::CraftItem("stone_axe".to_string());
 
-        let plan = plan_goal(&brain, &inventory, &known_resources, &goal)
-            .expect("Planning should succeed");
+        let mut planner_args = PlannerArgs {
+            brain: &brain,
+            inventory: &inventory,
+            known_resources: &known_resources,
+            item_registry: &crate::ItemRegistryResource(item_registry),
+            map: &map,
+            processed_goals: &mut HashSet::new(),
+        };
 
+        let plan = plan_goal(&mut planner_args, &goal).expect("Planning should succeed");
+
+        // The plan should be: Explore (for stone), Gather stone, Explore (for wood), Gather wood, Craft stone_axe
+        // Note: The planner is simple and doesn't know that exploring once might find both.
         assert_eq!(plan.len(), 5);
-        assert!(plan.contains(&Goal::Explore));
-        assert!(plan.contains(&Goal::GatherResource("wood".to_string())));
-        assert!(plan.contains(&Goal::GatherResource("stone".to_string())));
+        assert_eq!(plan[0], Goal::Explore);
+        assert_eq!(plan[1], Goal::GatherResource("stone".to_string()));
+        assert_eq!(plan[2], Goal::Explore);
+        assert_eq!(plan[3], Goal::GatherResource("wood".to_string()));
         assert_eq!(plan[4], Goal::CraftItem("stone_axe".to_string()));
     }
 
     #[test]
-    fn test_plan_goal_build_chest() {
+    fn test_plan_goal_gather_with_tool_dependency() {
         let recipe_manager = Arc::new(
             RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
         );
+        let item_registry = Arc::new(crate::item::ItemRegistry::new("data/items.json").unwrap());
+        let map = Map::new(10, 10, "data/biomes.json", "data/resources.json").unwrap();
         let brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
         let inventory = Inventory::new();
         let known_resources = KnownResources(HashMap::new());
-        let goal = Goal::Build("chest".to_string());
+        let goal = Goal::GatherResource("tree".to_string()); // Trees require an axe
 
-        let plan = plan_goal(&brain, &inventory, &known_resources, &goal)
-            .expect("Planning should succeed");
+        let mut planner_args = PlannerArgs {
+            brain: &brain,
+            inventory: &inventory,
+            known_resources: &known_resources,
+            item_registry: &crate::ItemRegistryResource(item_registry),
+            map: &map,
+            processed_goals: &mut HashSet::new(),
+        };
 
-        assert_eq!(plan.len(), 3);
-        assert!(plan.contains(&Goal::Explore));
-        assert!(plan.contains(&Goal::GatherResource("wood".to_string())));
-        assert_eq!(plan[2], Goal::Build("chest".to_string()));
+        let plan = plan_goal(&mut planner_args, &goal).expect("Planning should succeed");
+
+        // The plan should be to craft a stone_axe first, which itself requires resources.
+        // Explore -> Gather stone -> Explore -> Gather wood -> Craft stone_axe -> Explore -> Gather tree
+        assert_eq!(plan.len(), 7);
+        assert_eq!(plan[4], Goal::CraftItem("stone_axe".to_string()));
+        assert_eq!(plan[6], Goal::GatherResource("tree".to_string()));
     }
 
     #[test]
@@ -434,7 +537,9 @@ mod tests {
             rng: &mut rng,
         };
 
-        let goal = choose_goal(&mut args).expect("Choose goal should succeed");
+        let item_registry =
+            crate::ItemRegistryResource(Arc::new(crate::item::ItemRegistry::new("data/items.json").unwrap()));
+        let goal = choose_goal(&mut args, &item_registry).expect("Choose goal should succeed");
         assert_eq!(goal, Goal::Flee);
     }
 }

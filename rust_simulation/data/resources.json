@@ -3,25 +3,29 @@
     "name": "tree",
     "tile_type": "T",
     "biomes": ["plains"],
-    "density": 0.1
+    "density": 0.1,
+    "required_tool": "axe"
   },
   {
     "name": "rock",
     "tile_type": "R",
     "biomes": ["plains", "mountain"],
-    "density": 0.05
+    "density": 0.05,
+    "required_tool": "pickaxe"
   },
   {
     "name": "sulfur",
     "tile_type": "U",
     "biomes": ["plains", "mountain"],
-    "density": 0.05
+    "density": 0.05,
+    "required_tool": "pickaxe"
   },
   {
     "name": "iron_ore",
     "tile_type": "I",
     "biomes": ["mountain"],
-    "density": 0.1
+    "density": 0.1,
+    "required_tool": "pickaxe"
   },
   {
     "name": "pig",
