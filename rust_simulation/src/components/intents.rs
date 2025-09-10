@@ -25,6 +25,8 @@ pub struct IsGathering {
     pub resource: String,
     /// The target amount to gather.
     pub amount: u32,
+    /// The amount gathered so far in this action.
+    pub gathered_so_far: u32,
 }
 
 /// An intent to craft an item with the specified name.
