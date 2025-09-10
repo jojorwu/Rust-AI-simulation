@@ -22,6 +22,7 @@ valuable_resources = ["wood", "stone", "iron_ore"]
 defense_radius = 10
 critical_health_ratio = 0.25
 standard_health_ratio = 0.75
+vision_radius = 8
 
 [ai.q_learning]
 learning_rate = 0.1

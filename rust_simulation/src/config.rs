@@ -58,6 +58,7 @@ pub struct Ai {
     pub defense_radius: u32,
     pub critical_health_ratio: f32,
     pub standard_health_ratio: f32,
+    pub vision_radius: i32,
     pub q_learning: QLearning,
     pub goals: Goals,
 }

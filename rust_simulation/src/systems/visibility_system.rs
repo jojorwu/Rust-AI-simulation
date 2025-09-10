@@ -3,23 +3,21 @@ use crate::components::{
     Position,
     ai::{ExplorationFrontier, MentalMap},
 };
-use crate::fov;
-use crate::map::Map;
+use crate::{config::Config, fov, map::Map};
 use bevy_ecs::prelude::*;
 use log::debug;
 use std::sync::Arc;
 
-const VISION_RADIUS: i32 = 8; // TODO: Move to config.rs
-
 pub fn visibility_system(
     map: Res<Map>,
+    config: Res<Config>,
     mut query: Query<
         (Entity, &Position, &mut MentalMap, &mut ExplorationFrontier),
         Changed<Position>,
     >,
 ) {
     for (entity, pos, mut mental_map, mut exploration_frontier) in query.iter_mut() {
-        let visible_tiles = fov::field_of_view(pos, VISION_RADIUS, &map);
+        let visible_tiles = fov::field_of_view(pos, config.ai.vision_radius, &map);
         let old_frontier_size = exploration_frontier.0.len();
 
         // Get a mutable reference to the HashMap inside the Arc.
