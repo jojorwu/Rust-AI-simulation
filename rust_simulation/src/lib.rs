@@ -137,10 +137,7 @@ pub fn setup_simulation(
         match serde_json::from_str(&data) {
             Ok(tables) => tables,
             Err(e) => {
-                log::warn!(
-                    "Failed to parse q_tables.json: {}. Starting with empty Q-tables.",
-                    e
-                );
+                log::warn!("Failed to parse q_tables.json: {e}. Starting with empty Q-tables.");
                 HashMap::new()
             }
         }

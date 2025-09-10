@@ -2,9 +2,16 @@ use crate::components::{Position, Velocity, path::CurrentPath};
 use bevy_ecs::prelude::*;
 use log::debug;
 
+type PathMovementQuery<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static mut CurrentPath, &'static Position),
+    Or<(Changed<Position>, Added<CurrentPath>)>,
+>;
+
 pub fn path_movement_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut CurrentPath, &Position), Or<(Changed<Position>, Added<CurrentPath>)>>,
+    mut query: PathMovementQuery,
 ) {
     for (entity, mut path, position) in query.iter_mut() {
         // If the agent is at the current head of the path, pop it.

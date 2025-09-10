@@ -188,7 +188,7 @@ fn get_high_level_state(
         DiscretizedLevel::High
     };
 
-    let hunger_percent = (hunger.current as f32 / hunger.max as f32) * 100.0;
+    let hunger_percent = (hunger.current / hunger.max) * 100.0;
     let hunger_level = if hunger_percent < 34.0 {
         DiscretizedLevel::Low
     } else if hunger_percent < 67.0 {
@@ -235,7 +235,7 @@ fn handle_critical_needs<R: Rng + ?Sized>(
             item_registry
                 .0
                 .get_item(item_name)
-                .map_or(false, |item| item.is_food)
+                .is_some_and(|item| item.is_food)
         });
 
         if let Some(food_name) = food_in_inventory {
@@ -335,7 +335,7 @@ fn choose_q_learning_goal<R: Rng + ?Sized>(
 fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bool {
     match goal {
         Goal::GatherResource(resource_name, _amount) => {
-            if let Some(resource_def) = map.resources.iter().find(|r| &r.name == resource_name) {
+            if let Some(resource_def) = map.resources.iter().find(|r| r.name == *resource_name) {
                 if resource_def.huntable {
                     return true;
                 }
@@ -442,7 +442,7 @@ fn plan_tool_for_resource(
                 args.item_registry
                     .0
                     .get_item(item_name)
-                    .map_or(false, |item| item.category.as_deref() == Some(tool_category))
+                    .is_some_and(|item| item.category.as_deref() == Some(tool_category))
             });
 
             if !has_tool {
@@ -469,6 +469,7 @@ fn plan_tool_for_resource(
 mod tests {
     use super::*;
     use crate::recipes::RecipeManager;
+    use std::collections::HashMap;
     use std::collections::BTreeMap;
     use std::sync::Arc;
 

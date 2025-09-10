@@ -30,9 +30,9 @@ pub fn visibility_system(
         for visible_pos in &visible_tiles {
             let tile_coords = (visible_pos.x, visible_pos.y);
             // If we haven't seen this tile before, add it to our mental map.
-            if !mental_map_mut.contains_key(&tile_coords) {
+            if let std::collections::hash_map::Entry::Vacant(e) = mental_map_mut.entry(tile_coords) {
                 if let Some(tile) = map.get_tile(visible_pos.x, visible_pos.y) {
-                    mental_map_mut.insert(tile_coords, MemoryTile { tile });
+                    e.insert(MemoryTile { tile });
                 }
 
                 // Check neighbors of the newly visible tile to add them to the exploration frontier.
