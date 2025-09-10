@@ -19,6 +19,7 @@ pub fn combat_system(
             health.current -= damage;
             if health.current <= 0 {
                 target_dead = true;
+                health.current = 0;
             }
         }
 
