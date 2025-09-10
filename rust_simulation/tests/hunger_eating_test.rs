@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use rust_simulation::{
+    ItemRegistryResource,
     components::{
         intents::WantsToEat,
         status::{Health, Hunger},
@@ -14,7 +15,12 @@ fn setup_test_app() -> App {
     app.add_plugins(MinimalPlugins);
     // Load a default config for the tests
     let config = Config::load("data/config.toml").expect("Failed to load config");
+    let item_registry =
+        rust_simulation::item::ItemRegistry::new("data/items.json").unwrap();
     app.insert_resource(config);
+    app.insert_resource(ItemRegistryResource(std::sync::Arc::new(
+        item_registry,
+    )));
     app.add_systems(Update, (hunger_system, eating_system).chain());
     app
 }

@@ -30,6 +30,18 @@ impl PartialEq for Position {
     }
 }
 
+impl Position {
+    pub fn distance_squared(&self, other: &Position) -> f32 {
+        let dx = self.x as i32 - other.x as i32;
+        let dy = self.y as i32 - other.y as i32;
+        (dx * dx + dy * dy) as f32
+    }
+
+    pub fn distance(&self, other: &Position) -> f32 {
+        self.distance_squared(other).sqrt()
+    }
+}
+
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Velocity {
     pub dx: i32,
@@ -88,8 +100,8 @@ impl BrainComponent {
         epsilon: f64,
     ) -> Self {
         let goals = vec![
-            Goal::GatherResource("wood".to_string()),
-            Goal::GatherResource("stone".to_string()),
+            Goal::GatherResource("wood".to_string(), 10),
+            Goal::GatherResource("stone".to_string(), 10),
             Goal::CraftItem("stone_axe".to_string()),
             Goal::Build("foundation".to_string()),
             Goal::Stockpile("wood".to_string()),

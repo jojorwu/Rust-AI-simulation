@@ -11,7 +11,7 @@
 use crate::components::{Inventory, Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 /// A tile as remembered by the agent.

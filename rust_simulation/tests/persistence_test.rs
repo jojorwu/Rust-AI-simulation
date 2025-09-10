@@ -1,11 +1,11 @@
 use bevy::{app::AppExit, prelude::*};
 use rust_simulation::{
-    brain::{Goal, HighLevelState, InventorySummary},
+    brain::{DiscretizedLevel, Goal, HighLevelState, InventorySummary},
     components::ai::GoalQTable,
     player::Player,
     systems::persistence::save_q_tables_on_exit,
 };
-use std::{collections::HashMap, fs, panic};
+use std::{collections::{BTreeMap, HashMap}, fs, panic};
 
 #[test]
 fn test_q_table_persistence() {
@@ -20,7 +20,7 @@ fn test_q_table_persistence() {
         app.add_systems(Update, save_q_tables_on_exit.run_if(on_event::<AppExit>()));
 
         // Create a mock HighLevelState
-        let mut items = HashMap::new();
+        let mut items = BTreeMap::new();
         items.insert("wood".to_string(), 1);
         items.insert("stone".to_string(), 2);
         items.insert("iron_ore".to_string(), 3);
@@ -28,8 +28,8 @@ fn test_q_table_persistence() {
         let state = HighLevelState {
             inventory_summary: InventorySummary { items },
             num_hostile_players: 0,
-            health_level: 100,
-            hunger_level: 0,
+            health_level: DiscretizedLevel::High,
+            hunger_level: DiscretizedLevel::Low,
             is_night: false,
         };
 
@@ -48,7 +48,7 @@ fn test_q_table_persistence() {
         app.world.spawn((
             Player {
                 id: 1,
-                _held_item: None,
+                held_item: None,
             },
             q_table,
         ));

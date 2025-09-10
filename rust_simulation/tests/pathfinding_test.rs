@@ -29,18 +29,19 @@ fn test_pathfinding_flow() {
     // Add minimal plugins
     app.add_plugins(MinimalPlugins);
 
+    let map = rust_simulation::map::Map::new(TEST_WIDTH, TEST_HEIGHT, "data/biomes.json", "data/resources.json").unwrap();
+    app.insert_resource(map);
+
     // --- Setup Test Data ---
-    let mut mental_map = MentalMap(vec![vec![None; TEST_WIDTH as usize]; TEST_HEIGHT as usize]);
-    // Create a walkable path
-    for i in 0..5 {
-        mental_map.0[0][i] = Some(MemoryTile {
-            tile: Tile::new('.', "grassland".to_string()),
-        });
-    }
+    let mut map_data = std::collections::HashMap::new();
     // Create a wall
-    mental_map.0[1][1] = Some(MemoryTile {
-        tile: Tile::new('#', "wall".to_string()),
-    });
+    map_data.insert(
+        (1, 1),
+        MemoryTile {
+            tile: Tile::new('#', "wall".to_string()),
+        },
+    );
+    let mental_map = MentalMap(Arc::new(map_data));
 
     // --- Setup Systems ---
     app.add_systems(
@@ -93,7 +94,7 @@ fn test_exploration_flow() {
     app.add_plugins(MinimalPlugins);
 
     // --- Setup Test Data ---
-    let mental_map = MentalMap(vec![vec![None; TEST_WIDTH as usize]; TEST_HEIGHT as usize]);
+    let mental_map = MentalMap(Arc::new(std::collections::HashMap::new()));
     let mut exploration_frontier = ExplorationFrontier(VecDeque::new());
     // Manually add a frontier for the test
     exploration_frontier.0.push_back(Position { x: 1, y: 0 });

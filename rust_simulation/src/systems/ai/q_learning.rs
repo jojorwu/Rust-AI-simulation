@@ -20,7 +20,7 @@ pub fn update_q_table_system(
 
     q_table_query
         .par_iter_mut()
-        .for_each(|(entity, brain, mut q_table)| {
+        .for_each(|(entity, mut brain, mut q_table)| {
             if let Some(events) = events_by_entity.get(&entity) {
                 for event in events.iter() {
                     if let Event::GoalCompleted {

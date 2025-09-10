@@ -31,7 +31,9 @@ fn heuristic(a: (u32, u32), b: (u32, u32)) -> u32 {
 pub fn find_path(
     start: (u32, u32),
     goal: (u32, u32),
-    mental_map: &[Vec<Option<MemoryTile>>],
+    mental_map: &HashMap<(u32, u32), MemoryTile>,
+    width: u32,
+    height: u32,
 ) -> Option<Vec<(u32, u32)>> {
     let mut open_list = BinaryHeap::new();
     let mut closed_list = HashSet::new();
@@ -63,7 +65,7 @@ pub fn find_path(
 
         closed_list.insert(current_node.position);
 
-        for neighbor_pos in get_neighbors(current_node.position, mental_map) {
+        for neighbor_pos in get_neighbors(current_node.position, mental_map, width, height) {
             if closed_list.contains(&neighbor_pos) {
                 continue;
             }
@@ -89,7 +91,12 @@ pub fn find_path(
     None // No path found
 }
 
-fn get_neighbors(position: (u32, u32), mental_map: &[Vec<Option<MemoryTile>>]) -> Vec<(u32, u32)> {
+fn get_neighbors(
+    position: (u32, u32),
+    mental_map: &HashMap<(u32, u32), MemoryTile>,
+    width: u32,
+    height: u32,
+) -> Vec<(u32, u32)> {
     let mut neighbors = Vec::new();
     let (x, y) = position;
 
@@ -99,23 +106,20 @@ fn get_neighbors(position: (u32, u32), mental_map: &[Vec<Option<MemoryTile>>]) -
         let new_x = x as i32 + dx;
         let new_y = y as i32 + dy;
 
-        if new_x >= 0
-            && new_x < mental_map[0].len() as i32
-            && new_y >= 0
-            && new_y < mental_map.len() as i32
-        {
+        // Check map boundaries
+        if new_x >= 0 && new_x < width as i32 && new_y >= 0 && new_y < height as i32 {
             let new_pos = (new_x as u32, new_y as u32);
 
-            let tile_is_known_impassable = if let Some(Some(memory_tile)) = mental_map
-                .get(new_y as usize)
-                .and_then(|row| row.get(new_x as usize))
-            {
-                // Tile is known, check if it's a wall type
-                matches!(memory_tile.tile.tile_type, '#' | 'T' | 'M')
-            } else {
-                // Tile is None (unknown), so it's not known to be impassable.
-                false
-            };
+            // Check if the tile is known and impassable.
+            // If the tile is not in the mental map, it's considered unknown and therefore walkable.
+            let tile_is_known_impassable =
+                if let Some(memory_tile) = mental_map.get(&new_pos) {
+                    // Tile is known, check if it's a wall type
+                    matches!(memory_tile.tile.tile_type, '#' | 'T' | 'M')
+                } else {
+                    // Tile is unknown, so it's not known to be impassable.
+                    false
+                };
 
             if !tile_is_known_impassable {
                 neighbors.push(new_pos);

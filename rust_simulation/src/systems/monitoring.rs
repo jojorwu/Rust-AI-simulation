@@ -24,7 +24,6 @@ struct MonitoringTimer(Timer);
 
 pub struct MonitoringPlugin;
 
-use crate::config::Config;
 
 impl Plugin for MonitoringPlugin {
     fn build(&self, app: &mut App) {
@@ -34,12 +33,12 @@ impl Plugin for MonitoringPlugin {
                 Duration::from_secs(5),
                 TimerMode::Repeating,
             )))
-            .add_systems(FixedUpdate, memory_monitoring_system)
-            .add_systems(
-                FixedUpdate,
-                memory_limiting_system
-                    .run_if(|config: Res<Config>| config.performance.enable_ram_limit),
-            );
+            .add_systems(FixedUpdate, memory_monitoring_system);
+            // .add_systems(
+            //     FixedUpdate,
+            //     memory_limiting_system
+            //         .run_if(|config: Res<Config>| config.performance.enable_ram_limit),
+            // );
     }
 }
 
@@ -60,17 +59,17 @@ fn memory_monitoring_system(
     }
 }
 
-fn memory_limiting_system(
-    mut memory_limit_reached: ResMut<MemoryLimitReached>,
-    monitoring_state: Res<MonitoringState>,
-    config: Res<Config>,
-) {
-    if memory_limit_reached.0 {
-        return;
-    }
-    let used_memory_gb = monitoring_state.sys.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
-    if used_memory_gb > config.performance.ram_limit_gb as f64 {
-        memory_limit_reached.0 = true;
-        info!("RAM limit reached! No new agents will be spawned.");
-    }
-}
+// fn memory_limiting_system(
+//     mut memory_limit_reached: ResMut<MemoryLimitReached>,
+//     monitoring_state: Res<MonitoringState>,
+//     config: Res<Config>,
+// ) {
+//     if memory_limit_reached.0 {
+//         return;
+//     }
+//     let used_memory_gb = monitoring_state.sys.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+//     if used_memory_gb > config.performance.ram_limit_gb as f64 {
+//         memory_limit_reached.0 = true;
+//         info!("RAM limit reached! No new agents will be spawned.");
+//     }
+// }

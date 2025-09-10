@@ -7,20 +7,19 @@ use crate::fov;
 use crate::map::Map;
 use bevy_ecs::prelude::*;
 use log::debug;
-use rayon::prelude::*;
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 const VISION_RADIUS: i32 = 8; // TODO: Move to config.rs
 
 pub fn visibility_system(
     map: Res<Map>,
-    mut query: Query<(Entity, &Position, &mut MentalMap, &mut ExplorationFrontier)>,
+    mut query: Query<
+        (Entity, &Position, &mut MentalMap, &mut ExplorationFrontier),
+        Changed<Position>,
+    >,
 ) {
-    query
-        .par_iter_mut()
-        .for_each(|(entity, pos, mut mental_map, mut exploration_frontier)| {
-            let visible_tiles = fov::field_of_view(pos, VISION_RADIUS, &map);
+    for (entity, pos, mut mental_map, mut exploration_frontier) in query.iter_mut() {
+        let visible_tiles = fov::field_of_view(pos, VISION_RADIUS, &map);
         let old_frontier_size = exploration_frontier.0.len();
 
         // Get a mutable reference to the HashMap inside the Arc.
@@ -84,5 +83,5 @@ pub fn visibility_system(
                 exploration_frontier.0.len()
             );
         }
-    });
+    }
 }

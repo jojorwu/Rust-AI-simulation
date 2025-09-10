@@ -4,7 +4,7 @@ use log::debug;
 
 pub fn path_movement_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut CurrentPath, &Position)>,
+    mut query: Query<(Entity, &mut CurrentPath, &Position), Or<(Changed<Position>, Added<CurrentPath>)>>,
 ) {
     for (entity, mut path, position) in query.iter_mut() {
         // If the agent is at the current head of the path, pop it.

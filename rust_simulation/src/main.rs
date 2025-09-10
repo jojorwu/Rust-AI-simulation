@@ -11,7 +11,6 @@
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use rust_simulation::config::Config;
-use rust_simulation::errors::SimulationError;
 use rust_simulation::road_builder;
 use rust_simulation::road_manager::RoadManager;
 use rust_simulation::state::AppState;
@@ -79,7 +78,7 @@ fn main() {
     // --- Load Config ---
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let config_path = format!("{manifest_dir}/data/config.toml");
-    let mut config = match Config::load(&config_path) {
+    let config = match Config::load(&config_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Failed to load config file at {}: {}", config_path, e);
@@ -115,7 +114,7 @@ fn main() {
         .register_type::<rust_simulation::config::TrainingSettings>()
         .register_type::<rust_simulation::config::DayNightCycle>()
         .register_type::<rust_simulation::config::Ai>()
-        .register_type::<rust_simulation::config::QLearning>()
+        .register_type::<rust_simulation::config::QLearning>();
     app.register_type::<rust_simulation::config::Goals>();
 
     // --- Simulation Setup ---
