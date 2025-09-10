@@ -12,7 +12,7 @@ use crate::components::{Inventory, Velocity, WantsToAttack, WantsToCraft, WantsT
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// A tile as remembered by the agent.
 #[derive(Debug, Clone)]

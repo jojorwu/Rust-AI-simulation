@@ -14,7 +14,6 @@ use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
 use log::info;
 use rand::prelude::*;
-use std::collections::HashMap;
 
 // Type alias to simplify the query type
 use crate::components::Position;
@@ -352,7 +351,7 @@ fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bo
 
 /// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
 /// This is a simple hierarchical planner that can now handle nested dependencies.
-pub fn plan_goal(args: &mut PlannerArgs, goal: &Goal) -> Result<Vec<Goal>, SimulationError> {
+fn plan_goal(args: &mut PlannerArgs, goal: &Goal) -> Result<Vec<Goal>, SimulationError> {
     // Prevent infinite recursion if there's a circular dependency.
     if !args.processed_goals.insert(goal.clone()) {
         return Ok(Vec::new());
