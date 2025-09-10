@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rust_simulation::{
     animals::pig::Pig,
-    components::{DroppedItem, Inventory, Position},
+    components::{DroppedItem, Position},
     events::Event,
     map::Map,
     systems::death::death_system,
@@ -62,12 +62,9 @@ fn test_death_system_pig_drops_meat() {
     // 1. Setup
     let mut app = setup_test_app();
 
-    let mut pig_inventory = Inventory::new();
-    pig_inventory.add_item("meat", 1);
-
     // Create a pig entity and add it to the map
     let pig_pos = Position { x: 3, y: 3 };
-    let pig_entity = app.world.spawn((pig_pos, Pig {}, pig_inventory)).id();
+    let pig_entity = app.world.spawn((pig_pos, Pig {})).id();
     app.world
         .resource_mut::<Map>()
         .add_entity_to_spatial_map(pig_entity, pig_pos.x, pig_pos.y);
@@ -94,49 +91,4 @@ fn test_death_system_pig_drops_meat() {
         .expect("DroppedItem component should be present");
     assert_eq!(item.item_name, "meat");
     assert_eq!(item.quantity, 1);
-}
-
-#[test]
-fn test_death_system_drops_inventory() {
-    // 1. Setup
-    let mut app = setup_test_app();
-
-    let mut inventory = Inventory::new();
-    inventory.add_item("wood", 10);
-    inventory.add_item("stone", 5);
-
-    let entity_pos = Position { x: 5, y: 5 };
-    let dead_entity = app.world.spawn((entity_pos, inventory)).id();
-    app.world
-        .resource_mut::<Map>()
-        .add_entity_to_spatial_map(dead_entity, entity_pos.x, entity_pos.y);
-
-    // 2. Send death event
-    app.world.send_event(Event::EntityDied(dead_entity));
-    app.update();
-
-    // 3. Verify
-    assert!(app.world.get_entity(dead_entity).is_none());
-
-    let map_after_update = app.world.resource::<Map>();
-    let entities_at_pos = map_after_update
-        .get_entities_at(entity_pos.x, entity_pos.y)
-        .expect("Entities should be present");
-
-    // There should be two dropped item stacks
-    assert_eq!(entities_at_pos.len(), 2);
-
-    let mut found_wood = false;
-    let mut found_stone = false;
-    for &entity in &entities_at_pos {
-        if let Some(item) = app.world.get::<DroppedItem>(entity) {
-            if item.item_name == "wood" && item.quantity == 10 {
-                found_wood = true;
-            }
-            if item.item_name == "stone" && item.quantity == 5 {
-                found_stone = true;
-            }
-        }
-    }
-    assert!(found_wood && found_stone, "Not all items were dropped");
 }

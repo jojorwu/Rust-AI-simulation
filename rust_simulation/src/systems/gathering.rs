@@ -15,17 +15,17 @@ pub fn gathering_system(
             &mut KnownResources,
             &Position,
             &mut Inventory,
-            &mut IsGathering,
+            &IsGathering,
         ),
         (Without<CurrentPath>, Without<PathRequest>),
     >,
     mut resource_query: Query<(Entity, &mut ResourceComponent, &Position)>,
 ) {
-    for (entity, mut known_resources, position, mut inventory, mut gathering_state) in
+    for (entity, mut known_resources, position, mut inventory, gathering_state) in
         gatherer_query.iter_mut()
     {
         let target_entity = gathering_state.target;
-        let resource_name = gathering_state.resource.clone();
+        let resource_name = &gathering_state.resource;
         let target_amount = gathering_state.amount;
 
         if let Ok((_, mut resource, target_pos)) = resource_query.get_mut(target_entity) {
@@ -35,20 +35,19 @@ pub fn gathering_system(
             if is_adjacent {
                 if resource.quantity > 0 {
                     resource.quantity -= 1;
-                    inventory.add_item(&resource_name, 1);
-                    gathering_state.gathered_so_far += 1;
+                    inventory.add_item(resource_name, 1);
 
                     if resource.quantity == 0 {
                         commands.entity(target_entity).despawn();
                         // Remove the resource from the agent's known resources.
-                        if let Some(positions) = known_resources.0.get_mut(&resource_name) {
+                        if let Some(positions) = known_resources.0.get_mut(resource_name) {
                             positions.retain(|&p| p != *target_pos);
                         }
                     }
                 }
 
                 // Check if the goal is complete.
-                if gathering_state.gathered_so_far >= target_amount || resource.quantity == 0 {
+                if inventory.get_quantity(resource_name) >= target_amount || resource.quantity == 0 {
                     // The action is complete, so we can remove the state.
                     commands.entity(entity).remove::<IsGathering>();
                 }

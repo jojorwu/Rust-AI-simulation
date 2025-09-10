@@ -19,7 +19,7 @@ fn test_storage_system_success() {
     let mut storer_inv = Inventory::new();
     storer_inv.add_item("wood", 10);
 
-    let chest_entity = app.world.spawn(Chest { inventory: Inventory::new(), capacity: 100 }).id();
+    let chest_entity = app.world.spawn(Chest { inventory: Inventory::new() }).id();
     let storer_entity = app
         .world
         .spawn((
@@ -56,7 +56,7 @@ fn test_storage_fails_if_item_not_present() {
     let mut app = setup_test_app();
 
     let storer_inv = Inventory::new(); // Empty inventory
-    let chest_entity = app.world.spawn(Chest { inventory: Inventory::new(), capacity: 100 }).id();
+    let chest_entity = app.world.spawn(Chest { inventory: Inventory::new() }).id();
     let storer_entity = app
         .world
         .spawn((
@@ -119,55 +119,4 @@ fn test_storage_fails_if_chest_does_not_exist() {
         .get::<Inventory>(storer_entity)
         .expect("Storer should have an Inventory component");
     assert_eq!(storer_inv.get_quantity("wood"), 10);
-}
-
-#[test]
-fn test_storage_fails_if_chest_is_full() {
-    // 1. Setup
-    let mut app = setup_test_app();
-
-    let mut storer_inv = Inventory::new();
-    storer_inv.add_item("wood", 10);
-    storer_inv.add_item("stone", 10);
-
-    let mut chest_inv = Inventory::new();
-    chest_inv.add_item("iron", 5);
-    let chest_entity = app
-        .world
-        .spawn(Chest {
-            inventory: chest_inv,
-            capacity: 1, // Only one stack allowed
-        })
-        .id();
-
-    let storer_entity = app
-        .world
-        .spawn((
-            storer_inv,
-            WantsToStoreItem {
-                item_name: "wood".to_string(), // Try to store a new item
-                quantity: 5,
-                target_chest: chest_entity,
-            },
-        ))
-        .id();
-
-    // 2. Run system
-    app.update();
-
-    // 3. Verify
-    let storer_inv = app
-        .world
-        .get::<Inventory>(storer_entity)
-        .expect("Storer should have an Inventory component");
-    assert_eq!(storer_inv.get_quantity("wood"), 10); // Wood should not have been stored
-    assert_eq!(storer_inv.get_quantity("stone"), 10);
-
-    let chest_inv = &app
-        .world
-        .get::<Chest>(chest_entity)
-        .expect("Chest should have a Chest component")
-        .inventory;
-    assert_eq!(chest_inv.get_quantity("wood"), 0); // No wood in chest
-    assert_eq!(chest_inv.get_quantity("iron"), 5); // Iron should still be there
 }

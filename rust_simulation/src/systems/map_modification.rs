@@ -37,7 +37,6 @@ pub fn map_modification_system(
                             *position,
                             Chest {
                                 inventory: Inventory::new(),
-                                capacity: 100, // Default capacity
                             },
                         )).id();
 

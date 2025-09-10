@@ -25,17 +25,20 @@ pub struct IsGathering {
     pub resource: String,
     /// The target amount to gather.
     pub amount: u32,
-    /// The amount gathered so far in this action.
-    pub gathered_so_far: u32,
 }
 
 /// An intent to craft an item with the specified name.
 #[derive(Component)]
 pub struct IntendsToCraft(pub String);
 
+use super::Position;
+
 /// An intent to build a structure with the specified name.
 #[derive(Component)]
-pub struct IntendsToBuild(pub String);
+pub struct IntendsToBuild {
+    pub structure: String,
+    pub position: Position,
+}
 
 /// An intent to attack a specific target entity.
 #[derive(Component)]

@@ -23,14 +23,17 @@ pub fn check_resources_system(
     }
 }
 
+use crate::components::intents::IntendsToBuild;
+
 pub fn check_tile_system(
     mut commands: Commands,
-    query: Query<(Entity, &Position), With<HasResources>>,
+    query: Query<(Entity, &IntendsToBuild), With<HasResources>>,
     map: Res<Map>,
 ) {
-    for (entity, position) in query.iter() {
+    for (entity, intends_to_build) in query.iter() {
+        let position = intends_to_build.position;
         if let Some((chunk_x, chunk_y)) = map.get_chunk_index(position.x, position.y) {
-            if let Ok(chunk) = map.chunks[chunk_y][chunk_x].try_lock() {
+            if let Ok(chunk) = map.chunks[chunk_y as usize][chunk_x as usize].try_lock() {
                 let local_x = (position.x % CHUNK_SIZE) as usize;
                 let local_y = (position.y % CHUNK_SIZE) as usize;
                 let tile = &chunk.tiles[local_y][local_x];

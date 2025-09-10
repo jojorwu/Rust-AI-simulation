@@ -37,7 +37,6 @@ pub fn find_resource_system(
                     target: target_entity,
                     resource: resource_name.clone(),
                     amount,
-                    gathered_so_far: 0,
                 });
             }
         }

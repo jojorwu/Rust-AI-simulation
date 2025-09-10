@@ -139,8 +139,12 @@ pub fn intent_creation_system(
                     c.entity(entity).insert(IntendsToCraft(item.clone()));
                 }
                 Goal::Build(structure) => {
-                    c.entity(entity)
-                        .insert(IntendsToBuild(structure.clone()));
+                    // This is a simplification. A real AI would need to find a suitable position.
+                    let build_position = Position { x: 0, y: 0 };
+                    c.entity(entity).insert(IntendsToBuild {
+                        structure: structure.clone(),
+                        position: build_position,
+                    });
                 }
                 Goal::Attack(target) => {
                     c.entity(entity).insert(IntendsToAttack(*target));

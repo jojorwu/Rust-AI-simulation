@@ -66,7 +66,6 @@ pub struct WantsToBuild {
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct Chest {
     pub inventory: Inventory,
-    pub capacity: u32,
 }
 
 #[derive(Component, Clone, Debug)]
