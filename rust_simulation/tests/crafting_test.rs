@@ -80,3 +80,29 @@ fn test_crafting_system_insufficient_resources() {
     // Intent should still be removed
     assert!(app.world.get::<WantsToCraft>(crafter_entity).is_none());
 }
+
+#[test]
+fn test_crafting_circular_dependency() {
+    // 1. Setup
+    use std::collections::HashMap;
+    let mut recipes = HashMap::new();
+    // Create a circular dependency: item_a needs item_b, and item_b needs item_a
+    let mut recipe_a = HashMap::new();
+    recipe_a.insert("item_b".to_string(), 1);
+    recipes.insert("item_a".to_string(), recipe_a);
+
+    let mut recipe_b = HashMap::new();
+    recipe_b.insert("item_a".to_string(), 1);
+    recipes.insert("item_b".to_string(), recipe_b);
+
+    let recipe_manager = RecipeManager::with_recipes(recipes);
+
+    // 2. Run and Verify
+    let result = recipe_manager.get_required_resources("item_a", 1);
+    assert!(result.is_err(), "Should have detected a circular dependency");
+
+    // We can also check the specific error type if we want to be more precise
+    if let Err(e) = result {
+        assert!(matches!(e, rust_simulation::errors::SimulationError::CircularDependency(_)));
+    }
+}

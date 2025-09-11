@@ -26,4 +26,7 @@ pub enum SimulationError {
 
     #[error("Environment variable error: {0}")]
     EnvVarError(String),
+
+    #[error("Circular dependency detected in recipes: {0}")]
+    CircularDependency(String),
 }

@@ -400,7 +400,7 @@ fn plan_crafting_or_building(
     let required = args
         .brain
         .recipe_manager
-        .get_required_resources(item_name, 1);
+        .get_required_resources(item_name, 1)?;
 
     for (resource_name, &required_amount) in &required {
         let has_amount = args.inventory.get_quantity(resource_name);
