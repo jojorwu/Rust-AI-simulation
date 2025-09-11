@@ -36,12 +36,8 @@ fn scan(row: i32, mut start_slope: f32, end_slope: f32, context: &mut ScanContex
     }
 
     let mut prev_tile_was_wall = false;
-    let last_col = -1;
 
     for col in 0..=row {
-        if last_col != -1 && col < last_col {
-            continue;
-        }
 
         let (dx, dy) = transform_octant(col, row, context.octant);
         let x = context.player_pos.x as i32 + dx;
