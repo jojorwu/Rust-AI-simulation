@@ -77,6 +77,8 @@ pub fn goal_selection_system(
                 };
 
                 if let Ok(new_high_level_goal) = choose_goal(&mut args, &item_registry) {
+                    brain.prev_state = Some(high_level_state);
+                    brain.prev_goal = Some(new_high_level_goal.clone());
                     brain.current_goal = Some(new_high_level_goal);
                     if let Some(goal) = &brain.current_goal {
                         info!("Entity {entity:?} selected new goal: {goal:?}");
@@ -168,7 +170,7 @@ pub fn intent_creation_system(
 }
 
 /// Constructs the high-level state of an agent from its components.
-fn get_high_level_state(
+pub fn get_high_level_state(
     health: &Health,
     hunger: &Hunger,
     inventory: &Inventory,

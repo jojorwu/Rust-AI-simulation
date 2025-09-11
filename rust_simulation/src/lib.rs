@@ -49,7 +49,7 @@ use item::ItemRegistry;
 use map::Map;
 use player::Player;
 use recipes::RecipeManager;
-use systems::ai::{actions, goal_selection, q_learning};
+use systems::ai::{actions, goal_completion, goal_selection, q_learning};
 use systems::*;
 
 // --- System Sets ---
@@ -247,8 +247,8 @@ pub fn add_simulation_systems(app: &mut App) {
                 movement::movement_system,
             )
                 .chain(),
-            // --- Learning ---
-            // The Q-table is updated last, based on the results of the turn's actions.
+            // --- Goal Completion and Learning ---
+            goal_completion::goal_completion_system,
             q_learning::update_q_table_system,
         )
             .in_set(SimulationSet::Logic),
