@@ -138,3 +138,70 @@ fn test_exploration_flow() {
         "PathRequest was not generated"
     );
 }
+
+#[test]
+fn test_long_pathfinding() {
+    // Create a new Bevy App
+    let mut app = App::new();
+
+    // Add minimal plugins
+    app.add_plugins(MinimalPlugins);
+
+    let map = rust_simulation::map::Map::new(TEST_WIDTH, TEST_HEIGHT, "data/biomes.json", "data/resources.json").unwrap();
+    app.insert_resource(map);
+
+    // --- Setup Test Data ---
+    // An empty mental map represents a wide open space
+    let mental_map = MentalMap(Arc::new(std::collections::HashMap::new()));
+
+    // --- Setup Systems ---
+    app.add_systems(
+        Update,
+        (
+            pathfinding_system,
+            pathfinding_completion_system,
+        ),
+    );
+
+    // --- Setup Entities ---
+    let start_pos = (0, 0);
+    let goal_pos = (50, 50); // A significantly long path
+    let player_entity = app
+        .world
+        .spawn((
+            Player::new(0, TEST_WIDTH, TEST_HEIGHT),
+            Position {
+                x: start_pos.0,
+                y: start_pos.1,
+            },
+            PathRequest {
+                start: start_pos,
+                goal: goal_pos,
+            },
+            mental_map,
+        ))
+        .id();
+
+    // --- Run App ---
+    // The pathfinding is async, so we need to run the app a few times.
+    // This should be more than enough to get the result.
+    for _ in 0..20 {
+        app.update();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    // --- Check for Path ---
+    let player_entity_ref = app.world.entity(player_entity);
+    let current_path = player_entity_ref.get::<CurrentPath>();
+    assert!(
+        current_path.is_some(),
+        "Path was not found for the long path test"
+    );
+
+    // Optional: Check if the path is correct
+    let path = &current_path.unwrap().nodes;
+    assert_eq!(path[0], start_pos, "Path does not start at the correct location");
+    assert_eq!(path.back().unwrap(), &goal_pos, "Path does not end at the correct location");
+    // Manhattan distance for a clear path
+    assert_eq!(path.len(), 101, "Path length is not correct for a 50x50 journey");
+}

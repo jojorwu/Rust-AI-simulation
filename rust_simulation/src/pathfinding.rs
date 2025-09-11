@@ -2,14 +2,15 @@ use super::brain::MemoryTile;
 use log::debug;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::sync::Arc;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 struct Node {
     position: (u32, u32),
     g_cost: u32,
     h_cost: u32,
     f_cost: u32,
-    parent: Option<Box<Node>>,
+    parent: Option<Arc<Node>>,
 }
 
 impl Ord for Node {
@@ -39,13 +40,13 @@ pub fn find_path(
     let mut closed_list = HashSet::new();
     let mut g_costs = HashMap::new();
 
-    let start_node = Node {
+    let start_node = Arc::new(Node {
         position: start,
         g_cost: 0,
         h_cost: heuristic(start, goal),
         f_cost: heuristic(start, goal),
         parent: None,
-    };
+    });
 
     open_list.push(start_node);
     g_costs.insert(start, 0);
@@ -53,10 +54,10 @@ pub fn find_path(
     while let Some(current_node) = open_list.pop() {
         if current_node.position == goal {
             let mut path = Vec::new();
-            let mut current = Some(Box::new(current_node));
+            let mut current = Some(current_node);
             while let Some(node) = current {
                 path.push(node.position);
-                current = node.parent;
+                current = node.parent.clone();
             }
             path.reverse();
             debug!("Path found from {start:?} to {goal:?}: {path:?}");
@@ -75,13 +76,13 @@ pub fn find_path(
             if tentative_g_cost < *g_costs.get(&neighbor_pos).unwrap_or(&u32::MAX) {
                 g_costs.insert(neighbor_pos, tentative_g_cost);
                 let h_cost = heuristic(neighbor_pos, goal);
-                let neighbor_node = Node {
+                let neighbor_node = Arc::new(Node {
                     position: neighbor_pos,
                     g_cost: tentative_g_cost,
                     h_cost,
                     f_cost: tentative_g_cost + h_cost,
-                    parent: Some(Box::new(current_node.clone())),
-                };
+                    parent: Some(current_node.clone()),
+                });
                 open_list.push(neighbor_node);
             }
         }
