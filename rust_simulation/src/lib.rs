@@ -126,7 +126,6 @@ pub fn setup_simulation(
         config.map_settings.height,
         &paths.biomes,
         &paths.resources,
-        config.map_settings.seed,
     )
     .expect("Failed to create Map");
     let item_registry = Arc::new(ItemRegistry::new(&paths.items).expect("Failed to create ItemRegistry"));

@@ -56,7 +56,13 @@ pub fn fleeing_system(
                     let (flee_dx, flee_dy) = if dx == 0 && dy == 0 {
                         // If positions are the same, flee in a random direction
                         let mut rng = rand::rng();
-                        (rng.random_range(-1..=1), rng.random_range(-1..=1))
+                        let mut flee_dx = 0;
+                        let mut flee_dy = 0;
+                        while flee_dx == 0 && flee_dy == 0 {
+                            flee_dx = rng.random_range(-1..=1);
+                            flee_dy = rng.random_range(-1..=1);
+                        }
+                        (flee_dx, flee_dy)
                     } else {
                         (dx.signum(), dy.signum())
                     };

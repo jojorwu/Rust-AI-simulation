@@ -13,7 +13,7 @@ fn setup_test_app() -> App {
     app.add_plugins(MinimalPlugins);
     app.add_event::<Event>();
     app.insert_resource(
-        Map::new(10, 10, "data/biomes.json", "data/resources.json", None)
+        Map::new(10, 10, "data/biomes.json", "data/resources.json")
             .expect("Failed to create map"),
     );
     app.add_systems(Update, death_system);

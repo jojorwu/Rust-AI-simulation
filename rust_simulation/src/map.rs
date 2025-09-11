@@ -1,7 +1,6 @@
 //! This module handles the representation of the game world, divided into chunks for concurrent access.
 
 use bevy_ecs::prelude::*;
-use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -105,7 +104,6 @@ impl Map {
         height: u32,
         biomes_path: &str,
         resources_path: &str,
-        seed: Option<u32>,
     ) -> Result<Self, SimulationError> {
         let biomes_data = fs::read_to_string(biomes_path)?;
         let biomes: Vec<Biome> = serde_json::from_str(&biomes_data)?;
@@ -113,41 +111,13 @@ impl Map {
         let resources_data = fs::read_to_string(resources_path)?;
         let resources: Vec<ResourceDef> = serde_json::from_str(&resources_data)?;
 
-        let fbm = Fbm::<Perlin>::new(seed.unwrap_or(0))
-            .set_frequency(0.1)
-            .set_persistence(0.6)
-            .set_lacunarity(2.2)
-            .set_octaves(5);
-
         let chunks_x = (width as f32 / CHUNK_SIZE as f32).ceil() as usize;
         let chunks_y = (height as f32 / CHUNK_SIZE as f32).ceil() as usize;
 
         let chunks = (0..chunks_y)
-            .map(|y_chunk| {
+            .map(|_| {
                 (0..chunks_x)
-                    .map(|x_chunk| {
-                        let mut chunk = MapChunk::new();
-                        for y_local in 0..CHUNK_SIZE {
-                            for x_local in 0..CHUNK_SIZE {
-                                let x_global = x_chunk as u32 * CHUNK_SIZE + x_local;
-                                let y_global = y_chunk as u32 * CHUNK_SIZE + y_local;
-
-                                if x_global < width && y_global < height {
-                                    let noise_val = fbm.get([x_global as f64, y_global as f64]);
-                                    let biome = biomes
-                                        .iter()
-                                        .find(|b| {
-                                            noise_val >= b.height_range[0]
-                                                && noise_val < b.height_range[1]
-                                        })
-                                        .unwrap_or(&biomes[0]);
-                                    chunk.tiles[y_local as usize][x_local as usize] =
-                                        Tile::new(biome.tile_type, biome.name.clone());
-                                }
-                            }
-                        }
-                        Arc::new(Mutex::new(chunk))
-                    })
+                    .map(|_| Arc::new(Mutex::new(MapChunk::new())))
                     .collect()
             })
             .collect();
