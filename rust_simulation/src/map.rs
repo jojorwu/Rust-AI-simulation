@@ -187,6 +187,9 @@ impl Map {
         let local_y = y % CHUNK_SIZE;
         if let Some(entities) = chunk.spatial_map.get_mut(&(local_x, local_y)) {
             entities.retain(|&e| e != entity);
+            if entities.is_empty() {
+                chunk.spatial_map.remove(&(local_x, local_y));
+            }
         }
         Some(())
     }

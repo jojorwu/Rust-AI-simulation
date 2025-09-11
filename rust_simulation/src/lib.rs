@@ -12,7 +12,6 @@
 //! - **AI**: A Q-learning based decision-making system for agents.
 
 use bevy::prelude::*;
-use crate::state::AppState;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -50,7 +49,7 @@ use item::ItemRegistry;
 use map::Map;
 use player::Player;
 use recipes::RecipeManager;
-use systems::ai::{actions, goal_completion, goal_selection, q_learning};
+use systems::ai::{actions, goal_selection, q_learning};
 use systems::*;
 
 // --- System Sets ---
@@ -248,11 +247,10 @@ pub fn add_simulation_systems(app: &mut App) {
                 movement::movement_system,
             )
                 .chain(),
-            // --- Goal Completion and Learning ---
-            goal_completion::goal_completion_system,
+            // --- Learning ---
+            // The Q-table is updated last, based on the results of the turn's actions.
             q_learning::update_q_table_system,
         )
-            .in_set(SimulationSet::Logic)
-            .run_if(in_state(AppState::InGame)),
+            .in_set(SimulationSet::Logic),
     );
 }

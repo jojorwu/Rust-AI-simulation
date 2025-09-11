@@ -31,14 +31,9 @@ pub struct IsGathering {
 #[derive(Component)]
 pub struct IntendsToCraft(pub String);
 
-use super::Position;
-
 /// An intent to build a structure with the specified name.
 #[derive(Component)]
-pub struct IntendsToBuild {
-    pub structure: String,
-    pub position: Position,
-}
+pub struct IntendsToBuild(pub String);
 
 /// An intent to attack a specific target entity.
 #[derive(Component)]

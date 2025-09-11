@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use rust_simulation::{
     components::{Chest, Position},
     events::Event,
-    map::Map,
+    map::{Map, CHUNK_SIZE},
     systems::map_modification::map_modification_system,
 };
 
@@ -60,4 +60,31 @@ fn test_map_modification_builds_chest() {
     // The entity should have a Chest component
     let chest_entity = entities_at_pos[0];
     assert!(app.world.get::<Chest>(chest_entity).is_some());
+}
+
+#[test]
+fn test_remove_entity_from_spatial_map_clears_empty_vec() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    let map = Map::new(10, 10, "data/biomes.json", "data/resources.json").unwrap();
+    app.insert_resource(map);
+
+    let entity = app.world.spawn_empty().id();
+    let pos = Position { x: 5, y: 5 };
+
+    let map = app.world.resource::<Map>();
+    map.add_entity_to_spatial_map(entity, pos.x, pos.y);
+
+    // Verify that the entity is in the map
+    let entities = map.get_entities_at(pos.x, pos.y).unwrap();
+    assert_eq!(entities.len(), 1);
+
+    map.remove_entity_from_spatial_map(entity, pos.x, pos.y);
+
+    // Verify that the entry in the spatial map is removed
+    let (chunk_x, chunk_y) = map.get_chunk_index(pos.x, pos.y).unwrap();
+    let chunk = map.chunks[chunk_y][chunk_x].lock().unwrap();
+    let local_x = pos.x % CHUNK_SIZE;
+    let local_y = pos.y % CHUNK_SIZE;
+    assert!(!chunk.spatial_map.contains_key(&(local_x, local_y)));
 }

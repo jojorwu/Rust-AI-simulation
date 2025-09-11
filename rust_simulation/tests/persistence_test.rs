@@ -4,16 +4,12 @@ use rust_simulation::{
     components::ai::GoalQTable,
     player::Player,
     systems::persistence::save_q_tables_on_exit,
-    AppPaths,
 };
 use std::{collections::{BTreeMap, HashMap}, fs, panic};
-use tempfile::tempdir;
 
 #[test]
 fn test_q_table_persistence() {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
-    let data_dir = temp_dir.path().to_path_buf();
-    let test_file = data_dir.join("q_tables.json");
+    let test_file = "q_tables.json";
 
     // Run the test in a closure to ensure cleanup happens even on panic.
     let result = panic::catch_unwind(|| {
@@ -21,9 +17,6 @@ fn test_q_table_persistence() {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, bevy::log::LogPlugin::default()));
         app.add_event::<AppExit>();
-        app.insert_resource(AppPaths {
-            data_dir: data_dir.clone(),
-        });
         app.add_systems(Update, save_q_tables_on_exit.run_if(on_event::<AppExit>()));
 
         // Create a mock HighLevelState
@@ -65,7 +58,7 @@ fn test_q_table_persistence() {
         app.update();
 
         // 3. Verify the output file
-        let content = fs::read_to_string(&test_file).expect("Failed to read test file");
+        let content = fs::read_to_string(test_file).expect("Failed to read test file");
         let deserialized: HashMap<u32, GoalQTable> =
             serde_json::from_str(&content).expect("Failed to deserialize test data");
 
@@ -80,6 +73,15 @@ fn test_q_table_persistence() {
             .expect("State should be present in the Q-table");
         assert_eq!(saved_goal_map.get(&goal), Some(&42.0));
     });
+
+    // 4. Cleanup
+    if fs::metadata(test_file).is_ok() {
+        fs::remove_file(test_file).expect("Failed to remove test file");
+    }
+    let temp_file = "q_tables.json.tmp";
+    if fs::metadata(temp_file).is_ok() {
+        fs::remove_file(temp_file).expect("Failed to remove temp file");
+    }
 
     assert!(result.is_ok());
 }
