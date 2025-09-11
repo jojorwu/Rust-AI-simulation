@@ -29,7 +29,7 @@ fn test_pathfinding_flow() {
     // Add minimal plugins
     app.add_plugins(MinimalPlugins);
 
-    let map = rust_simulation::map::Map::new(TEST_WIDTH, TEST_HEIGHT, "data/biomes.json", "data/resources.json").unwrap();
+    let map = rust_simulation::map::Map::new(TEST_WIDTH, TEST_HEIGHT, "data/biomes.json", "data/resources.json", None).unwrap();
     app.insert_resource(map);
 
     // --- Setup Test Data ---
