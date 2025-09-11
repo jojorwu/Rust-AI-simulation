@@ -12,6 +12,7 @@
 //! - **AI**: A Q-learning based decision-making system for agents.
 
 use bevy::prelude::*;
+use crate::state::AppState;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -251,6 +252,7 @@ pub fn add_simulation_systems(app: &mut App) {
             goal_completion::goal_completion_system,
             q_learning::update_q_table_system,
         )
-            .in_set(SimulationSet::Logic),
+            .in_set(SimulationSet::Logic)
+            .run_if(in_state(AppState::InGame)),
     );
 }
