@@ -79,3 +79,37 @@ fn test_combat_system_handles_death() {
     }
     assert!(death_event_found);
 }
+
+#[test]
+fn test_combat_system_does_not_overkill() {
+    // 1. Setup
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.add_event::<Event>();
+    app.add_systems(Update, combat_system);
+
+    let target = app.world.spawn(Health { current: 10, max: 10 }).id();
+
+    let _attacker1 = app
+        .world
+        .spawn((
+            WantsToAttack { target },
+            Damage(10),
+        ))
+        .id();
+
+    let _attacker2 = app
+        .world
+        .spawn((
+            WantsToAttack { target },
+            Damage(10),
+        ))
+        .id();
+
+    // 2. Run the system
+    app.update();
+
+    // 3. Verify
+    let target_health = app.world.get::<Health>(target).unwrap();
+    assert_eq!(target_health.current, 0, "Target should have 0 health, not be overkilled");
+}
