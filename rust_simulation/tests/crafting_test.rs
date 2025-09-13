@@ -106,3 +106,24 @@ fn test_crafting_circular_dependency() {
         assert!(matches!(e, rust_simulation::errors::SimulationError::CircularDependency(_)));
     }
 }
+
+#[test]
+fn test_has_resources() {
+    let mut inventory = Inventory::new();
+    inventory.add_item("wood", 10);
+    inventory.add_item("stone", 5);
+
+    let mut recipe1 = std::collections::HashMap::new();
+    recipe1.insert("wood".to_string(), 5);
+    recipe1.insert("stone".to_string(), 5);
+
+    let mut recipe2 = std::collections::HashMap::new();
+    recipe2.insert("wood".to_string(), 11);
+
+    let mut recipe3 = std::collections::HashMap::new();
+    recipe3.insert("iron".to_string(), 1);
+
+    assert!(inventory.has_resources(&recipe1));
+    assert!(!inventory.has_resources(&recipe2));
+    assert!(!inventory.has_resources(&recipe3));
+}

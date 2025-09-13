@@ -12,7 +12,8 @@ pub fn crafting_system(
         let recipe_manager = &recipe_manager.0;
         match recipe_manager.get_required_resources(&wants_to_craft.item_name, 1) {
             Ok(required_resources) => {
-                if inventory.remove_resources(&required_resources) {
+                if inventory.has_resources(&required_resources) {
+                    inventory.remove_resources(&required_resources);
                     inventory.add_item(&wants_to_craft.item_name, 1);
                 }
             }
