@@ -1,9 +1,19 @@
-//! A simulation of a simple world with agents that can gather resources,
-//! craft items, and build structures. The simulation is based on an
-//! Entity-Component-System (ECS) architecture using `bevy_ecs`.
+//! # Rust Simulation Library
+//!
+//! This library contains the core logic for a simulation of a simple world
+//! where agents can gather resources, craft items, and build structures.
+//! It is built using the Bevy game engine's Entity-Component-System (ECS)
+//! architecture.
+//!
+//! The main components of the simulation are:
+//! - **Entities**: Agents, resources, items, etc.
+//! - **Components**: Data associated with entities (e.g., `Position`, `Health`).
+//! - **Systems**: Logic that operates on entities with specific components.
+//! - **AI**: A Q-learning based decision-making system for agents.
 
 use bevy::prelude::*;
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 pub mod animals;
@@ -43,32 +53,52 @@ use systems::ai::{actions, goal_selection, q_learning};
 use systems::*;
 
 // --- System Sets ---
+
+/// Defines the primary system sets used for ordering in the simulation.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SimulationSet {
+    /// Systems that run once at the beginning of the simulation.
     Setup,
+    /// Systems that run on every tick of the `FixedUpdate` schedule.
     Logic,
 }
 
 // --- Resources ---
 
+/// A resource that indicates whether it is currently day or night.
 #[derive(Resource)]
 pub struct IsDay(pub bool);
 
+/// A resource that tracks the number of ticks that have passed.
 #[derive(Resource)]
 pub struct TickCount(pub u32);
 
+/// A resource to hold the shared `RecipeManager`.
 #[derive(Resource)]
 pub struct RecipeManagerResource(pub Arc<RecipeManager>);
 
+/// A resource to hold the shared `ItemRegistry`.
 #[derive(Resource)]
 pub struct ItemRegistryResource(pub Arc<ItemRegistry>);
 
+/// A resource holding the paths to static data files.
 #[derive(Resource)]
 pub struct DataPaths {
+    /// Path to `biomes.json`.
     pub biomes: String,
+    /// Path to `resources.json`.
     pub resources: String,
+    /// Path to `items.json`.
     pub items: String,
+    /// Path to `recipes.json`.
     pub recipes: String,
+}
+
+/// A resource holding the paths to user-specific application directories.
+#[derive(Resource)]
+pub struct AppPaths {
+    /// The directory where persistent data (like `q_tables.json`) is stored.
+    pub data_dir: PathBuf,
 }
 
 // --- Simulation Setup ---
@@ -77,9 +107,17 @@ use std::fs;
 
 use crate::systems::monitoring::MemoryLimitReached;
 
+/// A Bevy startup system that sets up the initial state of the simulation.
+///
+/// This system is responsible for:
+/// - Creating the game map.
+/// - Loading registries for items and recipes.
+/// - Loading saved AI state (Q-tables).
+/// - Spawning the initial set of player agents.
 pub fn setup_simulation(
     mut commands: Commands,
     paths: Res<DataPaths>,
+    app_paths: Res<AppPaths>,
     config: Res<Config>,
     memory_limit_reached: Res<MemoryLimitReached>,
 ) {
@@ -94,8 +132,15 @@ pub fn setup_simulation(
     let recipe_manager = Arc::new(RecipeManager::new(&paths.recipes).expect("Failed to create RecipeManager"));
 
     // Load Q-tables if they exist
-    let q_tables: HashMap<u32, GoalQTable> = if let Ok(data) = fs::read_to_string("q_tables.json") {
-        serde_json::from_str(&data).unwrap_or_default()
+    let q_table_path = app_paths.data_dir.join("q_tables.json");
+    let q_tables: HashMap<u32, GoalQTable> = if let Ok(data) = fs::read_to_string(q_table_path) {
+        match serde_json::from_str(&data) {
+            Ok(tables) => tables,
+            Err(e) => {
+                log::warn!("Failed to parse q_tables.json: {e}. Starting with empty Q-tables.");
+                HashMap::new()
+            }
+        }
     } else {
         HashMap::new()
     };
@@ -132,10 +177,7 @@ pub fn setup_simulation(
                 config.ai.q_learning.discount_factor,
                 config.ai.q_learning.epsilon,
             ),
-            MentalMap(vec![
-                vec![None; config.map_settings.width as usize];
-                config.map_settings.height as usize
-            ]),
+            MentalMap(Arc::new(HashMap::new())),
             KnownResources(HashMap::new()),
             PlayerMemories(HashMap::new()),
             q_table,
@@ -155,96 +197,60 @@ fn update_day_night(
         < day_night_cycle.day_length;
 }
 
+/// Adds all the simulation's systems to the Bevy `App`.
+///
+/// This function organizes the systems into a coherent execution order using
+/// system sets and chaining to prevent race conditions and ensure logical consistency.
 pub fn add_simulation_systems(app: &mut App) {
     app.add_systems(
         FixedUpdate,
-        (update_day_night, systems::visibility_system::visibility_system)
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
         (
+            // --- Perception and State Updates ---
+            // These systems update the agent's internal state and perception of the world.
+            update_day_night,
+            visibility_system::visibility_system,
+            hunger::hunger_system,
+            eating::eating_system,
+            // --- AI Decision Making ---
+            // This chain handles the core AI loop from goal selection to planning.
+            (
+                goal_selection::goal_selection_system,
+                goal_selection::goal_planning_system,
+                goal_selection::intent_creation_system,
+            )
+                .chain(),
+            // --- Action Systems ---
+            // These systems execute the intents produced by the AI.
+            // They are grouped to run in parallel where possible.
+            (
+                actions::craft::craft_action_system,
+                actions::attack::attack_action_system,
+                actions::flee::flee_action_system,
+                actions::explore::explore_action_system,
+                actions::stockpile::stockpile_action_system,
+                find_resource::find_resource_system,
+                gathering::gathering_system,
+                crafting::crafting_system,
+                building_logic::check_resources_system,
+                building_logic::build_system,
+                storage::storage_system,
+                combat::combat_system,
+                death::death_system,
+                map_modification::map_modification_system,
+            ),
+            // --- Pathfinding and Movement ---
+            // This chain handles calculating and following paths.
+            (
+                pathfinding_system::pathfinding_system,
+                pathfinding_completion_system::pathfinding_completion_system,
+                path_movement_system::path_movement_system,
+                movement::movement_system,
+            )
+                .chain(),
+            // --- Learning ---
+            // The Q-table is updated last, based on the results of the turn's actions.
             q_learning::update_q_table_system,
-            goal_selection::goal_selection_system,
         )
             .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            actions::craft::craft_action_system,
-            actions::attack::attack_action_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        actions::flee::flee_action_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        actions::explore::explore_action_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        actions::stockpile::stockpile_action_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        systems::pathfinding_system::pathfinding_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            systems::pathfinding_completion_system::pathfinding_completion_system,
-            systems::path_movement_system::path_movement_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            movement::movement_system,
-            find_resource::find_resource_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        gathering::gathering_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        crafting::crafting_system.in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            building_logic::check_resources_system,
-            building_logic::check_tile_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (building_logic::build_system, storage::storage_system)
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (combat::combat_system, death::death_system)
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (
-            goal_selection::goal_planning_system,
-            goal_selection::intent_creation_system,
-        )
-            .in_set(SimulationSet::Logic),
-    );
-    app.add_systems(
-        FixedUpdate,
-        (map_modification::map_modification_system,).in_set(SimulationSet::Logic),
     );
 }

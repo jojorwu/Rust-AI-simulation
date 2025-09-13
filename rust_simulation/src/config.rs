@@ -12,7 +12,6 @@ pub struct Config {
     pub training_settings: TrainingSettings,
     pub day_night_cycle: DayNightCycle,
     pub ai: Ai,
-    pub performance: PerformanceSettings,
     pub survival: SurvivalSettings,
 }
 
@@ -59,6 +58,7 @@ pub struct Ai {
     pub defense_radius: u32,
     pub critical_health_ratio: f32,
     pub standard_health_ratio: f32,
+    pub vision_radius: i32,
     pub q_learning: QLearning,
     pub goals: Goals,
 }
@@ -68,6 +68,8 @@ pub struct QLearning {
     pub learning_rate: f64,
     pub discount_factor: f64,
     pub epsilon: f64,
+    pub epsilon_decay: f64,
+    pub min_epsilon: f64,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
@@ -78,13 +80,6 @@ pub struct Goals {
     pub gather_threshold: u32,
     pub commitment_ticks: u32,
     pub threat_commitment_ticks: u32,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, Reflect)]
-pub struct PerformanceSettings {
-    pub processor_cores: u32,
-    pub ram_limit_gb: u32,
-    pub enable_ram_limit: bool,
 }
 
 impl Config {

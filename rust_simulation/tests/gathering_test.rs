@@ -1,7 +1,7 @@
 use rust_simulation::{
     components::{
         ai::KnownResources,
-        intents::{IntendsToGather, IntendsToGatherFrom},
+        intents::{IntendsToGather, IsGathering},
         Position,
     },
     map::Map,
@@ -42,7 +42,7 @@ fn test_find_resource_system() {
         .spawn((
             known_resources,
             Position { x: 0, y: 0 },
-            IntendsToGather("wood".to_string()),
+            IntendsToGather("wood".to_string(), 1),
         ))
         .id();
 
@@ -50,9 +50,9 @@ fn test_find_resource_system() {
     app.update();
 
     let gatherer = app.world.entity(gatherer_entity);
-    let intends_to_gather_from = gatherer
-        .get::<IntendsToGatherFrom>()
-        .expect("Gatherer should have IntendsToGatherFrom component");
-    assert_eq!(intends_to_gather_from.0, resource_entity);
+    let is_gathering = gatherer
+        .get::<IsGathering>()
+        .expect("Gatherer should have IsGathering component");
+    assert_eq!(is_gathering.target, resource_entity);
     assert!(gatherer.get::<IntendsToGather>().is_none());
 }

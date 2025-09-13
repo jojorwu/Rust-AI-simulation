@@ -66,6 +66,7 @@ pub fn fleeing_system(
                     velocity.dy = flee_dy;
                     ai.move_timer = FLEE_TIMER;
                     commands.entity(pig_entity).insert(Fleeing);
+                    commands.entity(attacker_entity).remove::<WantsToAttack>();
                 }
             }
         }

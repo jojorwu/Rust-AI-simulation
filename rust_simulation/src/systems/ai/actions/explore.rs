@@ -28,7 +28,7 @@ pub fn explore_action_system(
         // Get the next destination from the frontier
         if let Some(target_pos) = exploration_frontier.0.pop_front() {
             // If the target has become visible since being added to the frontier, skip it.
-            if mental_map.0[target_pos.y as usize][target_pos.x as usize].is_some() {
+            if mental_map.0.contains_key(&(target_pos.x, target_pos.y)) {
                 // Try the next one on the next tick.
                 continue;
             }

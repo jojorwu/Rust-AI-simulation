@@ -1,5 +1,5 @@
 use crate::errors::SimulationError;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 
 pub struct RecipeManager {
@@ -18,13 +18,37 @@ impl RecipeManager {
         RecipeManager { recipes }
     }
 
-    pub fn get_required_resources(&self, item: &str, quantity: u32) -> HashMap<String, u32> {
+    // Public wrapper function
+    pub fn get_required_resources(
+        &self,
+        item: &str,
+        quantity: u32,
+    ) -> Result<HashMap<String, u32>, SimulationError> {
+        self.get_required_resources_recursive(item, quantity, &mut HashSet::new())
+    }
+
+    // Private recursive function with cycle detection
+    fn get_required_resources_recursive(
+        &self,
+        item: &str,
+        quantity: u32,
+        visited: &mut HashSet<String>,
+    ) -> Result<HashMap<String, u32>, SimulationError> {
+        if visited.contains(item) {
+            return Err(SimulationError::CircularDependency(item.to_string()));
+        }
+        visited.insert(item.to_string());
+
         let mut required_resources = HashMap::new();
 
         if let Some(recipe) = self.recipes.get(item) {
             for _ in 0..quantity {
                 for (ingredient, &ing_quantity) in recipe {
-                    let sub_resources = self.get_required_resources(ingredient, ing_quantity);
+                    let sub_resources = self.get_required_resources_recursive(
+                        ingredient,
+                        ing_quantity,
+                        visited,
+                    )?;
                     for (sub_resource, sub_quantity) in sub_resources {
                         *required_resources.entry(sub_resource).or_insert(0) += sub_quantity;
                     }
@@ -34,6 +58,7 @@ impl RecipeManager {
             required_resources.insert(item.to_string(), quantity);
         }
 
-        required_resources
+        visited.remove(item);
+        Ok(required_resources)
     }
 }

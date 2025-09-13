@@ -1,7 +1,7 @@
 use crate::{
     components::{
         ai::KnownResources,
-        intents::{IntendsToGather, IntendsToGatherFrom},
+        intents::{IntendsToGather, IsGathering},
         Position,
     },
     map::Map,
@@ -15,6 +15,7 @@ pub fn find_resource_system(
 ) {
     for (entity, known_resources, position, intent) in query.iter() {
         let resource_name = &intent.0;
+        let amount = intent.1;
 
         let target_pos = if let Some(known_positions) = known_resources.0.get(resource_name) {
             known_positions
@@ -30,13 +31,16 @@ pub fn find_resource_system(
                 .get_entities_at(target_pos.x, target_pos.y)
                 .and_then(|v| v.first().copied())
             {
-                commands
-                    .entity(entity)
-                    .insert(IntendsToGatherFrom(target_entity));
+                // We found a target, so remove the general intent and add a specific gathering state.
+                commands.entity(entity).remove::<IntendsToGather>();
+                commands.entity(entity).insert(IsGathering {
+                    target: target_entity,
+                    resource: resource_name.clone(),
+                    amount,
+                });
             }
         }
         // If no resource is found, the IntendsToGather component remains, and the
-        // goal selection system will eventually choose a new goal.
-        commands.entity(entity).remove::<IntendsToGather>();
+        // AI will eventually choose a new goal (likely Explore).
     }
 }

@@ -1,7 +1,16 @@
+//! The main entry point for the Rust Simulation application.
+//!
+//! This binary is responsible for:
+//! - Parsing command-line arguments.
+//! - Setting up application paths for data storage.
+//! - Loading configuration files.
+//! - Initializing the Bevy application (`App`).
+//! - Adding all necessary plugins, resources, and systems from the `rust_simulation` library.
+//! - Running the Bevy application.
+
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use rust_simulation::config::Config;
-use rust_simulation::errors::SimulationError;
 use rust_simulation::road_builder;
 use rust_simulation::road_manager::RoadManager;
 use rust_simulation::state::AppState;
@@ -9,10 +18,12 @@ use rust_simulation::systems::monitoring::MonitoringPlugin;
 use rust_simulation::systems::persistence::save_q_tables_on_exit;
 use rust_simulation::ui::main_menu::MainMenuPlugin;
 use rust_simulation::ui::settings::SettingsPlugin;
-use rust_simulation::{add_simulation_systems, setup_simulation, DataPaths, SimulationSet};
+use rust_simulation::{add_simulation_systems, setup_simulation, AppPaths, DataPaths, SimulationSet};
 use std::env;
 use std::time::Duration;
 use bevy::app::ScheduleRunnerPlugin;
+use directories::ProjectDirs;
+use clap::Parser;
 use bevy::asset::AssetPlugin;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::diagnostic::DiagnosticsPlugin;
@@ -24,54 +35,57 @@ use bevy::text::TextPlugin;
 use bevy::transform::TransformPlugin;
 use bevy::ui::UiPlugin;
 
-fn main() -> Result<(), SimulationError> {
-    let args: Vec<String> = env::args().collect();
+/// Command-line arguments for the simulation.
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Wipe all saved data (q-tables, models) before starting.
+    #[arg(long)]
+    hard_wipe: bool,
+}
 
-    // --- This section is for wiping saved data, keeping it from the original main.rs ---
-    if args.contains(&"--hard-wipe".to_string()) {
-        println!("Wiping simulation state...");
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let root_dir = std::path::Path::new(manifest_dir);
-        let models_path = root_dir.join("../models");
-        if models_path.exists() {
-            if let Err(e) = std::fs::remove_dir_all(&models_path) {
-                eprintln!("Failed to remove models directory: {e}");
+fn main() {
+    // --- Path Setup ---
+    let app_paths = if let Some(proj_dirs) = ProjectDirs::from("com", "simulation", "rust_simulation") {
+        let data_dir = proj_dirs.data_dir().to_path_buf();
+        if !data_dir.exists() {
+            if let Err(e) = std::fs::create_dir_all(&data_dir) {
+                eprintln!("Failed to create application data directory at {}: {}", data_dir.display(), e);
+                std::process::exit(1);
             }
         }
-        let q_table_path = root_dir.join("../q_table.json");
+        AppPaths { data_dir }
+    } else {
+        eprintln!("Could not determine application data directory.");
+        std::process::exit(1);
+    };
+
+    let cli = Cli::parse();
+
+    // --- This section is for wiping saved data, keeping it from the original main.rs ---
+    if cli.hard_wipe {
+        println!("Wiping simulation state...");
+        let q_table_path = app_paths.data_dir.join("q_tables.json");
         if q_table_path.exists() {
             if let Err(e) = std::fs::remove_file(&q_table_path) {
                 eprintln!("Failed to remove q_table.json: {e}");
             }
         }
         println!("Wipe complete.");
-        return Ok(());
+        return;
     }
 
     // --- Load Config ---
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let config_path = format!("{manifest_dir}/data/config.toml");
-    let mut config = Config::load(&config_path)?;
+    let config = match Config::load(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to load config file at {}: {}", config_path, e);
+            std::process::exit(1);
+        }
+    };
 
-    // --- Validate and Clamp Config ---
-    let num_cpus = num_cpus::get();
-    if config.performance.processor_cores as usize > num_cpus {
-        log::warn!(
-            "Processor cores setting ({}) is higher than the number of available cores ({}). Clamping to {}.",
-            config.performance.processor_cores,
-            num_cpus,
-            num_cpus
-        );
-        config.performance.processor_cores = num_cpus as u32;
-    }
-
-    // --- Setup Rayon Thread Pool ---
-    if let Err(e) = rayon::ThreadPoolBuilder::new()
-        .num_threads(config.performance.processor_cores as usize)
-        .build_global()
-    {
-        log::error!("Failed to build global thread pool: {e}");
-    }
 
     // --- Bevy App Setup ---
     let mut app = App::new();
@@ -100,9 +114,8 @@ fn main() -> Result<(), SimulationError> {
         .register_type::<rust_simulation::config::TrainingSettings>()
         .register_type::<rust_simulation::config::DayNightCycle>()
         .register_type::<rust_simulation::config::Ai>()
-        .register_type::<rust_simulation::config::QLearning>()
-        .register_type::<rust_simulation::config::Goals>()
-        .register_type::<rust_simulation::config::PerformanceSettings>();
+        .register_type::<rust_simulation::config::QLearning>();
+    app.register_type::<rust_simulation::config::Goals>();
 
     // --- Simulation Setup ---
     // Insert resources
@@ -111,6 +124,7 @@ fn main() -> Result<(), SimulationError> {
     app.init_resource::<RoadManager>();
 
     // Insert data paths resource
+    app.insert_resource(app_paths);
     app.insert_resource(DataPaths {
         biomes: format!("{manifest_dir}/data/biomes.json"),
         resources: format!("{manifest_dir}/data/resources.json"),
@@ -131,6 +145,4 @@ fn main() -> Result<(), SimulationError> {
     app.add_systems(Update, save_q_tables_on_exit.run_if(on_event::<AppExit>()));
 
     app.run();
-
-    Ok(())
 }

@@ -1,12 +1,13 @@
-use crate::components::{ai::GoalQTable, BrainComponent};
+use crate::{components::{ai::GoalQTable, BrainComponent}, config::Config};
 use crate::events::Event;
 use bevy_ecs::prelude::*;
 use dashmap::DashMap;
 use rayon::prelude::*;
 
 pub fn update_q_table_system(
-    mut q_table_query: Query<(Entity, &BrainComponent, &mut GoalQTable)>,
+    mut q_table_query: Query<(Entity, &mut BrainComponent, &mut GoalQTable)>,
     mut event_reader: EventReader<Event>,
+    config: Res<Config>,
 ) {
     let events: Vec<_> = event_reader.read().collect();
     let events_by_entity: DashMap<Entity, Vec<&Event>> = DashMap::new();
@@ -19,7 +20,7 @@ pub fn update_q_table_system(
 
     q_table_query
         .par_iter_mut()
-        .for_each(|(entity, brain, mut q_table)| {
+        .for_each(|(entity, mut brain, mut q_table)| {
             if let Some(events) = events_by_entity.get(&entity) {
                 for event in events.iter() {
                     if let Event::GoalCompleted {
@@ -54,6 +55,10 @@ pub fn update_q_table_system(
                             .entry(prev_state.clone())
                             .or_default()
                             .insert(goal.clone(), new_q_value);
+
+                        // Apply epsilon decay
+                        brain.epsilon = (brain.epsilon * config.ai.q_learning.epsilon_decay)
+                            .max(config.ai.q_learning.min_epsilon);
                     }
                 }
             }

@@ -71,14 +71,21 @@ pub struct Biome {
     pub height_range: [f64; 2],
 }
 
-/// Represents a resource that can be found in the world.
+/// Represents a definition for a resource that can be found in the world.
 #[derive(Debug, Deserialize, Clone)]
 pub struct ResourceDef {
+    /// The unique name of the resource (e.g., "tree", "rock").
     pub name: String,
+    /// A list of biomes where this resource can spawn.
     pub biomes: Vec<String>,
+    /// The probability of this resource spawning on a given tile in a valid biome.
     pub density: f64,
+    /// Whether this resource is a huntable animal.
     #[serde(default)]
     pub huntable: bool,
+    /// The category of tool required to gather this resource (e.g., "axe", "pickaxe").
+    #[serde(default)]
+    pub required_tool: Option<String>,
 }
 
 /// The main map resource, containing a grid of map chunks.

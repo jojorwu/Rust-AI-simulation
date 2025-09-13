@@ -22,11 +22,14 @@ valuable_resources = ["wood", "stone", "iron_ore"]
 defense_radius = 10
 critical_health_ratio = 0.25
 standard_health_ratio = 0.75
+vision_radius = 8
 
 [ai.q_learning]
 learning_rate = 0.1
 discount_factor = 0.9
 epsilon = 0.1
+epsilon_decay = 0.9995
+min_epsilon = 0.01
 
 [ai.goals]
 reward = 10.0
@@ -35,11 +38,6 @@ build_bonus = 5.0
 gather_threshold = 5
 commitment_ticks = 100
 threat_commitment_ticks = 200
-
-[performance]
-processor_cores = 4
-ram_limit_gb = 4
-enable_ram_limit = false
 
 [survival]
 hunger_rate = 0.01

@@ -1,5 +1,6 @@
 use crate::components::{Position, Velocity};
 use crate::map::Map;
+use bevy::ecs::system::Commands;
 use bevy_ecs::prelude::*;
 
 use log::debug;
@@ -29,6 +30,7 @@ pub fn movement_system(
             pos.y = new_y;
 
             // Update the spatial map in the corresponding map chunks.
+            // This is safe to do in parallel because the Map uses Mutexes on its chunks.
             map.remove_entity_from_spatial_map(entity, old_pos.x, old_pos.y);
             map.add_entity_to_spatial_map(entity, pos.x, pos.y);
         }

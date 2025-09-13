@@ -3,29 +3,37 @@ use crate::components::{
     Position,
     ai::{ExplorationFrontier, MentalMap},
 };
-use crate::fov;
-use crate::map::Map;
+use crate::{config::Config, fov, map::Map};
 use bevy_ecs::prelude::*;
 use log::debug;
-use std::collections::VecDeque;
-
-const VISION_RADIUS: i32 = 8; // TODO: Move to config.rs
+use std::sync::Arc;
 
 pub fn visibility_system(
     map: Res<Map>,
-    mut query: Query<(Entity, &Position, &mut MentalMap, &mut ExplorationFrontier)>,
+    config: Res<Config>,
+    mut query: Query<
+        (Entity, &Position, &mut MentalMap, &mut ExplorationFrontier),
+        Changed<Position>,
+    >,
 ) {
     for (entity, pos, mut mental_map, mut exploration_frontier) in query.iter_mut() {
-        let visible_tiles = fov::field_of_view(pos, VISION_RADIUS, &map);
+        let visible_tiles = fov::field_of_view(pos, config.ai.vision_radius, &map);
         let old_frontier_size = exploration_frontier.0.len();
 
+        // Get a mutable reference to the HashMap inside the Arc.
+        // This will create a copy if the map is currently being shared (e.g., by a pathfinding task),
+        // ensuring that we don't cause data races. This is a copy-on-write strategy.
+        let mental_map_mut = Arc::make_mut(&mut mental_map.0);
+
         for visible_pos in &visible_tiles {
-            if mental_map.0[visible_pos.y as usize][visible_pos.x as usize].is_none() {
+            let tile_coords = (visible_pos.x, visible_pos.y);
+            // If we haven't seen this tile before, add it to our mental map.
+            if let std::collections::hash_map::Entry::Vacant(e) = mental_map_mut.entry(tile_coords) {
                 if let Some(tile) = map.get_tile(visible_pos.x, visible_pos.y) {
-                    mental_map.0[visible_pos.y as usize][visible_pos.x as usize] =
-                        Some(MemoryTile { tile });
+                    e.insert(MemoryTile { tile });
                 }
 
+                // Check neighbors of the newly visible tile to add them to the exploration frontier.
                 for dx in -1..=1 {
                     for dy in -1..=1 {
                         if dx == 0 && dy == 0 {
@@ -41,7 +49,9 @@ pub fn visibility_system(
                         {
                             let nx = neighbor_x as u32;
                             let ny = neighbor_y as u32;
-                            if mental_map.0[ny as usize][nx as usize].is_none() {
+                            let neighbor_coords = (nx, ny);
+                            // If we haven't seen the neighbor, it's a candidate for the frontier.
+                            if !mental_map_mut.contains_key(&neighbor_coords) {
                                 let frontier_pos = Position { x: nx, y: ny };
                                 if !exploration_frontier.0.contains(&frontier_pos) {
                                     exploration_frontier.0.push_back(frontier_pos);
@@ -53,13 +63,10 @@ pub fn visibility_system(
             }
         }
 
-        let mut new_frontier = VecDeque::new();
-        for p in exploration_frontier.0.iter() {
-            if mental_map.0[p.y as usize][p.x as usize].is_none() {
-                new_frontier.push_back(*p);
-            }
-        }
-        exploration_frontier.0 = new_frontier;
+        // Prune the exploration frontier of any tiles that have now been seen.
+        exploration_frontier
+            .0
+            .retain(|p| !mental_map_mut.contains_key(&(p.x, p.y)));
 
         let new_frontiers = exploration_frontier
             .0
