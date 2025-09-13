@@ -26,4 +26,8 @@ pub enum Event {
         new_state: HighLevelState,
         reward: f64,
     },
+    CraftingFailed {
+        crafter: Entity,
+        item_name: String,
+    },
 }

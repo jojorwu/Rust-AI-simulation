@@ -11,6 +11,7 @@ use std::sync::Arc;
 fn setup_test_app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
+    app.add_event::<rust_simulation::events::Event>();
 
     let recipe_manager = Arc::new(
         RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
@@ -126,4 +127,34 @@ fn test_has_resources() {
     assert!(inventory.has_resources(&recipe1));
     assert!(!inventory.has_resources(&recipe2));
     assert!(!inventory.has_resources(&recipe3));
+}
+
+#[test]
+fn test_crafting_sends_failure_event_on_insufficient_resources() {
+    // 1. Setup
+    let mut app = setup_test_app();
+    app.add_event::<rust_simulation::events::Event>();
+
+    let mut inventory = Inventory::new();
+    inventory.add_item("wood", 1); // Not enough for a stone_axe
+    let crafter_entity = app
+        .world
+        .spawn((inventory, WantsToCraft { item_name: "stone_axe".to_string() }))
+        .id();
+
+    // 2. Run the system
+    app.update();
+
+    // 3. Verify
+    let events = app.world.resource::<Events<rust_simulation::events::Event>>();
+    let mut reader = events.get_reader();
+    let mut event_found = false;
+    for event in reader.read(events) {
+        if let rust_simulation::events::Event::CraftingFailed { crafter, item_name } = event {
+            assert_eq!(*crafter, crafter_entity);
+            assert_eq!(item_name, "stone_axe");
+            event_found = true;
+        }
+    }
+    assert!(event_found, "CraftingFailed event was not sent");
 }
