@@ -14,11 +14,11 @@ pub fn crafting_system(
 ) {
     for (entity, mut inventory, wants_to_craft) in query.iter_mut() {
         let recipe_manager = &recipe_manager.0;
-        match recipe_manager.get_required_resources(&wants_to_craft.item_name, 1) {
+        match recipe_manager.get_required_resources(&wants_to_craft.item_name, wants_to_craft.quantity) {
             Ok(required_resources) => {
                 if inventory.has_resources(&required_resources) {
                     inventory.remove_resources(&required_resources);
-                    inventory.add_item(&wants_to_craft.item_name, 1);
+                    inventory.add_item(&wants_to_craft.item_name, wants_to_craft.quantity);
                 } else {
                     event_writer.send(Event::CraftingFailed {
                         crafter: entity,

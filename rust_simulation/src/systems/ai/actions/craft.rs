@@ -9,6 +9,7 @@ pub fn craft_action_system(
         let item_name = &intent.0;
         commands.entity(entity).insert(WantsToCraft {
             item_name: item_name.to_string(),
+            quantity: 1,
         });
 
         // Crafting is a single-tick action, so the goal is complete.

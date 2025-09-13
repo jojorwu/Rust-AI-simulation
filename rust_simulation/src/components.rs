@@ -56,6 +56,7 @@ pub struct WantsToGather {
 #[derive(Component, Debug, Clone)]
 pub struct WantsToCraft {
     pub item_name: String,
+    pub quantity: u32,
 }
 
 #[derive(Component, Debug, Clone)]
