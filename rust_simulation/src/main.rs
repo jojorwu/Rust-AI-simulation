@@ -21,7 +21,6 @@ use rust_simulation::ui::settings::SettingsPlugin;
 use rust_simulation::{add_simulation_systems, setup_simulation, AppPaths, DataPaths, SimulationSet};
 use std::env;
 use std::time::Duration;
-use bevy::app::ScheduleRunnerPlugin;
 use directories::ProjectDirs;
 use clap::Parser;
 use bevy::asset::AssetPlugin;
@@ -95,7 +94,6 @@ fn main() {
     app.add_plugins(TransformPlugin);
     app.add_plugins(DiagnosticsPlugin);
     app.add_plugins(InputPlugin);
-    app.add_plugins(ScheduleRunnerPlugin::default());
     app.add_plugins(AssetPlugin::default());
     app.add_plugins(RenderPlugin::default());
     app.add_plugins(CorePipelinePlugin);

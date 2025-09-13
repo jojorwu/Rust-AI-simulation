@@ -16,12 +16,9 @@ pub fn combat_system(
     for (attacker, target, damage) in to_attack {
         let mut target_dead = false;
         if let Ok(mut health) = health_query.get_mut(target) {
-            if health.current > 0 {
-                health.current -= damage;
-                if health.current <= 0 {
-                    health.current = 0;
-                    target_dead = true;
-                }
+            health.current -= damage;
+            if health.current <= 0 {
+                target_dead = true;
             }
         }
 
