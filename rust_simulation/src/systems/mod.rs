@@ -18,5 +18,6 @@ pub mod pathfinding_completion_system;
 pub mod pathfinding_system;
 pub mod persistence;
 pub mod pickup;
+pub mod resource_management;
 pub mod storage;
 pub mod visibility_system;

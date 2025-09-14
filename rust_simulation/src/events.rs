@@ -30,4 +30,8 @@ pub enum Event {
         crafter: Entity,
         item_name: String,
     },
+    ResourceDepleted {
+        resource: String,
+        position: Position,
+    },
 }

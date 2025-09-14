@@ -51,6 +51,8 @@ pub fn check_tile_system(
     }
 }
 
+use log::info;
+
 pub fn build_system(
     mut commands: Commands,
     mut event_writer: EventWriter<Event>,
@@ -61,15 +63,19 @@ pub fn build_system(
     for (entity, position, check_resources, mut inventory) in query.iter_mut() {
         if let Ok(required) = recipe_manager.get_required_resources(&check_resources.0, 1) {
             if inventory.remove_resources(&required) {
+                info!("Sending build request for {}", check_resources.0);
                 event_writer.send(Event::BuildRequest {
                     builder: entity,
                     structure: check_resources.0.clone(),
                     position: *position,
                 });
-                commands
-                    .entity(entity)
-                    .remove::<(CheckResources, HasResources, TileIsSuitable)>();
+            } else {
+                info!("Could not build {}, not enough resources after check", check_resources.0);
             }
         }
+        // Always remove the components to avoid getting stuck in a build loop.
+        commands
+            .entity(entity)
+            .remove::<(CheckResources, HasResources, TileIsSuitable)>();
     }
 }
