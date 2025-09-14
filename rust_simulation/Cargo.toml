@@ -3,6 +3,10 @@ name = "rust_simulation"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["ui"]
+ui = ["bevy/bevy_asset", "bevy/bevy_winit", "bevy/bevy_core_pipeline", "bevy/bevy_render", "bevy/bevy_sprite", "bevy/bevy_text", "bevy/bevy_ui", "bevy/bevy_pbr", "bevy/bevy_gltf", "bevy/bevy_audio", "bevy/bevy_gilrs", "bevy/animation", "bevy/x11"]
+
 [dependencies]
 anyhow = "1.0"
 dashmap = "5.5.3"
@@ -16,7 +20,7 @@ num_cpus = "1.16.0"
 bevy_ecs = "0.13.0"
 bevy_tasks = "0.13.0"
 log = "0.4"
-bevy = { version = "0.13.0", features = ["trace_tracy"] }
+bevy = { version = "0.13.0", default-features = false, features = ["trace_tracy", "multi-threaded"] }
 toml = "0.8.12"
 sysinfo = "0.30.13"
 clap = { version = "4.5.4", features = ["derive"] }

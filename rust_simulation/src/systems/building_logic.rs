@@ -60,8 +60,7 @@ pub fn build_system(
     let recipe_manager = &recipe_manager.0;
     for (entity, position, check_resources, mut inventory) in query.iter_mut() {
         if let Ok(required) = recipe_manager.get_required_resources(&check_resources.0, 1) {
-            if inventory.has_resources(&required) {
-                inventory.remove_resources(&required);
+            if inventory.remove_resources(&required) {
                 event_writer.send(Event::BuildRequest {
                     builder: entity,
                     structure: check_resources.0.clone(),

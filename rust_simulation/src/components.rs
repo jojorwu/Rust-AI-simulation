@@ -56,7 +56,6 @@ pub struct WantsToGather {
 #[derive(Component, Debug, Clone)]
 pub struct WantsToCraft {
     pub item_name: String,
-    pub quantity: u32,
 }
 
 #[derive(Component, Debug, Clone)]
@@ -198,9 +197,13 @@ impl Inventory {
         true
     }
 
-    pub fn remove_resources(&mut self, recipe: &HashMap<String, u32>) {
+    pub fn remove_resources(&mut self, recipe: &HashMap<String, u32>) -> bool {
+        if !self.has_resources(recipe) {
+            return false;
+        }
         for (resource, &amount_to_remove) in recipe {
             self.remove_item(resource, amount_to_remove);
         }
+        true
     }
 }

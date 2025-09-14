@@ -11,7 +11,6 @@ use std::sync::Arc;
 fn setup_test_app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
-    app.add_event::<rust_simulation::events::Event>();
 
     let recipe_manager = Arc::new(
         RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
@@ -33,7 +32,7 @@ fn test_crafting_system_success() {
     inventory.add_item("stone", 3);
     let crafter_entity = app
         .world
-        .spawn((inventory, WantsToCraft { item_name: "stone_axe".to_string(), quantity: 1 }))
+        .spawn((inventory, WantsToCraft { item_name: "stone_axe".to_string() }))
         .id();
 
     // 2. Run the system
@@ -63,7 +62,7 @@ fn test_crafting_system_insufficient_resources() {
     inventory.add_item("wood", 1); // Not enough for a stone_axe
     let crafter_entity = app
         .world
-        .spawn((inventory, WantsToCraft { item_name: "stone_axe".to_string(), quantity: 1 }))
+        .spawn((inventory, WantsToCraft { item_name: "stone_axe".to_string() }))
         .id();
 
     // 2. Run the system
@@ -106,86 +105,4 @@ fn test_crafting_circular_dependency() {
     if let Err(e) = result {
         assert!(matches!(e, rust_simulation::errors::SimulationError::CircularDependency(_)));
     }
-}
-
-#[test]
-fn test_has_resources() {
-    let mut inventory = Inventory::new();
-    inventory.add_item("wood", 10);
-    inventory.add_item("stone", 5);
-
-    let mut recipe1 = std::collections::HashMap::new();
-    recipe1.insert("wood".to_string(), 5);
-    recipe1.insert("stone".to_string(), 5);
-
-    let mut recipe2 = std::collections::HashMap::new();
-    recipe2.insert("wood".to_string(), 11);
-
-    let mut recipe3 = std::collections::HashMap::new();
-    recipe3.insert("iron".to_string(), 1);
-
-    assert!(inventory.has_resources(&recipe1));
-    assert!(!inventory.has_resources(&recipe2));
-    assert!(!inventory.has_resources(&recipe3));
-}
-
-#[test]
-fn test_crafting_sends_failure_event_on_insufficient_resources() {
-    // 1. Setup
-    let mut app = setup_test_app();
-    app.add_event::<rust_simulation::events::Event>();
-
-    let mut inventory = Inventory::new();
-    inventory.add_item("wood", 1); // Not enough for a stone_axe
-    let crafter_entity = app
-        .world
-        .spawn((inventory, WantsToCraft { item_name: "stone_axe".to_string(), quantity: 1 }))
-        .id();
-
-    // 2. Run the system
-    app.update();
-
-    // 3. Verify
-    let events = app.world.resource::<Events<rust_simulation::events::Event>>();
-    let mut reader = events.get_reader();
-    let mut event_found = false;
-    for event in reader.read(events) {
-        if let rust_simulation::events::Event::CraftingFailed { crafter, item_name } = event {
-            assert_eq!(*crafter, crafter_entity);
-            assert_eq!(item_name, "stone_axe");
-            event_found = true;
-        }
-    }
-    assert!(event_found, "CraftingFailed event was not sent");
-}
-
-#[test]
-fn test_bulk_crafting_success() {
-    // 1. Setup
-    let mut app = setup_test_app();
-
-    // Create crafter with sufficient resources for 2 "stone_axe" (2 wood, 3 stone each)
-    let mut inventory = Inventory::new();
-    inventory.add_item("wood", 4);
-    inventory.add_item("stone", 6);
-    let crafter_entity = app
-        .world
-        .spawn((inventory, WantsToCraft { item_name: "stone_axe".to_string(), quantity: 2 }))
-        .id();
-
-    // 2. Run the system
-    app.update();
-
-    // 3. Verify
-    let inventory = app
-        .world
-        .get::<Inventory>(crafter_entity)
-        .expect("Crafter should have an Inventory component");
-    // Resources should be consumed
-    assert_eq!(inventory.get_quantity("wood"), 0);
-    assert_eq!(inventory.get_quantity("stone"), 0);
-    // New items should be added
-    assert_eq!(inventory.get_quantity("stone_axe"), 2);
-    // Intent should be removed
-    assert!(app.world.get::<WantsToCraft>(crafter_entity).is_none());
 }

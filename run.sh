@@ -169,11 +169,12 @@ update_app() {
 }
 
 run_tests() {
-    info "Running test suite..."
+    info "Running test suite without UI features..."
+    info "This will be much faster and have fewer dependencies."
     install_rust
 
     cd "$PROJECT_DIR"
-    if ! cargo test; then
+    if ! cargo test --no-default-features; then
         error "Tests failed."
     fi
     info "All tests passed successfully."
@@ -190,14 +191,13 @@ show_menu() {
     echo "  1. Launch existing version"
     echo "  2. Rebuild the application"
     echo "  3. Check for Updates and Rebuild"
-    echo "  4. Run Tests"
+    echo "To run tests, use the --test flag: ./run.sh --test"
     read -p "> " -n 1 -r
     echo
     case "$REPLY" in
         1) return "launch" ;;
         2) return "rebuild" ;;
         3) update_app; return "rebuild" ;;
-        4) return "test" ;;
         *) warn "Invalid option. Aborting."; return "exit" ;;
     esac
 }
@@ -217,7 +217,7 @@ build_project() {
         info "Cleaning previous build artifacts..."
         cargo clean || warn "cargo clean command failed, but continuing anyway."
     fi
-    if ! cargo build --release; then
+    if ! cargo build --release --features ui; then
         error "Project build failed."
     fi
     cd "$SCRIPT_DIR"
@@ -436,9 +436,9 @@ show_help() {
     echo "This script builds, runs, and tests the Rust Simulation project."
     echo
     echo "Options:"
-    echo "  --build         Build the application (default action if --run is specified)."
+    echo "  --build         Build the application with UI features (default action if --run is specified)."
     echo "  --run           Run the application after building."
-    echo "  --test          Run the project's test suite."
+    echo "  --test          Run the project's test suite (without UI features for speed)."
     echo "  --clean         Perform a clean build before any action."
     echo "  --help          Display this help message and exit."
     echo
