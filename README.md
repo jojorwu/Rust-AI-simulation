@@ -66,52 +66,12 @@ Available flags:
 -   `--clean` / `-Clean`: Perform a clean build.
 -   `--help` / `-Help`: Display a help message.
 
-### Speeding Up Compilation with sccache
-
-To significantly speed up recompilation times, it is highly recommended to install `sccache`. The `run.sh` script will automatically detect and use it if it's available.
-
--   **Installation with Cargo:**
-    ```bash
-    cargo install sccache
-    ```
--   **Installation on macOS (with Homebrew):**
-    ```bash
-    brew install sccache
-    ```
--   For other installation methods, please refer to the [sccache repository](https://github.com/mozilla/sccache).
-
-### System Dependencies
-
-To build the full application with its user interface, you will need to have a few system dependencies installed.
-
--   **On Linux (Debian/Ubuntu):**
-    ```bash
-    sudo apt-get install build-essential libasound2-dev libudev-dev
-    ```
--   **On Linux (Fedora):**
-    ```bash
-    sudo dnf install alsa-lib-devel libudev-devel systemd-devel
-    ```
--   **On Windows:**
-    You will need the MSVC build tools. You can install them from the [Visual Studio Downloads page](https://visualstudio.microsoft.com/downloads/) by selecting "Tools for Visual Studio" and then installing the "Desktop development with C++" workload.
-
 ### Manual Development
 
-If you are a developer and have already installed Rust, you can use Cargo directly.
-
-**Running the Full Application:**
+If you are a developer and have already installed Rust and all the required dependencies, you can run the simulation directly with Cargo:
 ```bash
-# This will build and run the application with the UI
 cd rust_simulation
-cargo run --release
-```
-
-**Running Tests (Fast, No UI):**
-```bash
-# This will run the tests without compiling the UI, making it much faster
-# and avoiding the need for the system dependencies listed above.
-cd rust_simulation
-cargo test --no-default-features
+cargo run
 ```
 
 ## Project Structure

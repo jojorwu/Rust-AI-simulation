@@ -24,7 +24,6 @@ pub mod config;
 pub mod errors;
 pub mod events;
 pub mod fov;
-#[cfg(feature = "ui")]
 pub mod graphics;
 pub mod item;
 pub mod map;
@@ -37,7 +36,6 @@ pub mod road_manager;
 pub mod serde_helpers;
 pub mod state;
 pub mod systems;
-#[cfg(feature = "ui")]
 pub mod ui;
 pub mod world;
 

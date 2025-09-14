@@ -6,12 +6,9 @@ use crate::components::{
 };
 use bevy_ecs::prelude::*;
 
-use crate::events::Event;
-
 #[allow(clippy::type_complexity)]
 pub fn gathering_system(
     mut commands: Commands,
-    mut event_writer: EventWriter<Event>,
     mut gatherer_query: Query<
         (
             Entity,
@@ -42,15 +39,10 @@ pub fn gathering_system(
 
                     if resource.quantity == 0 {
                         commands.entity(target_entity).despawn();
-                        // Remove the resource from the current agent's known resources.
+                        // Remove the resource from the agent's known resources.
                         if let Some(positions) = known_resources.0.get_mut(resource_name) {
                             positions.retain(|&p| p != *target_pos);
                         }
-                        // Broadcast an event so other agents know this resource is gone.
-                        event_writer.send(Event::ResourceDepleted {
-                            resource: resource_name.clone(),
-                            position: *target_pos,
-                        });
                     }
                 }
 

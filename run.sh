@@ -54,16 +54,6 @@ error() {
 # Generic Helper Functions
 # =============================================================================
 
-setup_sccache() {
-    if command -v sccache &> /dev/null; then
-        info "sccache found, using it to cache compilation."
-        export RUSTC_WRAPPER="sccache"
-    else
-        warn "sccache not found. Compilation will be slower."
-        warn "Install sccache for faster builds: https://github.com/mozilla/sccache"
-    fi
-}
-
 # --- Configuration (these are now global) ---
 PROJECT_DIR="$SCRIPT_DIR/rust_simulation"
 DIST_DIR="$SCRIPT_DIR/dist"
@@ -179,12 +169,11 @@ update_app() {
 }
 
 run_tests() {
-    info "Running test suite without UI features..."
-    info "This will be much faster and have fewer dependencies."
+    info "Running test suite..."
     install_rust
 
     cd "$PROJECT_DIR"
-    if ! cargo test --no-default-features; then
+    if ! cargo test; then
         error "Tests failed."
     fi
     info "All tests passed successfully."
@@ -201,13 +190,14 @@ show_menu() {
     echo "  1. Launch existing version"
     echo "  2. Rebuild the application"
     echo "  3. Check for Updates and Rebuild"
-    echo "To run tests, use the --test flag: ./run.sh --test"
+    echo "  4. Run Tests"
     read -p "> " -n 1 -r
     echo
     case "$REPLY" in
         1) return "launch" ;;
         2) return "rebuild" ;;
         3) update_app; return "rebuild" ;;
+        4) return "test" ;;
         *) warn "Invalid option. Aborting."; return "exit" ;;
     esac
 }
@@ -227,7 +217,7 @@ build_project() {
         info "Cleaning previous build artifacts..."
         cargo clean || warn "cargo clean command failed, but continuing anyway."
     fi
-    if ! cargo build --release --features ui; then
+    if ! cargo build --release; then
         error "Project build failed."
     fi
     cd "$SCRIPT_DIR"
@@ -446,9 +436,9 @@ show_help() {
     echo "This script builds, runs, and tests the Rust Simulation project."
     echo
     echo "Options:"
-    echo "  --build         Build the application with UI features (default action if --run is specified)."
+    echo "  --build         Build the application (default action if --run is specified)."
     echo "  --run           Run the application after building."
-    echo "  --test          Run the project's test suite (without UI features for speed)."
+    echo "  --test          Run the project's test suite."
     echo "  --clean         Perform a clean build before any action."
     echo "  --help          Display this help message and exit."
     echo
@@ -490,9 +480,6 @@ main() {
     # For now, this structure sets up the parsing logic.
 
     info "Starting the Rust Simulation launcher..."
-
-    # --- Setup sccache for faster builds if available ---
-    setup_sccache
 
     # --- Detect Operating System ---
     os_name="$(uname -s)"

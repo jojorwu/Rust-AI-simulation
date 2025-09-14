@@ -1,12 +1,6 @@
-use crate::{
-    components::{
-        status::{Damage, Health},
-        WantsToAttack,
-    },
-    events::Event,
-};
+use crate::components::{status::{Damage, Health}, WantsToAttack};
+use crate::events::Event;
 use bevy_ecs::prelude::*;
-use std::collections::HashSet;
 
 pub fn combat_system(
     mut commands: Commands,
@@ -19,30 +13,18 @@ pub fn combat_system(
         to_attack.push((entity, wants_to_attack.target, damage.0));
     }
 
-    let mut killed_this_tick = HashSet::new();
-
     for (attacker, target, damage) in to_attack {
-        let mut target_was_killed = false;
-
+        let mut target_dead = false;
         if let Ok(mut health) = health_query.get_mut(target) {
-            // Only apply damage if the target is actually alive.
-            if health.current > 0 {
-                health.current -= damage;
-                if health.current <= 0 {
-                    health.current = 0; // Clamp health at 0 to prevent negative values.
-                    target_was_killed = true;
-                }
+            health.current -= damage;
+            if health.current <= 0 {
+                target_dead = true;
             }
         }
 
-        // If the target was killed by this attack AND we haven't already sent a death event for it,
-        // send one now and record it.
-        if target_was_killed && !killed_this_tick.contains(&target) {
+        if target_dead {
             event_writer.send(Event::EntityDied(target));
-            killed_this_tick.insert(target);
         }
-
-        // The attack intent is always consumed.
         commands.entity(attacker).remove::<WantsToAttack>();
     }
 }

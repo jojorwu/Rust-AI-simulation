@@ -16,26 +16,24 @@ use rust_simulation::road_manager::RoadManager;
 use rust_simulation::state::AppState;
 use rust_simulation::systems::monitoring::MonitoringPlugin;
 use rust_simulation::systems::persistence::save_q_tables_on_exit;
-#[cfg(feature = "ui")]
-use rust_simulation::ui::{main_menu::MainMenuPlugin, settings::SettingsPlugin};
+use rust_simulation::ui::main_menu::MainMenuPlugin;
+use rust_simulation::ui::settings::SettingsPlugin;
 use rust_simulation::{add_simulation_systems, setup_simulation, AppPaths, DataPaths, SimulationSet};
 use std::env;
 use std::time::Duration;
+use bevy::app::ScheduleRunnerPlugin;
 use directories::ProjectDirs;
 use clap::Parser;
-#[cfg(feature = "ui")]
-use bevy::{
-    asset::AssetPlugin,
-    core_pipeline::CorePipelinePlugin,
-    diagnostic::DiagnosticsPlugin,
-    input::InputPlugin,
-    pbr::PbrPlugin,
-    render::RenderPlugin,
-    sprite::SpritePlugin,
-    text::TextPlugin,
-    transform::TransformPlugin,
-    ui::UiPlugin,
-};
+use bevy::asset::AssetPlugin;
+use bevy::core_pipeline::CorePipelinePlugin;
+use bevy::diagnostic::DiagnosticsPlugin;
+use bevy::input::InputPlugin;
+use bevy::pbr::PbrPlugin;
+use bevy::render::RenderPlugin;
+use bevy::sprite::SpritePlugin;
+use bevy::text::TextPlugin;
+use bevy::transform::TransformPlugin;
+use bevy::ui::UiPlugin;
 
 /// Command-line arguments for the simulation.
 #[derive(Parser, Debug)]
@@ -92,28 +90,22 @@ fn main() {
     // --- Bevy App Setup ---
     let mut app = App::new();
 
-    #[cfg(feature = "ui")]
-    {
-        app.add_plugins(MinimalPlugins);
-        app.add_plugins(bevy::log::LogPlugin::default());
-        app.add_plugins(TransformPlugin);
-        app.add_plugins(DiagnosticsPlugin);
-        app.add_plugins(InputPlugin);
-        app.add_plugins(AssetPlugin::default());
-        app.add_plugins(RenderPlugin::default());
-        app.add_plugins(CorePipelinePlugin);
-        app.add_plugins(SpritePlugin);
-        app.add_plugins(TextPlugin);
-        app.add_plugins(UiPlugin);
-        app.add_plugins(PbrPlugin::default());
-        app.add_plugins(rust_simulation::graphics::GraphicsPlugin);
-        app.add_plugins(MainMenuPlugin);
-        app.add_plugins(SettingsPlugin);
-    }
-    #[cfg(not(feature = "ui"))]
-    {
-        app.add_plugins(MinimalPlugins);
-    }
+    app.add_plugins(MinimalPlugins);
+    app.add_plugins(bevy::log::LogPlugin::default());
+    app.add_plugins(TransformPlugin);
+    app.add_plugins(DiagnosticsPlugin);
+    app.add_plugins(InputPlugin);
+    app.add_plugins(ScheduleRunnerPlugin::default());
+    app.add_plugins(AssetPlugin::default());
+    app.add_plugins(RenderPlugin::default());
+    app.add_plugins(CorePipelinePlugin);
+    app.add_plugins(SpritePlugin);
+    app.add_plugins(TextPlugin);
+    app.add_plugins(UiPlugin);
+    app.add_plugins(PbrPlugin::default());
+    app.add_plugins(rust_simulation::graphics::GraphicsPlugin);
+    app.add_plugins(MainMenuPlugin);
+    app.add_plugins(SettingsPlugin);
     app.add_plugins(MonitoringPlugin);
     app.init_state::<AppState>();
     app.register_type::<Config>()
