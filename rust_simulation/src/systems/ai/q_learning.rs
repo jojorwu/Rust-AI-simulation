@@ -1,13 +1,22 @@
-use crate::{components::{ai::GoalQTable, BrainComponent}, config::Config};
-use crate::events::Event;
+use crate::{
+    components::{
+        ai::{GoalQTable, KnownResources},
+        BrainComponent,
+    },
+    config::Config,
+    events::Event,
+    map::Map,
+    systems::ai::validation::is_goal_valid,
+};
 use bevy_ecs::prelude::*;
 use dashmap::DashMap;
 use rayon::prelude::*;
 
 pub fn update_q_table_system(
-    mut q_table_query: Query<(Entity, &mut BrainComponent, &mut GoalQTable)>,
+    mut q_table_query: Query<(Entity, &mut BrainComponent, &mut GoalQTable, &KnownResources)>,
     mut event_reader: EventReader<Event>,
     config: Res<Config>,
+    map: Res<Map>,
 ) {
     let events: Vec<_> = event_reader.read().collect();
     let events_by_entity: DashMap<Entity, Vec<&Event>> = DashMap::new();
@@ -20,7 +29,7 @@ pub fn update_q_table_system(
 
     q_table_query
         .par_iter_mut()
-        .for_each(|(entity, mut brain, mut q_table)| {
+        .for_each(|(entity, mut brain, mut q_table, known_resources)| {
             if let Some(events) = events_by_entity.get(&entity) {
                 for event in events.iter() {
                     if let Event::GoalCompleted {
@@ -37,16 +46,20 @@ pub fn update_q_table_system(
                             .and_then(|q| q.get(goal))
                             .cloned()
                             .unwrap_or(0.0);
+
+                        // Calculate the max Q-value for the next state, but only consider valid goals.
                         let max_future_q = q_table
                             .0
                             .get(new_state)
                             .map(|q| {
-                                q.values()
-                                    .cloned()
+                                q.iter()
+                                    .filter(|(g, _)| is_goal_valid(g, known_resources, &map))
+                                    .map(|(_, v)| *v)
                                     .max_by(|a, b| a.total_cmp(b))
                                     .unwrap_or(0.0)
                             })
                             .unwrap_or(0.0);
+
                         let new_q_value = old_q_value
                             + brain.learning_rate
                                 * (reward + brain.discount_factor * max_future_q - old_q_value);

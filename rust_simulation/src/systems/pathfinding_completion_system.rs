@@ -21,10 +21,7 @@ pub fn pathfinding_completion_system(
             commands.entity(entity).remove::<PathRequest>();
 
             if let Some(path) = path_result.path {
-                commands.entity(entity).insert(CurrentPath {
-                    nodes: path,
-                    stuck_timer: 0,
-                });
+                commands.entity(entity).insert(CurrentPath { nodes: path });
             } else {
                 commands.entity(entity).insert(PathfindingFailed);
             }

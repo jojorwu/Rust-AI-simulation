@@ -9,6 +9,7 @@ use crate::components::{
 use crate::config::Config;
 use crate::errors::SimulationError;
 use crate::map::Map;
+use crate::systems::ai::validation::is_goal_valid;
 use crate::IsDay;
 use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
@@ -328,24 +329,6 @@ fn choose_q_learning_goal<R: Rng + ?Sized>(
         // If there's no entry for the current state in the Q-table, choose a random valid goal.
         let index = args.rng.random_range(0..valid_goals.len());
         Ok(valid_goals[index].clone())
-    }
-}
-
-/// Checks if a goal is currently valid.
-fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bool {
-    match goal {
-        Goal::GatherResource(resource_name, _amount) => {
-            if let Some(resource_def) = map.resources.iter().find(|r| r.name == *resource_name) {
-                if resource_def.huntable {
-                    return true;
-                }
-            }
-            known_resources
-                .0
-                .get(resource_name)
-                .is_some_and(|s| !s.is_empty())
-        }
-        _ => true,
     }
 }
 
