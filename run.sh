@@ -54,6 +54,16 @@ error() {
 # Generic Helper Functions
 # =============================================================================
 
+setup_sccache() {
+    if command -v sccache &> /dev/null; then
+        info "sccache found, using it to cache compilation."
+        export RUSTC_WRAPPER="sccache"
+    else
+        warn "sccache not found. Compilation will be slower."
+        warn "Install sccache for faster builds: https://github.com/mozilla/sccache"
+    fi
+}
+
 # --- Configuration (these are now global) ---
 PROJECT_DIR="$SCRIPT_DIR/rust_simulation"
 DIST_DIR="$SCRIPT_DIR/dist"
@@ -480,6 +490,9 @@ main() {
     # For now, this structure sets up the parsing logic.
 
     info "Starting the Rust Simulation launcher..."
+
+    # --- Setup sccache for faster builds if available ---
+    setup_sccache
 
     # --- Detect Operating System ---
     os_name="$(uname -s)"

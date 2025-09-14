@@ -66,6 +66,20 @@ Available flags:
 -   `--clean` / `-Clean`: Perform a clean build.
 -   `--help` / `-Help`: Display a help message.
 
+### Speeding Up Compilation with sccache
+
+To significantly speed up recompilation times, it is highly recommended to install `sccache`. The `run.sh` script will automatically detect and use it if it's available.
+
+-   **Installation with Cargo:**
+    ```bash
+    cargo install sccache
+    ```
+-   **Installation on macOS (with Homebrew):**
+    ```bash
+    brew install sccache
+    ```
+-   For other installation methods, please refer to the [sccache repository](https://github.com/mozilla/sccache).
+
 ### System Dependencies
 
 To build the full application with its user interface, you will need to have a few system dependencies installed.
