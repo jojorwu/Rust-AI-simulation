@@ -23,6 +23,9 @@ pub struct Item {
     /// The category of the item, used for tasks like checking for a required tool type.
     #[serde(default)]
     pub category: Option<String>,
+    /// The tier of the item, used for comparing tools. Higher is better.
+    #[serde(default)]
+    pub tier: u32,
 }
 
 pub struct ItemRegistry {

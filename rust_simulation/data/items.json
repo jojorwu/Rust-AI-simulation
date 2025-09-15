@@ -9,6 +9,7 @@
     "stackable": false,
     "tool": true,
     "category": "axe",
+    "tier": 1,
     "properties": {
       "damage": 5.0,
       "efficiency": 3.0,
@@ -20,6 +21,7 @@
     "stackable": false,
     "tool": true,
     "category": "pickaxe",
+    "tier": 1,
     "properties": {
       "damage": 3.0,
       "efficiency": 4.0,
@@ -31,6 +33,7 @@
     "stackable": false,
     "tool": true,
     "category": "pickaxe",
+    "tier": 2,
     "properties": {
       "damage": 5.0,
       "efficiency": 6.0,
@@ -42,6 +45,7 @@
     "stackable": false,
     "tool": true,
     "category": "axe",
+    "tier": 2,
     "properties": {
       "damage": 8.0,
       "efficiency": 5.0,
