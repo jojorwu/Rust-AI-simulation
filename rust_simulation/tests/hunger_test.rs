@@ -97,4 +97,11 @@ fn test_starvation_sends_death_event() {
         death_event_found,
         "An EntityDied event should be sent when an entity starves to death"
     );
+
+    // Also verify that health is clamped at 0
+    let health = app.world.get::<Health>(starving_entity).unwrap();
+    assert_eq!(
+        health.current, 0,
+        "Health should be clamped at 0 and not be negative."
+    );
 }

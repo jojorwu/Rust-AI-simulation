@@ -16,8 +16,10 @@ pub fn hunger_system(
             hunger.current = 0.0;
             if let Some(mut health) = health_option {
                 let old_health = health.current;
-                health.current -= config.survival.starvation_damage;
-                if old_health > 0 && health.current <= 0 {
+                // Apply damage, clamping at 0 to prevent negative health.
+                health.current =
+                    (health.current - config.survival.starvation_damage).max(0);
+                if old_health > 0 && health.current == 0 {
                     event_writer.send(Event::EntityDied(entity));
                 }
             }
