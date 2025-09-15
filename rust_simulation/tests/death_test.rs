@@ -4,7 +4,7 @@ use rust_simulation::{
     components::{DroppedItem, Inventory, Position},
     events::Event,
     map::Map,
-    systems::death::death_system,
+    systems::death::{death_cleanup_system, inventory_drop_on_death_system, pig_death_handler},
 };
 
 // Helper to setup a basic app for testing death-related systems
@@ -16,7 +16,15 @@ fn setup_test_app() -> App {
         Map::new(10, 10, "data/biomes.json", "data/resources.json")
             .expect("Failed to create map"),
     );
-    app.add_systems(Update, death_system);
+    app.add_systems(
+        Update,
+        (
+            pig_death_handler,
+            inventory_drop_on_death_system,
+            death_cleanup_system,
+        )
+            .chain(),
+    );
     app
 }
 
