@@ -17,8 +17,10 @@ pub fn eating_system(
                 if hunger.current > hunger.max {
                     hunger.current = hunger.max;
                 }
-                commands.entity(entity).remove::<WantsToEat>();
             }
         }
+
+        // Always remove the intent, whether it succeeded or failed.
+        commands.entity(entity).remove::<WantsToEat>();
     }
 }
