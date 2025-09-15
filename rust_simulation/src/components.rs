@@ -207,3 +207,16 @@ impl Inventory {
         true
     }
 }
+
+/// A marker component added to a `DroppedItem` to indicate that an agent has
+/// claimed it for pickup. This prevents multiple agents from trying to pick up
+/// the same item in the same tick.
+#[derive(Component)]
+pub struct PickupClaimed;
+
+/// A component indicating that an agent is in the process of picking up a
+/// specific claimed item.
+#[derive(Component)]
+pub struct IsPickingUp {
+    pub item: Entity,
+}
