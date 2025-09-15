@@ -9,7 +9,6 @@ use crate::components::{
 use crate::config::Config;
 use crate::errors::SimulationError;
 use crate::map::Map;
-use crate::systems::ai::validation::is_goal_valid;
 use crate::IsDay;
 use bevy::ecs::system::ParallelCommands;
 use bevy_ecs::prelude::*;
@@ -332,6 +331,24 @@ fn choose_q_learning_goal<R: Rng + ?Sized>(
     }
 }
 
+/// Checks if a goal is currently valid.
+fn is_goal_valid(goal: &Goal, known_resources: &KnownResources, map: &Map) -> bool {
+    match goal {
+        Goal::GatherResource(resource_name, _amount) => {
+            if let Some(resource_def) = map.resources.iter().find(|r| r.name == *resource_name) {
+                if resource_def.huntable {
+                    return true;
+                }
+            }
+            known_resources
+                .0
+                .get(resource_name)
+                .is_some_and(|s| !s.is_empty())
+        }
+        _ => true,
+    }
+}
+
 /// Creates a plan (a sequence of sub-goals) to achieve a given high-level goal.
 /// This is a simple hierarchical planner that can now handle nested dependencies.
 fn plan_goal(args: &mut PlannerArgs, goal: &Goal) -> Result<Vec<Goal>, SimulationError> {
@@ -472,8 +489,8 @@ fn plan_tool_for_resource(
 mod tests {
     use super::*;
     use crate::recipes::RecipeManager;
-    use std::collections::HashMap;
     use std::collections::BTreeMap;
+    use std::collections::HashMap;
     use std::sync::Arc;
 
     #[test]
