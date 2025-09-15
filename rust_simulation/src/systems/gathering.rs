@@ -33,6 +33,16 @@ pub fn gathering_system(
                 && (position.y.abs_diff(target_pos.y) <= 1);
 
             if is_adjacent {
+                // --- BUG FIX ---
+                // Verify that the resource we are adjacent to is the one we intend to gather.
+                if resource.name != *resource_name {
+                    // If not, the intent is invalid (e.g., the resource was depleted and
+                    // replaced by something else). Remove the intent and stop.
+                    commands.entity(entity).remove::<IsGathering>();
+                    continue;
+                }
+                // --- END BUG FIX ---
+
                 if resource.quantity > 0 {
                     resource.quantity -= 1;
                     inventory.add_item(resource_name, 1);
