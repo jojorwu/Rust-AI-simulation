@@ -1,4 +1,7 @@
-use crate::components::{status::{Damage, Health}, WantsToAttack};
+use crate::components::{
+    intents::WantsToAttack,
+    status::{Damage, Health},
+};
 use crate::events::Event;
 use bevy_ecs::prelude::*;
 

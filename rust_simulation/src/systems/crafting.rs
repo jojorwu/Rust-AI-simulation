@@ -1,4 +1,5 @@
-use crate::components::{Inventory, WantsToCraft};
+use crate::components::intents::WantsToCraft;
+use crate::components::Inventory;
 use crate::RecipeManagerResource;
 use bevy_ecs::prelude::*;
 use log::error;

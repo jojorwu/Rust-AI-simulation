@@ -1,4 +1,4 @@
-use crate::components::{BrainComponent, WantsToAttack, intents::IntendsToAttack};
+use crate::components::{intents::{IntendsToAttack, WantsToAttack}, BrainComponent};
 use bevy_ecs::prelude::*;
 
 pub fn attack_action_system(

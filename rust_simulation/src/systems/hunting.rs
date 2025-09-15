@@ -1,7 +1,7 @@
 use crate::animals::pig::Pig;
 use crate::components::intents::IntendsToGather;
 use crate::components::path::PathRequest;
-use crate::components::{Position, WantsToAttack};
+use crate::components::{intents::WantsToAttack, Position};
 use bevy_ecs::prelude::*;
 
 pub fn hunting_system(

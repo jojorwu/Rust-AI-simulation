@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 use rust_simulation::{
-    components::{status::{Damage, Health}, WantsToAttack},
+    components::{
+        intents::WantsToAttack,
+        status::{Damage, Health},
+    },
     events::Event,
     systems::combat::combat_system,
 };

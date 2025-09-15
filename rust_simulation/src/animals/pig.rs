@@ -1,4 +1,4 @@
-use crate::components::{Position, Velocity, WantsToAttack};
+use crate::components::{intents::WantsToAttack, Position, Velocity};
 use bevy_ecs::prelude::*;
 use rand::Rng;
 

@@ -1,7 +1,7 @@
 use crate::components::{
-    BrainComponent, Chest, Position, WantsToStoreItem,
-    intents::IntendsToStockpile,
+    intents::{IntendsToStockpile, WantsToStoreItem},
     path::{CurrentPath, PathRequest},
+    BrainComponent, Chest, Position,
 };
 use bevy_ecs::prelude::*;
 

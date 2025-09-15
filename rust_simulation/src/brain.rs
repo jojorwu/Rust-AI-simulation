@@ -8,7 +8,10 @@
 //! The `Brain` uses a Q-learning-based approach to decide on a `Goal`, and then
 //! uses a planner to break that goal down into a series of actions.
 
-use crate::components::{Inventory, Velocity, WantsToAttack, WantsToCraft, WantsToStoreItem};
+use crate::components::{
+    intents::{WantsToAttack, WantsToCraft, WantsToStoreItem},
+    Inventory, Velocity,
+};
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

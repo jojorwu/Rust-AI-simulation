@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rust_simulation::{
     animals::pig::{fleeing_system, Pig, SimpleAi},
-    components::{Position, Velocity, WantsToAttack},
+    components::{intents::WantsToAttack, Position, Velocity},
 };
 
 #[test]

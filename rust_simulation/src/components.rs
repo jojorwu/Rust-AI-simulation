@@ -48,31 +48,9 @@ pub struct Velocity {
     pub dy: i32,
 }
 
-#[derive(Component, Debug, Clone, Copy)]
-pub struct WantsToGather {
-    pub target: Entity,
-}
-
-#[derive(Component, Debug, Clone)]
-pub struct WantsToCraft {
-    pub item_name: String,
-}
-
-#[derive(Component, Debug, Clone)]
-pub struct WantsToBuild {
-    pub structure_name: String,
-}
-
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct Chest {
     pub inventory: Inventory,
-}
-
-#[derive(Component, Clone, Debug)]
-pub struct WantsToStoreItem {
-    pub item_name: String,
-    pub quantity: u32,
-    pub target_chest: Entity,
 }
 
 #[derive(Component, Clone)]
@@ -122,14 +100,6 @@ impl BrainComponent {
         }
     }
 }
-
-#[derive(Component, Debug, Clone, Copy)]
-pub struct WantsToAttack {
-    pub target: Entity,
-}
-
-#[derive(Component, Debug, Clone, Copy)]
-pub struct WantsToPickup {}
 
 #[derive(Component, Debug, Clone)]
 pub struct Resource {

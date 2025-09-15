@@ -1,4 +1,4 @@
-use crate::components::{DroppedItem, Inventory, Position, WantsToPickup};
+use crate::components::{intents::WantsToPickup, DroppedItem, Inventory, Position};
 use crate::map::Map;
 use bevy_ecs::prelude::*;
 

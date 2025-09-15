@@ -1,4 +1,4 @@
-use crate::components::{BrainComponent, WantsToCraft, intents::IntendsToCraft};
+use crate::components::{intents::{IntendsToCraft, WantsToCraft}, BrainComponent};
 use bevy_ecs::prelude::*;
 
 pub fn craft_action_system(
