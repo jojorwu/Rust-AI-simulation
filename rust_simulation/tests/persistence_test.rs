@@ -2,66 +2,86 @@ use bevy::{app::AppExit, prelude::*};
 use rust_simulation::{
     brain::{DiscretizedLevel, Goal, HighLevelState, InventorySummary},
     components::ai::GoalQTable,
-    AppPaths,
     player::Player,
     systems::persistence::save_q_tables_on_exit,
 };
-use std::{
-    collections::{BTreeMap, HashMap},
-    panic,
-};
-use tempfile::tempdir;
+use std::{collections::{BTreeMap, HashMap}, fs, panic};
 
 #[test]
-fn test_q_table_persistence_uses_app_paths() {
-    // 1. Setup
-    // Create a temporary directory for app data
-    let temp_dir = tempdir().expect("Failed to create temp dir");
-    let data_dir = temp_dir.path().to_path_buf();
-
-    let expected_path = data_dir.join("q_tables.json");
+fn test_q_table_persistence() {
+    let test_file = "q_tables.json";
 
     // Run the test in a closure to ensure cleanup happens even on panic.
     let result = panic::catch_unwind(|| {
+        // 1. Setup
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, bevy::log::LogPlugin::default()));
         app.add_event::<AppExit>();
-        app.insert_resource(AppPaths {
-            data_dir: data_dir.clone(),
-        });
         app.add_systems(Update, save_q_tables_on_exit.run_if(on_event::<AppExit>()));
 
-        // Create a dummy player with a Q-table to save
-        let mut q_table = GoalQTable(HashMap::new());
         // Create a mock HighLevelState
+        let mut items = BTreeMap::new();
+        items.insert("wood".to_string(), 1);
+        items.insert("stone".to_string(), 2);
+        items.insert("iron_ore".to_string(), 3);
+        items.insert("stone_axe".to_string(), 4);
         let state = HighLevelState {
-            inventory_summary: InventorySummary {
-                items: BTreeMap::new(),
-            },
+            inventory_summary: InventorySummary { items },
             num_hostile_players: 0,
             health_level: DiscretizedLevel::High,
-            hunger_level: DiscretizedLevel::High,
+            hunger_level: DiscretizedLevel::Low,
             is_night: false,
         };
+
         // Create a mock Goal
         let goal = Goal::Explore;
-        // Add some dummy data to ensure the file is not empty
-        q_table.0.entry(state).or_default().insert(goal, 1.0);
-        app.world
-            .spawn((Player { id: 0, held_item: None }, q_table));
 
+        // Create a mock inner HashMap
+        let mut goal_map = HashMap::new();
+        goal_map.insert(goal.clone(), 42.0);
+
+        // Create a mock Q-table
+        let mut q_table = GoalQTable(HashMap::new());
+        q_table.0.insert(state.clone(), goal_map);
+
+        // Create a mock player entity
+        app.world.spawn((
+            Player {
+                id: 1,
+                held_item: None,
+            },
+            q_table,
+        ));
 
         // 2. Run the system by sending an AppExit event
         app.world.send_event(AppExit);
         app.update();
+
+        // 3. Verify the output file
+        let content = fs::read_to_string(test_file).expect("Failed to read test file");
+        let deserialized: HashMap<u32, GoalQTable> =
+            serde_json::from_str(&content).expect("Failed to deserialize test data");
+
+        assert_eq!(deserialized.len(), 1);
+        assert!(deserialized.contains_key(&1));
+        let saved_q_table = deserialized
+            .get(&1)
+            .expect("Player 1's Q-table should be present");
+        let saved_goal_map = saved_q_table
+            .0
+            .get(&state)
+            .expect("State should be present in the Q-table");
+        assert_eq!(saved_goal_map.get(&goal), Some(&42.0));
     });
 
-    // 3. Verify
-    assert!(result.is_ok(), "The system should not panic");
-    assert!(
-        expected_path.exists(),
-        "q_tables.json should be saved in the directory specified by AppPaths, but it was not found there."
-    );
+    // 4. Cleanup
+    if fs::metadata(test_file).is_ok() {
+        fs::remove_file(test_file).expect("Failed to remove test file");
+    }
+    let temp_file = "q_tables.json.tmp";
+    if fs::metadata(temp_file).is_ok() {
+        fs::remove_file(temp_file).expect("Failed to remove temp file");
+    }
 
-    // 4. Cleanup is handled by temp_dir going out of scope
+    assert!(result.is_ok());
 }
