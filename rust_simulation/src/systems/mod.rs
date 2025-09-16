@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod building;
+pub mod building_logic;
 pub mod combat;
 pub mod crafting;
 pub mod death;

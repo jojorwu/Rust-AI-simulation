@@ -24,6 +24,7 @@ directories = "5.0"
 
 [dev-dependencies]
 criterion = "0.5.1"
+tempfile = "3.10.1"
 
 [[bench]]
 name = "ai_bench"

@@ -231,15 +231,11 @@ pub fn add_simulation_systems(app: &mut App) {
                 find_resource::find_resource_system,
                 gathering::gathering_system,
                 crafting::crafting_system,
-                building::building_system,
+                building_logic::check_resources_system,
+                building_logic::build_system,
                 storage::storage_system,
                 combat::combat_system,
-                (
-                    death::pig_death_handler,
-                    death::inventory_drop_on_death_system,
-                    death::death_cleanup_system,
-                )
-                    .chain(),
+                death::death_system,
                 map_modification::map_modification_system,
             ),
             // --- Pathfinding and Movement ---

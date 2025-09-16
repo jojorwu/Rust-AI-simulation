@@ -1,0 +1,18 @@
+{
+  "0": [
+    [
+      {
+        "inventory_summary": {
+          "items": {}
+        },
+        "num_hostile_players": 0,
+        "health_level": "High",
+        "hunger_level": "High",
+        "is_night": false
+      },
+      {
+        "Explore": 1.0
+      }
+    ]
+  ]
+}

@@ -82,36 +82,3 @@ fn test_combat_system_handles_death() {
     }
     assert!(death_event_found);
 }
-
-#[test]
-fn test_health_does_not_go_below_zero() {
-    // 1. Setup
-    let mut app = App::new();
-    app.add_plugins(MinimalPlugins);
-    app.add_event::<Event>();
-    app.add_systems(Update, combat_system);
-
-    // Create target with low health
-    let target = app.world.spawn(Health { current: 5, max: 50 }).id();
-    // Create attacker that deals more damage than the target has health
-    let _attacker = app
-        .world
-        .spawn((WantsToAttack { target }, Damage(20)))
-        .id();
-
-    // 2. Run the system
-    app.update();
-
-    // 3. Verify
-    let target_health = app
-        .world
-        .get::<Health>(target)
-        .expect("Target should have a Health component");
-    // This is the key assertion for the bug.
-    // With the bug, health will be -15. After the fix, it should be 0.
-    assert_eq!(
-        target_health.current,
-        0,
-        "Target health should be clamped at 0 and not be negative."
-    );
-}

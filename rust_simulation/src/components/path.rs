@@ -23,8 +23,6 @@ pub struct PathRequest {
 pub struct CurrentPath {
     /// The sequence of coordinates that form the path.
     pub nodes: VecDeque<(u32, u32)>,
-    /// A counter for how many ticks the entity has been stuck.
-    pub stuck_ticks: u32,
 }
 
 /// A component that holds the async `Task` for a pathfinding calculation.

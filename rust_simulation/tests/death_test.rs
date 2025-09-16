@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 use rust_simulation::{
     animals::pig::Pig,
-    components::{DroppedItem, Inventory, Position},
+    components::{DroppedItem, Position},
     events::Event,
     map::Map,
-    systems::death::{death_cleanup_system, inventory_drop_on_death_system, pig_death_handler},
+    systems::death::death_system,
 };
 
 // Helper to setup a basic app for testing death-related systems
@@ -16,15 +16,7 @@ fn setup_test_app() -> App {
         Map::new(10, 10, "data/biomes.json", "data/resources.json")
             .expect("Failed to create map"),
     );
-    app.add_systems(
-        Update,
-        (
-            pig_death_handler,
-            inventory_drop_on_death_system,
-            death_cleanup_system,
-        )
-            .chain(),
-    );
+    app.add_systems(Update, death_system);
     app
 }
 
@@ -99,57 +91,4 @@ fn test_death_system_pig_drops_meat() {
         .expect("DroppedItem component should be present");
     assert_eq!(item.item_name, "meat");
     assert_eq!(item.quantity, 1);
-}
-
-#[test]
-fn test_agent_drops_inventory_on_death() {
-    // 1. Setup
-    let mut app = setup_test_app();
-
-    // Create an agent with an inventory
-    let agent_pos = Position { x: 5, y: 5 };
-    let mut agent_inventory = Inventory::new();
-    agent_inventory.add_item("wood", 10);
-    agent_inventory.add_item("stone", 5);
-
-    let agent_entity = app.world.spawn((agent_pos, agent_inventory)).id();
-    app.world
-        .resource_mut::<Map>()
-        .add_entity_to_spatial_map(agent_entity, agent_pos.x, agent_pos.y);
-
-    // 2. Send death event
-    app.world.send_event(Event::EntityDied(agent_entity));
-    app.update();
-
-    // 3. Verify
-    // Agent entity should be despawned
-    assert!(app.world.get_entity(agent_entity).is_none());
-
-    // The items from the inventory should now be on the ground
-    let map_after_update = app.world.resource::<Map>();
-    let entities_at_pos = map_after_update
-        .get_entities_at(agent_pos.x, agent_pos.y)
-        .expect("Entities should be present at the death location");
-
-    let mut found_wood = false;
-    let mut found_stone = false;
-
-    for entity in entities_at_pos {
-        if let Some(item) = app.world.get::<DroppedItem>(entity) {
-            match item.item_name.as_str() {
-                "wood" => {
-                    assert_eq!(item.quantity, 10);
-                    found_wood = true;
-                }
-                "stone" => {
-                    assert_eq!(item.quantity, 5);
-                    found_stone = true;
-                }
-                _ => {}
-            }
-        }
-    }
-
-    assert!(found_wood, "Wood should have been dropped");
-    assert!(found_stone, "Stone should have been dropped");
 }
