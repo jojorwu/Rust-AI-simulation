@@ -16,6 +16,9 @@ param(
 
 # --- Script Configuration ---
 $ErrorActionPreference = "Stop"
+# Speed up builds by using the LLD linker.
+# This requires the `lld` component to be installed via `rustup component add lld`.
+$UseLldLinker = $true
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Join-Path $ScriptDir "rust_simulation"
 $DistDir = Join-Path $ScriptDir "dist"
@@ -40,6 +43,38 @@ function Write-Log {
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+function Use-LldLinker {
+    if (-not $UseLldLinker) {
+        return $false
+    }
+
+    Write-Log "Checking for LLD linker component..."
+    # Check if rustup is even installed
+    if (-not (Get-Command "rustup" -ErrorAction SilentlyContinue)) {
+        Write-Log "rustup command not found. Cannot manage components. Assuming LLD is unavailable." -Level "WARN"
+        return $false
+    }
+
+    # Check for the lld component
+    $components = rustup component list
+    if ($components -match "lld-linker.*\(installed\)" -or $components -match "rust-lld.*\(installed\)") {
+        Write-Log "LLD component is already installed." -Level "SUCCESS"
+        return $true
+    }
+
+    Write-Log "LLD component not found. Attempting to install..." -Level "WARN"
+    try {
+        rustup component add lld
+        Write-Log "LLD component installed successfully." -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Failed to install the LLD component. Falling back to the default linker." -Level "ERROR"
+        Write-Log "Please try installing it manually: `rustup component add lld`" -Level "WARN"
+        return $false
+    }
+}
 
 function Get-ProjectVersion {
     Write-Log "Getting project version..."
@@ -226,6 +261,13 @@ function Build-Project {
         cargo clean | Out-Null
     }
 
+    # Prepare environment for build
+    $originalRustFlags = $env:RUSTFLAGS
+    if (Use-LldLinker) {
+        Write-Log "Attempting to use LLD linker to speed up the build."
+        $env:RUSTFLAGS = "$originalRustFlags -C linker=rust-lld.exe"
+    }
+
     try {
         cargo build --release
         Write-Log "Project built successfully." -Level "SUCCESS"
@@ -233,9 +275,14 @@ function Build-Project {
     catch {
         Write-Log "Build failed. Please check the error messages." -Level "ERROR"
         Write-Log "Note: If the error mentions 'linker' or 'LNK' errors, you may need to install the 'C++ build tools' from the Visual Studio Installer." -Level "WARN"
+        if ($UseLldLinker) {
+            Write-Log "LLD linker might have failed. Try running with `$UseLldLinker = `$false` in the script." -Level "WARN"
+        }
         throw "Build failed."
     }
     finally {
+        # Restore original environment
+        $env:RUSTFLAGS = $originalRustFlags
         Set-Location $ScriptDir
     }
 }
