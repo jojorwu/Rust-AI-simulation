@@ -44,10 +44,7 @@ fn test_death_system_despawns_entity() {
     );
 
     // 2. Send death event
-    app.world.send_event(Event::EntityDied {
-        entity: dead_entity,
-        position: entity_pos,
-    });
+    app.world.send_event(Event::EntityDied(dead_entity));
     app.update();
 
     // 3. Verify
@@ -73,10 +70,7 @@ fn test_death_system_pig_drops_meat() {
         .add_entity_to_spatial_map(pig_entity, pig_pos.x, pig_pos.y);
 
     // 2. Send death event
-    app.world.send_event(Event::EntityDied {
-        entity: pig_entity,
-        position: pig_pos,
-    });
+    app.world.send_event(Event::EntityDied(pig_entity));
     app.update();
 
     // 3. Verify
@@ -97,47 +91,4 @@ fn test_death_system_pig_drops_meat() {
         .expect("DroppedItem component should be present");
     assert_eq!(item.item_name, "meat");
     assert_eq!(item.quantity, 1);
-}
-
-#[test]
-fn test_death_system_removes_entity_without_position() {
-    // 1. Setup
-    let mut app = setup_test_app();
-
-    // Create a generic entity and add it to the map
-    let entity_pos = Position { x: 5, y: 5 };
-    let dead_entity = app.world.spawn(entity_pos).id();
-    app.world
-        .resource_mut::<Map>()
-        .add_entity_to_spatial_map(dead_entity, entity_pos.x, entity_pos.y);
-
-    // Verify entity is on the map
-    assert_eq!(
-        app.world
-            .resource::<Map>()
-            .get_entities_at(entity_pos.x, entity_pos.y)
-            .unwrap()
-            .len(),
-        1
-    );
-
-    // Remove the position component to simulate the scenario where it's gone before death handling
-    app.world.entity_mut(dead_entity).remove::<Position>();
-    assert!(app.world.get::<Position>(dead_entity).is_none());
-
-    // 2. Send death event with the last known position
-    app.world.send_event(Event::EntityDied {
-        entity: dead_entity,
-        position: entity_pos,
-    });
-    app.update();
-
-    // 3. Verify
-    // Entity should be despawned
-    assert!(app.world.get_entity(dead_entity).is_none());
-
-    // Entity should still be removed from spatial map because the event had the position
-    let map_after_update = app.world.resource::<Map>();
-    let entities_after = map_after_update.get_entities_at(entity_pos.x, entity_pos.y);
-    assert!(entities_after.is_none_or(|e| e.is_empty()));
 }

@@ -9,10 +9,7 @@ pub enum Event {
         position: (u32, u32),
         tiles: Vec<Vec<Tile>>,
     },
-    EntityDied {
-        entity: Entity,
-        position: Position,
-    },
+    EntityDied(Entity),
     FoundationBuilt {
         builder: Entity,
         position: Position,

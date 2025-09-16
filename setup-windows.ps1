@@ -47,26 +47,23 @@ function Get-ProjectVersion {
     if (-not (Test-Path $tomlPath)) {
         throw "Cargo.toml not found at '$tomlPath'"
     }
-    $inPackageSection = $false
-    foreach ($line in (Get-Content -Path $tomlPath)) {
-        $trimmedLine = $line.Trim()
-        if ($trimmedLine -eq '[package]') { $inPackageSection = $true; continue }
-        if ($trimmedLine.StartsWith('[') -and $trimmedLine.EndsWith(']')) {
-            # We've left the [package] section without finding a version.
-            if ($inPackageSection) { break }
-            $inPackageSection = $false
-        }
-        if ($inPackageSection -and $trimmedLine -match '^version\s*=\s*') {
-            $version = ($trimmedLine.Split('=')[1]).Trim().Trim('"')
-            if ($version) {
+    try {
+        $inPackageSection = $false
+        foreach ($line in (Get-Content -Path $tomlPath)) {
+            $trimmedLine = $line.Trim()
+            if ($trimmedLine -eq '[package]') { $inPackageSection = $true; continue }
+            if ($trimmedLine.StartsWith('[') -and $trimmedLine.EndsWith(']')) { $inPackageSection = $false }
+            if ($inPackageSection -and $trimmedLine -match '^version\s*=\s*') {
+                $version = ($trimmedLine.Split('=')[1]).Trim().Trim('"')
                 Write-Log "Found version: $version" -Level "SUCCESS"
                 return $version
             }
         }
     }
-
-    # If we get here, the version was not found.
-    throw "Could not find 'version' field in the [package] section of Cargo.toml."
+    catch {
+        Write-Log "Could not reliably determine project version. Defaulting to 'unknown'." -Level "WARN"
+        return "unknown"
+    }
 }
 
 function Update-App {
@@ -285,17 +282,13 @@ Microsoft C++ library installer and is required by the game engine.
     $readmeContent | Out-File -FilePath (Join-Path $DistPath "README.txt") -Encoding "utf8"
 
     # Bundle VC++ Redistributable
+    Write-Log "Bundling Microsoft VC++ Redistributable..."
     $redistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     $redistPath = Join-Path $DistPath "vc_redist.x64.exe"
-    if (Test-Path $redistPath) {
-        Write-Log "VC++ Redistributable already exists. Skipping download."
-    } else {
-        Write-Log "Bundling Microsoft VC++ Redistributable..."
-        try {
-            Invoke-WebRequest -Uri $redistUrl -OutFile $redistPath
-        } catch {
-            Write-Log "Failed to download VC++ Redistributable. The application may not run on all PCs." -Level "WARN"
-        }
+    try {
+        Invoke-WebRequest -Uri $redistUrl -OutFile $redistPath
+    } catch {
+        Write-Log "Failed to download VC++ Redistributable. The application may not run on all PCs." -Level "WARN"
     }
 
     # Create ZIP archive
