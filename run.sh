@@ -326,6 +326,28 @@ run_windows() {
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SCRIPT_DIR/setup-windows.ps1" $ps_args
 }
 
+install_xcode_tools() {
+    if xcode-select -p &> /dev/null; then
+        info "Xcode Command Line Tools are already installed."
+        return
+    fi
+
+    warn "Xcode Command Line Tools not found."
+    read -p "Would you like to install them now? (This is required for building on macOS) (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        error "Xcode Command Line Tools installation skipped. Cannot proceed."
+    fi
+
+    info "Starting Xcode Command Line Tools installation..."
+    info "Please follow the on-screen prompts in the new window."
+    if ! xcode-select --install; then
+        error "Failed to start Xcode Command Line Tools installation. Please try running 'xcode-select --install' manually."
+    fi
+    info "Installation complete. Please re-run this script after the installation finishes."
+    exit 0
+}
+
 run_macos() {
     # --- OS Version Detection ---
     local product_name=$(sw_vers -productName)
@@ -333,8 +355,7 @@ run_macos() {
     local build_version=$(sw_vers -buildVersion)
     info "macOS detected: $product_name $product_version (Build $build_version)"
 
-    warn "macOS support is experimental."
-    warn "Please ensure you have the necessary development tools (like Xcode Command Line Tools) installed."
+    install_xcode_tools
 
     # --- macOS Dependency Check (Homebrew) ---
     if command -v brew &> /dev/null; then

@@ -45,11 +45,6 @@ pub fn check_tile_system(
                 let tile = &chunk.tiles[local_y][local_x];
                 if tile.tile_type == '.' {
                     commands.entity(entity).insert(TileIsSuitable);
-                } else {
-                    // Tile is not suitable, remove the temporary components to un-stick the entity
-                    commands
-                        .entity(entity)
-                        .remove::<(CheckResources, HasResources)>();
                 }
             }
         }
