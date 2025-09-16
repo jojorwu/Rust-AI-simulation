@@ -17,8 +17,10 @@ pub fn eating_system(
                 if hunger.current > hunger.max {
                     hunger.current = hunger.max;
                 }
-                commands.entity(entity).remove::<WantsToEat>();
             }
         }
+        // Always remove the intent, even if it fails. This prevents agents from getting
+        // stuck trying to eat something they don't have or that isn't food.
+        commands.entity(entity).remove::<WantsToEat>();
     }
 }
