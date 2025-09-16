@@ -150,25 +150,21 @@ update_app() {
         return
     fi
 
-    # All git operations are done in a subshell to prevent `cd` from affecting
-    # the rest of the script.
-    (
-        cd "$SCRIPT_DIR"
-        if [ -n "$(git status --porcelain)" ]; then
-            warn "You have uncommitted local changes. Pulling updates may result in conflicts."
-            read -p "Do you want to proceed with the update anyway? (y/N) " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                error "Update cancelled by user."
-            fi
+    cd "$SCRIPT_DIR"
+    if [ -n "$(git status --porcelain)" ]; then
+        warn "You have uncommitted local changes. Pulling updates may result in conflicts."
+        read -p "Do you want to proceed with the update anyway? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            error "Update cancelled by user."
         fi
+    fi
 
-        info "Attempting to pull the latest changes..."
-        if ! git pull; then
-            error "git pull failed. Please resolve any conflicts or issues and run the script again."
-        fi
-    ) || exit 1 # The script will exit if any command in the subshell fails due to `set -e`
-
+    info "Attempting to pull the latest changes..."
+    if ! git pull; then
+        error "git pull failed. Please resolve any conflicts or issues and run the script again."
+    fi
+    cd - > /dev/null
     info "Successfully pulled latest changes. The application will now be rebuilt."
 }
 
