@@ -18,16 +18,19 @@ pub fn movement_system(
         let old_pos = *pos;
 
         // Calculate the new position.
+        // This assumes the velocity is valid and doesn't lead to out-of-bounds.
+        // A more robust system would check boundaries and collisions.
         let new_x = (pos.x as i32 + vel.dx) as u32;
         let new_y = (pos.y as i32 + vel.dy) as u32;
 
-        // Basic boundary check & walkability check
-        if new_x < map.width && new_y < map.height && map.is_walkable(new_x, new_y) {
+        // Basic boundary check
+        if new_x < map.width && new_y < map.height {
             // Update the entity's position component.
             pos.x = new_x;
             pos.y = new_y;
 
             // Update the spatial map in the corresponding map chunks.
+            // This is safe to do in parallel because the Map uses Mutexes on its chunks.
             map.remove_entity_from_spatial_map(entity, old_pos.x, old_pos.y);
             map.add_entity_to_spatial_map(entity, pos.x, pos.y);
         }
