@@ -23,13 +23,11 @@ pub fn combat_system(
             if health.current <= 0 {
                 target_dead = true;
             }
-            // The attack was successful, so remove the intent.
-            commands.entity(attacker).remove::<WantsToAttack>();
         }
-        // If the target is invalid, the intent is not removed.
 
         if target_dead {
             event_writer.send(Event::EntityDied(target));
         }
+        commands.entity(attacker).remove::<WantsToAttack>();
     }
 }

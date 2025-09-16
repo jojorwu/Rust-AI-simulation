@@ -82,28 +82,3 @@ fn test_combat_system_handles_death() {
     }
     assert!(death_event_found);
 }
-
-#[test]
-fn test_combat_intent_persists_if_target_is_invalid() {
-    // 1. Setup
-    let mut app = App::new();
-    app.add_plugins(MinimalPlugins);
-    app.add_event::<Event>();
-    app.add_systems(Update, combat_system);
-
-    // Create an invalid target entity
-    let invalid_target = Entity::from_raw(999);
-
-    // Create attacker with the invalid target ID
-    let attacker = app
-        .world
-        .spawn((WantsToAttack { target: invalid_target }, Damage(10)))
-        .id();
-
-    // 2. Run the system
-    app.update();
-
-    // 3. Verify
-    // Attacker should still want to attack because the target was invalid
-    assert!(app.world.get::<WantsToAttack>(attacker).is_some());
-}

@@ -15,10 +15,9 @@ pub fn storage_system(
                 chest
                     .inventory
                     .add_item(&wants_to_store.item_name, wants_to_store.quantity);
-                // And then remove the intent.
-                commands.entity(storer_entity).remove::<WantsToStoreItem>();
             }
         }
-        // If the chest doesn't exist, we don't remove the intent. The agent will try again later.
+        // Always remove the intent, whether it succeeded or failed, to prevent getting stuck.
+        commands.entity(storer_entity).remove::<WantsToStoreItem>();
     }
 }

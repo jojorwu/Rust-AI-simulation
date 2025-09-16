@@ -15,7 +15,6 @@ pub fn crafting_system(
             Ok(required_resources) => {
                 if inventory.remove_resources(&required_resources) {
                     inventory.add_item(&wants_to_craft.item_name, 1);
-                    commands.entity(entity).remove::<WantsToCraft>();
                 }
             }
             Err(e) => {
@@ -23,8 +22,8 @@ pub fn crafting_system(
                     "Failed to get required resources for item '{}': {}",
                     wants_to_craft.item_name, e
                 );
-                commands.entity(entity).remove::<WantsToCraft>();
             }
         }
+        commands.entity(entity).remove::<WantsToCraft>();
     }
 }

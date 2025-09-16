@@ -282,13 +282,17 @@ Microsoft C++ library installer and is required by the game engine.
     $readmeContent | Out-File -FilePath (Join-Path $DistPath "README.txt") -Encoding "utf8"
 
     # Bundle VC++ Redistributable
-    Write-Log "Bundling Microsoft VC++ Redistributable..."
     $redistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     $redistPath = Join-Path $DistPath "vc_redist.x64.exe"
-    try {
-        Invoke-WebRequest -Uri $redistUrl -OutFile $redistPath
-    } catch {
-        Write-Log "Failed to download VC++ Redistributable. The application may not run on all PCs." -Level "WARN"
+    if (Test-Path $redistPath) {
+        Write-Log "VC++ Redistributable already exists. Skipping download."
+    } else {
+        Write-Log "Bundling Microsoft VC++ Redistributable..."
+        try {
+            Invoke-WebRequest -Uri $redistUrl -OutFile $redistPath
+        } catch {
+            Write-Log "Failed to download VC++ Redistributable. The application may not run on all PCs." -Level "WARN"
+        }
     }
 
     # Create ZIP archive

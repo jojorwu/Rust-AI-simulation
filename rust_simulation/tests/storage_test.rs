@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rust_simulation::{
-    components::{intents::WantsToStoreItem, Chest, Inventory},
+    components::{Chest, Inventory, WantsToStoreItem},
     systems::storage::storage_system,
 };
 
@@ -119,7 +119,4 @@ fn test_storage_fails_if_chest_does_not_exist() {
         .get::<Inventory>(storer_entity)
         .expect("Storer should have an Inventory component");
     assert_eq!(storer_inv.get_quantity("wood"), 10);
-
-    // Also assert that the intent to store is still present
-    assert!(app.world.get::<WantsToStoreItem>(storer_entity).is_some());
 }
