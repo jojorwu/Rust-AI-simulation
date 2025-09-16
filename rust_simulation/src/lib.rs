@@ -231,8 +231,7 @@ pub fn add_simulation_systems(app: &mut App) {
                 find_resource::find_resource_system,
                 gathering::gathering_system,
                 crafting::crafting_system,
-                building_logic::check_resources_system,
-                building_logic::build_system,
+                building::building_system,
                 storage::storage_system,
                 combat::combat_system,
                 (
