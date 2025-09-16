@@ -47,23 +47,26 @@ function Get-ProjectVersion {
     if (-not (Test-Path $tomlPath)) {
         throw "Cargo.toml not found at '$tomlPath'"
     }
-    try {
-        $inPackageSection = $false
-        foreach ($line in (Get-Content -Path $tomlPath)) {
-            $trimmedLine = $line.Trim()
-            if ($trimmedLine -eq '[package]') { $inPackageSection = $true; continue }
-            if ($trimmedLine.StartsWith('[') -and $trimmedLine.EndsWith(']')) { $inPackageSection = $false }
-            if ($inPackageSection -and $trimmedLine -match '^version\s*=\s*') {
-                $version = ($trimmedLine.Split('=')[1]).Trim().Trim('"')
+    $inPackageSection = $false
+    foreach ($line in (Get-Content -Path $tomlPath)) {
+        $trimmedLine = $line.Trim()
+        if ($trimmedLine -eq '[package]') { $inPackageSection = $true; continue }
+        if ($trimmedLine.StartsWith('[') -and $trimmedLine.EndsWith(']')) {
+            # We've left the [package] section without finding a version.
+            if ($inPackageSection) { break }
+            $inPackageSection = $false
+        }
+        if ($inPackageSection -and $trimmedLine -match '^version\s*=\s*') {
+            $version = ($trimmedLine.Split('=')[1]).Trim().Trim('"')
+            if ($version) {
                 Write-Log "Found version: $version" -Level "SUCCESS"
                 return $version
             }
         }
     }
-    catch {
-        Write-Log "Could not reliably determine project version. Defaulting to 'unknown'." -Level "WARN"
-        return "unknown"
-    }
+
+    # If we get here, the version was not found.
+    throw "Could not find 'version' field in the [package] section of Cargo.toml."
 }
 
 function Update-App {
