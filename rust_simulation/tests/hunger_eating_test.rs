@@ -118,6 +118,10 @@ fn test_eating_does_not_exceed_max_hunger() {
         .world
         .get::<Hunger>(entity)
         .expect("Entity should have a Hunger component");
+    let config = app.world.resource::<Config>();
+    let initial_hunger = 90.0;
+    let expected_hunger = initial_hunger - config.survival.hunger_rate + config.survival.meat_hunger_value;
+    let expected_clamped_hunger = expected_hunger.min(100.0);
     // Should be clamped to max
-    assert_eq!(hunger.current, 100.0);
+    assert_eq!(hunger.current, expected_clamped_hunger, "Hunger should be clamped to the max value.");
 }
