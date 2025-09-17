@@ -15,7 +15,6 @@ pub mod monitoring;
 pub mod movement;
 pub mod path_movement_system;
 pub mod pathfinding_completion_system;
-pub mod pathfinding_failure;
 pub mod pathfinding_system;
 pub mod persistence;
 pub mod pickup;
