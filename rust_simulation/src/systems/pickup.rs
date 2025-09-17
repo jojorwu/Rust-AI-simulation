@@ -35,12 +35,11 @@ pub fn pickup_system(
 
                     // For simplicity, we assume an entity can only pick up one item stack per tick.
                     // We can break here if that's the desired behavior.
+                    // The entity has attempted to pick up, so we remove the component.
+                    commands.entity(picker_entity).remove::<WantsToPickup>();
                     break;
                 }
             }
         }
-
-        // The entity has attempted to pick up, so we remove the component.
-        commands.entity(picker_entity).remove::<WantsToPickup>();
     }
 }
