@@ -15,7 +15,7 @@ use rust_simulation::{
     },
     recipes::RecipeManager,
 };
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 
 const TEST_WIDTH: u32 = 100;
@@ -49,7 +49,7 @@ fn test_pathfinding_flow() {
         (
             pathfinding_system,
             pathfinding_completion_system,
-        ),
+        ).chain(),
     );
 
     // --- Setup Entities ---
@@ -72,9 +72,13 @@ fn test_pathfinding_flow() {
         .id();
 
     // --- Run App ---
-    for _ in 0..10 {
+    // Loop until the path is found or we time out
+    for _ in 0..100 {
         app.update();
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        if app.world.get::<CurrentPath>(player_entity).is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
 
     // --- Check for Path ---
@@ -183,11 +187,13 @@ fn test_long_pathfinding() {
         .id();
 
     // --- Run App ---
-    // The pathfinding is async, so we need to run the app a few times.
-    // This should be more than enough to get the result.
-    for _ in 0..20 {
+    // Loop until the path is found or we time out
+    for _ in 0..200 {
         app.update();
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        if app.world.get::<CurrentPath>(player_entity).is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 
     // --- Check for Path ---
@@ -204,4 +210,78 @@ fn test_long_pathfinding() {
     assert_eq!(path.back().unwrap(), &goal_pos, "Path does not end at the correct location");
     // Manhattan distance for a clear path
     assert_eq!(path.len(), 101, "Path length is not correct for a 50x50 journey");
+}
+
+use rust_simulation::brain::Goal;
+use rust_simulation::systems::pathfinding_failure::pathfinding_failure_system;
+
+#[test]
+fn test_pathfinding_failure_clears_goal() {
+    // Create a new Bevy App
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+
+    let map = rust_simulation::map::Map::new(TEST_WIDTH, TEST_HEIGHT, "data/biomes.json", "data/resources.json").unwrap();
+    app.insert_resource(map);
+
+    // --- Setup Test Data ---
+    let mut map_data = std::collections::HashMap::new();
+    // Create a wall around the goal
+    let goal_pos = (5, 5);
+    map_data.insert((4, 5), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+    map_data.insert((6, 5), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+    map_data.insert((5, 4), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+    map_data.insert((5, 6), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+    let mental_map = MentalMap(Arc::new(map_data));
+
+    // --- Setup Systems ---
+    app.add_systems(
+        Update,
+        (
+            pathfinding_system,
+            pathfinding_completion_system,
+            pathfinding_failure_system,
+        ).chain(),
+    );
+
+    // --- Setup Entities ---
+    let start_pos = (0, 0);
+    let recipe_manager = Arc::new(
+        RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
+    );
+    let mut brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
+    brain.current_goal = Some(Goal::Explore); // Give the agent a goal
+    brain.goals = vec![Goal::Explore]; // Only allow exploring, to make the test deterministic
+
+    let player_entity = app
+        .world
+        .spawn((
+            Player::new(0, TEST_WIDTH, TEST_HEIGHT),
+            Position {
+                x: start_pos.0,
+                y: start_pos.1,
+            },
+            PathRequest {
+                start: start_pos,
+                goal: goal_pos,
+            },
+            mental_map,
+            brain,
+        ))
+        .id();
+
+    // --- Run App ---
+    // Loop until the goal is cleared or we time out.
+    for _ in 0..100 {
+        app.update();
+        if app.world.get::<BrainComponent>(player_entity).unwrap().current_goal.is_none() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+
+    // --- Check ---
+    let brain = app.world.get::<BrainComponent>(player_entity).unwrap();
+    assert!(brain.current_goal.is_none(), "Goal should be cleared after pathfinding failure");
 }

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rust_simulation::{
-    components::{Chest, Inventory, WantsToStoreItem},
+    components::{intents::WantsToStoreItem, Chest, Inventory},
     systems::storage::storage_system,
 };
 
