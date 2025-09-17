@@ -247,6 +247,8 @@ fn handle_critical_needs<R: Rng + ?Sized>(
             if let Some(huntable) = args.map.resources.iter().find(|r| r.huntable) {
                 return Some(Goal::GatherResource(huntable.name.clone(), 1));
             }
+            // 3. If no food and no huntable resources, explore to find some.
+            return Some(Goal::Explore);
         }
     }
 
@@ -580,5 +582,56 @@ mod tests {
             crate::ItemRegistryResource(Arc::new(crate::item::ItemRegistry::new("data/items.json").unwrap()));
         let goal = choose_goal(&mut args, &item_registry).expect("Choose goal should succeed");
         assert_eq!(goal, Goal::Flee);
+    }
+
+    #[test]
+    fn test_choose_goal_explore_when_starving_and_no_food_source() {
+        let recipe_manager = Arc::new(
+            RecipeManager::new("data/recipes.json").expect("Failed to create recipe manager"),
+        );
+        let brain = BrainComponent::new(Arc::clone(&recipe_manager), 0.1, 0.9, 1.0);
+        let inventory = Inventory::new();
+        let known_resources = KnownResources(HashMap::new());
+        let goal_q_table = GoalQTable(HashMap::new());
+        let config = Config::load("data/config.toml").expect("Failed to load config");
+        // Create a map with no huntable resources
+        let mut map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
+            .expect("Failed to create map");
+        map.resources.retain(|r| !r.huntable);
+
+        let mut rng = rand::rng();
+
+        let state = HighLevelState {
+            inventory_summary: InventorySummary {
+                items: BTreeMap::new(),
+            },
+            num_hostile_players: 0,
+            health_level: DiscretizedLevel::High,
+            hunger_level: DiscretizedLevel::Low, // Starving
+            is_night: false,
+        };
+
+        let player_memories = PlayerMemories(HashMap::new());
+        let position = Position { x: 0, y: 0 };
+        let mut args = ChooseGoalArgs {
+            state: &state,
+            brain: &brain,
+            inventory: &inventory,
+            known_resources: &known_resources,
+            goal_q_table: &goal_q_table,
+            is_day: true,
+            config: &config,
+            map: &map,
+            player_memories: &player_memories,
+            position: &position,
+            rng: &mut rng,
+        };
+
+        let item_registry =
+            crate::ItemRegistryResource(Arc::new(crate::item::ItemRegistry::new("data/items.json").unwrap()));
+        // We expect the agent to fall back to the Q-learning goal choice, which should be Explore
+        // if no other goals are available.
+        let goal = choose_goal(&mut args, &item_registry).expect("Choose goal should succeed");
+        assert_eq!(goal, Goal::Explore);
     }
 }

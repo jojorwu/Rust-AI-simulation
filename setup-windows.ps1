@@ -306,25 +306,6 @@ function Launch-App {
     Start-Process -FilePath $exePath -WorkingDirectory $DistPath
 }
 
-function Invoke-BuildSequence {
-    param([bool]$IsInteractive)
-
-    $projectVersion = Get-ProjectVersion
-    $doClean = $false
-    if ($IsInteractive) {
-        $doClean = Ask-CleanBuild
-    } elseif ($Clean) {
-        $doClean = $true
-    }
-
-    if (-not (Check-Rust)) {
-        Install-Rust
-    }
-
-    Build-Project -Clean $doClean
-    Package-App -Version $projectVersion
-}
-
 function Get-OSVersion {
     try {
         # Modern approach for PowerShell 5.1+
@@ -393,7 +374,19 @@ try {
     }
 
     if ($Build) {
-        Invoke-BuildSequence -IsInteractive $Interactive
+        $projectVersion = Get-ProjectVersion
+        $doClean = $false
+        if ($Interactive) {
+            $doClean = Ask-CleanBuild
+        } elseif ($Clean) {
+            $doClean = $true
+        }
+        if (-not (Check-Rust)) {
+            Install-Rust
+        }
+        Build-Project -Clean $doClean
+        Package-App -Version $projectVersion
+
         if ($Run) {
             Launch-App
         } else {
@@ -402,7 +395,13 @@ try {
     } elseif ($Interactive -and $action -eq "rebuild") {
         # This handles the case where the user chose "rebuild" from the menu
         # without any non-interactive flags being set.
-        Invoke-BuildSequence -IsInteractive $true
+        $projectVersion = Get-ProjectVersion
+        $doClean = Ask-CleanBuild
+        if (-not (Check-Rust)) {
+            Install-Rust
+        }
+        Build-Project -Clean $doClean
+        Package-App -Version $projectVersion
         Launch-App
     }
 
