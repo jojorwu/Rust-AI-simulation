@@ -243,6 +243,7 @@ pub fn add_simulation_systems(app: &mut App) {
             (
                 pathfinding_system::pathfinding_system,
                 pathfinding_completion_system::pathfinding_completion_system,
+                pathfinding_failure::pathfinding_failure_system,
                 path_movement_system::path_movement_system,
                 movement::movement_system,
             )

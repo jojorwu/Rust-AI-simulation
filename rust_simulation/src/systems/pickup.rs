@@ -11,7 +11,6 @@ pub fn pickup_system(
     item_query: Query<&DroppedItem>,
 ) {
     for (picker_entity, pos, mut inventory) in picker_query.iter_mut() {
-        let mut picked_up_item = false;
         if let Some(entities_on_tile) = map.get_entities_at(pos.x, pos.y) {
             for &item_entity in &entities_on_tile {
                 // An entity cannot pick itself up.
@@ -36,15 +35,12 @@ pub fn pickup_system(
 
                     // For simplicity, we assume an entity can only pick up one item stack per tick.
                     // We can break here if that's the desired behavior.
-                    picked_up_item = true;
                     break;
                 }
             }
         }
 
-        // The entity has attempted to pick up, so we remove the component if successful.
-        if picked_up_item {
-            commands.entity(picker_entity).remove::<WantsToPickup>();
-        }
+        // The entity has attempted to pick up, so we remove the component.
+        commands.entity(picker_entity).remove::<WantsToPickup>();
     }
 }

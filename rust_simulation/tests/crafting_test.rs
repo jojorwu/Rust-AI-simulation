@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rust_simulation::{
-    components::{Inventory, WantsToCraft},
+    components::{intents::WantsToCraft, Inventory},
     recipes::RecipeManager,
     systems::crafting::crafting_system,
     RecipeManagerResource,
