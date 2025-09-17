@@ -14,13 +14,27 @@ use bevy_tasks::{AsyncComputeTaskPool, Task};
 /// cancelling any pre-existing pathfinding task for that entity.
 use crate::map::Map;
 
+use crate::components::path::PathfindingFailed;
+
 pub fn pathfinding_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &PathRequest, &MentalMap, Option<&mut PathfindingTask>)>,
+    mut query: Query<(
+        Entity,
+        &PathRequest,
+        Option<&MentalMap>,
+        Option<&mut PathfindingTask>,
+    )>,
     map: Res<Map>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
     for (entity, request, mental_map, existing_task) in query.iter_mut() {
+        if mental_map.is_none() {
+            commands.entity(entity).insert(PathfindingFailed);
+            commands.entity(entity).remove::<PathRequest>();
+            continue;
+        }
+        let mental_map = mental_map.unwrap();
+
         // --- Task Cancellation ---
         // If a new PathRequest is added to an entity that already has a PathfindingTask,
         // we assume the old one is obsolete. By removing the component, the old task will
