@@ -30,52 +30,65 @@ struct ScanContext<'a> {
     visible_tiles: &'a mut HashSet<Position>,
 }
 
-fn scan(row: i32, start_slope: f32, end_slope: f32, context: &mut ScanContext) {
-    if start_slope < end_slope {
+fn scan(row: i32, mut start_slope: f32, end_slope: f32, context: &mut ScanContext) {
+    if row > context.radius {
         return;
     }
-    let mut next_start_slope = start_slope;
-    for i in row..=context.radius {
-        let mut in_wall = false;
-        for j in 0..=i {
-            let (mut x, mut y) = (context.player_pos.x as i32, context.player_pos.y as i32);
-            let (dx, dy) = transform_octant(j, i, context.octant);
-            x += dx;
-            y += dy;
 
-            if x < 0 || x >= context.map.width as i32 || y < 0 || y >= context.map.height as i32 {
-                continue;
-            }
+    let mut prev_tile_was_wall = false;
+    let last_col = -1;
 
-            let pos = Position {
-                x: x as u32,
-                y: y as u32,
-            };
-            if (dx * dx + dy * dy) > context.radius * context.radius {
-                continue;
-            }
-
-            let slope = (2.0 * j as f32 - 1.0) / (2.0 * i as f32);
-            let next_slope = (2.0 * j as f32 + 1.0) / (2.0 * i as f32);
-            if slope > start_slope || next_slope < end_slope {
-                continue;
-            }
-
-            context.visible_tiles.insert(pos);
-
-            if is_opaque(pos, context.map) {
-                if !in_wall {
-                    scan(i + 1, next_start_slope, slope, context);
-                }
-                next_start_slope = next_slope;
-                in_wall = true;
-            } else {
-                in_wall = false;
-            }
+    for col in 0..=row {
+        if last_col != -1 && col < last_col {
+            continue;
         }
-        if in_wall {
+
+        let (dx, dy) = transform_octant(col, row, context.octant);
+        let x = context.player_pos.x as i32 + dx;
+        let y = context.player_pos.y as i32 + dy;
+
+        if x < 0 || x >= context.map.width as i32 || y < 0 || y >= context.map.height as i32 {
+            continue;
+        }
+
+        let pos = Position {
+            x: x as u32,
+            y: y as u32,
+        };
+        let in_radius = (dx * dx + dy * dy) <= context.radius * context.radius;
+
+        let top_slope = if col == 0 {
+            1.0
+        } else {
+            (2.0 * col as f32 - 1.0) / (2.0 * row as f32 - 1.0)
+        };
+        let bottom_slope = (2.0 * col as f32 + 1.0) / (2.0 * row as f32 + 1.0);
+
+        if start_slope < bottom_slope {
+            continue;
+        }
+        if end_slope > top_slope {
             break;
         }
+
+        if in_radius {
+            context.visible_tiles.insert(pos);
+        }
+
+        let current_tile_is_wall = is_opaque(pos, context.map);
+        if current_tile_is_wall {
+            if !prev_tile_was_wall && col > 0 {
+                scan(row + 1, start_slope, top_slope, context);
+            }
+            prev_tile_was_wall = true;
+            start_slope = bottom_slope;
+        } else {
+            prev_tile_was_wall = false;
+        }
+    }
+
+    if !prev_tile_was_wall {
+        scan(row + 1, start_slope, end_slope, context);
     }
 }
 
