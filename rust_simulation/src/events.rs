@@ -2,12 +2,13 @@ use crate::brain::{Goal, HighLevelState};
 use crate::components::Position;
 use crate::map::Tile;
 use bevy_ecs::prelude::*;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Event)]
 pub enum Event {
     ChunkGenerated {
         position: (u32, u32),
-        tiles: Vec<Vec<Tile>>,
+        tiles: Arc<Vec<Vec<Tile>>>,
     },
     EntityDied(Entity),
     FoundationBuilt {

@@ -14,7 +14,12 @@ pub fn map_builder_system(
                 // Create a new scope to ensure the lock is released as soon as possible.
                 {
                     if let Ok(mut chunk) = chunk_mutex.lock() {
-                        chunk.tiles = tiles.clone();
+                        if let Ok(unwrapped_tiles) = std::sync::Arc::try_unwrap(tiles.clone()) {
+                            chunk.tiles = unwrapped_tiles;
+                        } else {
+                            // The Arc is shared, so we have to clone.
+                            chunk.tiles = (**tiles).clone();
+                        }
                     } else {
                         error!("Mutex was poisoned in map_builder_system");
                     }
