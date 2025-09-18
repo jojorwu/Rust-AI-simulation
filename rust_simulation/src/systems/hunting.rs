@@ -37,6 +37,7 @@ pub fn hunting_system(
                             start: (hunter_pos.x, hunter_pos.y),
                             goal: (pig_pos.x, pig_pos.y),
                         });
+                        commands.entity(hunter_entity).remove::<IntendsToGather>();
                     }
                 }
             }
