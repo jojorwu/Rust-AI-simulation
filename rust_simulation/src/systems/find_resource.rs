@@ -10,10 +10,10 @@ use bevy_ecs::prelude::*;
 
 pub fn find_resource_system(
     mut commands: Commands,
-    query: Query<(Entity, &KnownResources, &Position, &IntendsToGather)>,
+    mut query: Query<(Entity, &mut KnownResources, &Position, &IntendsToGather)>,
     map: Res<Map>,
 ) {
-    for (entity, known_resources, position, intent) in query.iter() {
+    for (entity, mut known_resources, position, intent) in query.iter_mut() {
         let resource_name = &intent.0;
         let amount = intent.1;
 
@@ -38,6 +38,11 @@ pub fn find_resource_system(
                     resource: resource_name.clone(),
                     amount,
                 });
+            } else {
+                // The resource is known but not there, so remove it from known resources.
+                if let Some(positions) = known_resources.0.get_mut(resource_name) {
+                    positions.remove(&target_pos);
+                }
             }
         }
         // If no resource is found, the IntendsToGather component remains, and the
