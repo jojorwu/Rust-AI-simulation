@@ -13,7 +13,7 @@ use log::error;
 
 pub fn check_resources_system(
     mut commands: Commands,
-    query: Query<(Entity, &Inventory, &CheckResources)>,
+    query: Query<(Entity, &Inventory, &CheckResources), Without<HasResources>>,
     recipe_manager: Res<RecipeManagerResource>,
 ) {
     let recipe_manager = &recipe_manager.0;
