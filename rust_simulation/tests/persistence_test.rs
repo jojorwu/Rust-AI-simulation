@@ -85,3 +85,59 @@ fn test_q_table_persistence() {
 
     assert!(result.is_ok());
 }
+
+#[test]
+fn test_q_table_persistence_cleanup_on_rename_error() {
+    let test_file = "q_tables.json";
+    let temp_file = "q_tables.json.tmp";
+
+    // Create a directory where the final file should be, to cause a rename error.
+    fs::create_dir_all(test_file).expect("Failed to create test directory");
+
+    let result = panic::catch_unwind(|| {
+        // 1. Setup
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::log::LogPlugin::default()));
+        app.add_event::<AppExit>();
+        app.add_systems(Update, save_q_tables_on_exit.run_if(on_event::<AppExit>()));
+
+        // Create a mock Q-table
+        let mut q_table = GoalQTable(HashMap::new());
+        q_table.0.insert(
+            HighLevelState {
+                inventory_summary: InventorySummary { items: BTreeMap::new() },
+                num_hostile_players: 0,
+                health_level: DiscretizedLevel::High,
+                hunger_level: DiscretizedLevel::Low,
+                is_night: false,
+            },
+            HashMap::new(),
+        );
+
+        // Create a mock player entity
+        app.world.spawn((
+            Player {
+                id: 1,
+                held_item: None,
+            },
+            q_table,
+        ));
+
+        // 2. Run the system by sending an AppExit event
+        app.world.send_event(AppExit);
+        app.update();
+
+        // 3. Verify that the temp file does not exist
+        assert!(!fs::metadata(temp_file).is_ok(), "Temp file should be cleaned up on rename error");
+    });
+
+    // 4. Cleanup
+    if fs::metadata(test_file).is_ok() {
+        fs::remove_dir_all(test_file).expect("Failed to remove test directory");
+    }
+    if fs::metadata(temp_file).is_ok() {
+        fs::remove_file(temp_file).expect("Failed to remove temp file");
+    }
+
+    assert!(result.is_ok());
+}

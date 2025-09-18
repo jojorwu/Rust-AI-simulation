@@ -28,7 +28,11 @@ fn save_q_tables(query: &Query<(&Player, &GoalQTable)>) -> Result<(), anyhow::Er
     temp_file.write_all(json_data.as_bytes())?;
 
     // 3. Atomically rename the temporary file to the final destination
-    fs::rename(temp_path, final_path)?;
+    if let Err(e) = fs::rename(temp_path, final_path) {
+        // If the rename fails, we must clean up the temporary file.
+        let _ = fs::remove_file(temp_path);
+        return Err(e.into());
+    }
 
     Ok(())
 }
