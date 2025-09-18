@@ -38,11 +38,11 @@ fn test_q_table_persistence() {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, bevy::log::LogPlugin::default()));
         app.add_event::<AppExit>();
-        app.add_systems(PostUpdate, (move |query: Query<(&Player, &GoalQTable)>| {
+        app.add_systems(PostUpdate, move |query: Query<(&Player, &GoalQTable)>| {
             if let Err(e) = rust_simulation::systems::persistence::save_q_tables(&query, test_file) {
                 panic!("Failed to save Q-tables: {e}");
             }
-        }));
+        });
 
         // Create a mock HighLevelState
         let mut items = BTreeMap::new();
@@ -115,10 +115,10 @@ fn test_q_table_persistence_cleanup_on_rename_error() {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, bevy::log::LogPlugin::default()));
         app.add_event::<AppExit>();
-        app.add_systems(PostUpdate, (move |query: Query<(&Player, &GoalQTable)>| {
+        app.add_systems(PostUpdate, move |query: Query<(&Player, &GoalQTable)>| {
             // We expect this to fail, so we don't panic.
             let _ = rust_simulation::systems::persistence::save_q_tables(&query, test_file);
-        }));
+        });
 
         // Create a mock Q-table
         let mut q_table = GoalQTable(HashMap::new());

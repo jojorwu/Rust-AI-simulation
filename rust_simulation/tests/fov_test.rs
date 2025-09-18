@@ -1,9 +1,7 @@
-use bevy::prelude::*;
 use rust_simulation::{components::Position, fov, map::Map};
-use std::collections::HashSet;
 
 fn create_test_map(walls: &[(u32, u32)]) -> Map {
-    let mut map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
+    let map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
         .expect("Failed to create map");
     for &(x, y) in walls {
         map.set_tile(x, y, rust_simulation::map::Tile::new('#', "wall".to_string()));

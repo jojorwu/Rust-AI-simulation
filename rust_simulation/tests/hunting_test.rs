@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use rust_simulation::{
     animals::pig::Pig,
     components::{
-        intents::{IntendsToGather, WantsToAttack},
+        intents::IntendsToGather,
         path::PathRequest,
         Position,
     },
