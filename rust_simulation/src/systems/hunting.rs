@@ -1,43 +1,32 @@
 use crate::animals::pig::Pig;
-use crate::components::intents::IntendsToGather;
+use crate::components::intents::{IntendsToExplore, IntendsToGather};
 use crate::components::path::PathRequest;
 use crate::components::{intents::WantsToAttack, Position};
-use crate::map::Map;
 use bevy_ecs::prelude::*;
 
 pub fn hunting_system(
     mut commands: Commands,
     hunter_query: Query<(Entity, &Position, &IntendsToGather), Without<PathRequest>>,
-    pig_query: Query<Entity, With<Pig>>, // Query for pig entities, not their positions
-    position_query: Query<&Position>,    // A general query for positions
-    map: Res<Map>,
+    pig_query: Query<(Entity, &Position), With<Pig>>,
 ) {
     for (hunter_entity, hunter_pos, intends_to_gather) in hunter_query.iter() {
         if intends_to_gather.0 == "pig" {
+            if pig_query.is_empty() {
+                // No pigs found, so explore
+                commands.entity(hunter_entity).insert(IntendsToExplore);
+                commands.entity(hunter_entity).remove::<IntendsToGather>();
+                continue;
+            }
+
             let mut closest_pig: Option<(Entity, f32)> = None;
+            for (pig_entity, pig_pos) in pig_query.iter() {
+                let dist_x = (hunter_pos.x as i32 - pig_pos.x as i32).abs();
+                let dist_y = (hunter_pos.y as i32 - pig_pos.y as i32).abs();
+                let dist = (dist_x + dist_y) as f32; // Manhattan distance
 
-            // Search in a 5x5 chunk area around the hunter
-            if let Some((chunk_x, chunk_y)) = map.get_chunk_index(hunter_pos.x, hunter_pos.y) {
-                for x_offset in -2..=2 {
-                    for y_offset in -2..=2 {
-                        let check_chunk_x = chunk_x as i32 + x_offset;
-                        let check_chunk_y = chunk_y as i32 + y_offset;
-
-                        if check_chunk_x >= 0 && check_chunk_y >= 0 {
-                            if let Some(entities) = map.get_entities_in_chunk(check_chunk_x as u32, check_chunk_y as u32) {
-                                for &entity in &entities {
-                                    if pig_query.get(entity).is_ok() {
-                                        if let Ok(pig_pos) = position_query.get(entity) {
-                                            let dist = hunter_pos.distance(pig_pos);
-                                            if closest_pig.is_none() || dist < closest_pig.unwrap().1 {
-                                                closest_pig = Some((entity, dist));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                let is_closer = closest_pig.is_none_or(|(_, current_dist)| dist < current_dist);
+                if is_closer {
+                    closest_pig = Some((pig_entity, dist));
                 }
             }
 
@@ -50,12 +39,11 @@ pub fn hunting_system(
                     commands.entity(hunter_entity).remove::<IntendsToGather>();
                 } else {
                     // Pathfind to the pig
-                    if let Ok(pig_pos) = position_query.get(pig_entity) {
+                    if let Ok((_, pig_pos)) = pig_query.get(pig_entity) {
                         commands.entity(hunter_entity).insert(PathRequest {
                             start: (hunter_pos.x, hunter_pos.y),
                             goal: (pig_pos.x, pig_pos.y),
                         });
-                        commands.entity(hunter_entity).remove::<IntendsToGather>();
                     }
                 }
             }

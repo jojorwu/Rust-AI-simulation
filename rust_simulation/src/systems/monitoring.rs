@@ -43,7 +43,7 @@ impl Plugin for MonitoringPlugin {
 }
 
 fn memory_monitoring_system(
-    time: Res<Time<Fixed>>,
+    time: Res<Time>,
     mut timer: ResMut<MonitoringTimer>,
     mut monitoring_state: ResMut<MonitoringState>,
 ) {
@@ -53,8 +53,8 @@ fn memory_monitoring_system(
         let used_memory = monitoring_state.sys.used_memory();
         info!(
             "Memory usage: {} / {} MB",
-            used_memory / (1024 * 1024),
-            total_memory / (1024 * 1024)
+            used_memory / 1024 / 1024,
+            total_memory / 1024 / 1024
         );
     }
 }

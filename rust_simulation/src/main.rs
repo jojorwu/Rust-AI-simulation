@@ -135,12 +135,7 @@ fn main() {
     // Add simulation setup and systems
     app.add_systems(
         OnEnter(AppState::InGame),
-        (
-            setup_simulation,
-            rust_simulation::systems::world_gen::world_gen_system,
-            rust_simulation::systems::map_builder::map_builder_system,
-            road_builder::generate_roads,
-        )
+        (setup_simulation, road_builder::generate_roads)
             .chain()
             .in_set(SimulationSet::Setup),
     );

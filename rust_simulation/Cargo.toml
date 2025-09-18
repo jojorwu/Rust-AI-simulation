@@ -13,10 +13,10 @@ serde_json = "1.0.143"
 thiserror = "1.0.69"
 rayon = "1.8.1"
 num_cpus = "1.16.0"
+log = "0.4"
 bevy_ecs = "0.13.0"
 bevy_tasks = "0.13.0"
-log = "0.4"
-bevy = { version = "0.13.0", features = ["trace_tracy"] }
+bevy = { version = "0.13.0", default-features = false, features = ["bevy_render", "bevy_ui", "multi-threaded", "bevy_pbr"] }
 toml = "0.8.12"
 sysinfo = "0.30.13"
 clap = { version = "4.5.4", features = ["derive"] }

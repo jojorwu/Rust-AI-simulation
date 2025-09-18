@@ -21,4 +21,3 @@ pub mod persistence;
 pub mod pickup;
 pub mod storage;
 pub mod visibility_system;
-pub mod world_gen;

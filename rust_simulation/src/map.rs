@@ -199,15 +199,6 @@ impl Map {
         chunk.spatial_map.get(&(local_x, local_y)).cloned()
     }
 
-    pub fn get_entities_in_chunk(&self, chunk_x: u32, chunk_y: u32) -> Option<Vec<Entity>> {
-        let chunk = self.chunks.get(chunk_y as usize)?.get(chunk_x as usize)?.lock().ok()?;
-        let mut entities = Vec::new();
-        for (_, entities_on_tile) in chunk.spatial_map.iter() {
-            entities.extend(entities_on_tile);
-        }
-        Some(entities)
-    }
-
     pub fn is_walkable(&self, x: u32, y: u32) -> bool {
         self.get_tile(x, y)
             .is_some_and(|tile| matches!(tile.tile_type, '.' | ',' | 'f'))

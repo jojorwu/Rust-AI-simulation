@@ -494,9 +494,7 @@ mod tests {
             processed_goals: &mut HashSet::new(),
         };
 
-        let result = plan_goal(&mut planner_args, &goal);
-        assert!(result.is_ok(), "Planning should succeed");
-        let plan = result.unwrap();
+        let plan = plan_goal(&mut planner_args, &goal).expect("Planning should succeed");
 
         // The plan should contain all the necessary sub-goals, though the order of gathering
         // might change due to HashMap iteration order.
@@ -529,9 +527,7 @@ mod tests {
             processed_goals: &mut HashSet::new(),
         };
 
-        let result = plan_goal(&mut planner_args, &goal);
-        assert!(result.is_ok(), "Planning should succeed");
-        let plan = result.unwrap();
+        let plan = plan_goal(&mut planner_args, &goal).expect("Planning should succeed");
 
         // The plan should be to craft a stone_axe first, which itself requires resources.
         // Explore -> Gather 1 stone -> Explore -> Gather 3 wood -> Craft stone_axe -> Explore -> Gather 1 tree
@@ -582,9 +578,7 @@ mod tests {
 
         let item_registry =
             crate::ItemRegistryResource(Arc::new(crate::item::ItemRegistry::new("data/items.json").unwrap()));
-        let result = choose_goal(&mut args, &item_registry);
-        assert!(result.is_ok(), "Choose goal should succeed");
-        let goal = result.unwrap();
+        let goal = choose_goal(&mut args, &item_registry).expect("Choose goal should succeed");
         assert_eq!(goal, Goal::Flee);
     }
 }
