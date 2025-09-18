@@ -43,7 +43,7 @@ impl Plugin for MonitoringPlugin {
 }
 
 fn memory_monitoring_system(
-    time: Res<Time>,
+    time: Res<Time<Fixed>>,
     mut timer: ResMut<MonitoringTimer>,
     mut monitoring_state: ResMut<MonitoringState>,
 ) {
