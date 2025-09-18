@@ -30,13 +30,13 @@ struct ScanContext<'a> {
     visible_tiles: &'a mut HashSet<Position>,
 }
 
-fn scan(row: i32, mut start_slope: f32, end_slope: f32, context: &mut ScanContext) {
-    if row > context.radius {
+fn scan(row: i32, start_slope: f32, end_slope: f32, context: &mut ScanContext) {
+    if start_slope < end_slope {
         return;
     }
 
-    let mut prev_tile_was_wall = false;
-    let last_col = -1;
+    let mut next_start_slope = start_slope;
+    let mut last_col = -1;
 
     for col in 0..=row {
         if last_col != -1 && col < last_col {
@@ -55,40 +55,25 @@ fn scan(row: i32, mut start_slope: f32, end_slope: f32, context: &mut ScanContex
             x: x as u32,
             y: y as u32,
         };
-        let in_radius = (dx * dx + dy * dy) <= context.radius * context.radius;
-
-        let top_slope = if col == 0 {
-            1.0
-        } else {
-            (2.0 * col as f32 - 1.0) / (2.0 * row as f32 - 1.0)
-        };
-        let bottom_slope = (2.0 * col as f32 + 1.0) / (2.0 * row as f32 + 1.0);
-
-        if start_slope < bottom_slope {
+        if (dx * dx + dy * dy) > context.radius * context.radius {
             continue;
         }
-        if end_slope > top_slope {
-            break;
+
+        let slope = (2.0 * col as f32 - 1.0) / (2.0 * row as f32);
+        let next_slope = (2.0 * col as f32 + 1.0) / (2.0 * row as f32);
+
+        if slope > start_slope || next_slope < end_slope {
+            continue;
         }
 
-        if in_radius {
-            context.visible_tiles.insert(pos);
-        }
+        context.visible_tiles.insert(pos);
 
-        let current_tile_is_wall = is_opaque(pos, context.map);
-        if current_tile_is_wall {
-            if !prev_tile_was_wall && col > 0 {
-                scan(row + 1, start_slope, top_slope, context);
+        if is_opaque(pos, context.map) {
+            if col > 0 {
+                scan(row + 1, next_start_slope, slope, context);
             }
-            prev_tile_was_wall = true;
-            start_slope = bottom_slope;
-        } else {
-            prev_tile_was_wall = false;
+            next_start_slope = next_slope;
         }
-    }
-
-    if !prev_tile_was_wall {
-        scan(row + 1, start_slope, end_slope, context);
     }
 }
 

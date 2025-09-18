@@ -52,13 +52,11 @@ pub fn gathering_system(
                     commands.entity(entity).remove::<IsGathering>();
                 }
             } else {
-                // Not adjacent, request a path and remove the gathering state
-                // to prevent spamming path requests.
+                // Not adjacent, request a path.
                 commands.entity(entity).insert(PathRequest {
                     start: (position.x, position.y),
                     goal: (target_pos.x, target_pos.y),
                 });
-                commands.entity(entity).remove::<IsGathering>();
             }
         } else {
             // The target entity no longer exists, so the gathering state is invalid.
