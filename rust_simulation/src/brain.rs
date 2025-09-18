@@ -90,7 +90,12 @@ pub struct InventorySummary {
 impl From<&Inventory> for InventorySummary {
     fn from(inventory: &Inventory) -> Self {
         // Collect into a BTreeMap to ensure deterministic ordering for hashing.
-        let items = inventory.items.clone().into_iter().collect();
+        let mut items = BTreeMap::new();
+        for (item_name, &quantity) in &inventory.items {
+            if quantity > 0 {
+                items.insert(item_name.clone(), quantity);
+            }
+        }
         InventorySummary { items }
     }
 }
