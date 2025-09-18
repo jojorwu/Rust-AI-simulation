@@ -148,6 +148,12 @@ impl Map {
         Some(((x / CHUNK_SIZE) as usize, (y / CHUNK_SIZE) as usize))
     }
 
+    pub fn get_biome_name(&self, x: u32, y: u32) -> String {
+        self.get_tile(x, y)
+            .map(|t| t.biome.clone())
+            .unwrap_or_else(|| "none".to_string())
+    }
+
     pub fn get_tile(&self, x: u32, y: u32) -> Option<Tile> {
         let (chunk_x, chunk_y) = self.get_chunk_index(x, y)?;
         let chunk = self.chunks.get(chunk_y)?.get(chunk_x)?.lock().ok()?;

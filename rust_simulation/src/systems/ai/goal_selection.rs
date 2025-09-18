@@ -241,12 +241,36 @@ fn handle_critical_needs<R: Rng + ?Sized>(
         if let Some(food_name) = food_in_inventory {
             return Some(Goal::EatFood(food_name.clone()));
         } else {
-            // 2. If no food, find a known resource that is a food source.
-            // This is a simplification. A better AI would check the loot table of resources.
-            // For now, we'll check for any huntable resource.
-            if let Some(huntable) = args.map.resources.iter().find(|r| r.huntable) {
+            // 2. If no food, find a food source.
+            let current_biome = args.map.get_biome_name(args.position.x, args.position.y);
+
+            // Prioritize known resources that are food.
+            for (resource_name, positions) in args.known_resources.0.iter() {
+                if !positions.is_empty() {
+                    if let Some(resource_def) =
+                        args.map.resources.iter().find(|r| &r.name == resource_name)
+                    {
+                        // A more robust check would be to see if the resource's loot table contains food.
+                        // For now, we'll assume any huntable resource is food.
+                        if resource_def.huntable {
+                            return Some(Goal::GatherResource(resource_name.clone(), 1));
+                        }
+                    }
+                }
+            }
+
+            // If no known food sources, check for huntable animals in the current biome.
+            if let Some(huntable) = args
+                .map
+                .resources
+                .iter()
+                .find(|r| r.huntable && r.biomes.contains(&current_biome))
+            {
                 return Some(Goal::GatherResource(huntable.name.clone(), 1));
             }
+
+            // If still no options, explore.
+            return Some(Goal::Explore);
         }
     }
 
