@@ -18,13 +18,6 @@ fn test_fov_sees_around_corners() {
     let player_pos = Position { x: 0, y: 0 };
     let visible_tiles = fov::field_of_view(&player_pos, 5, &map);
 
-    let expected_visible: HashSet<Position> = [
-        (0, 0), (1, 0), (0, 1), (2, 1), (1, 2)
-    ]
-    .iter()
-    .map(|&(x, y)| Position { x, y })
-    .collect();
-
     assert!(
         visible_tiles.contains(&Position { x: 1, y: 2 }),
         "Should see the tile at (1, 2)"

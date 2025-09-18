@@ -25,8 +25,8 @@ pub fn path_movement_system(
 
         // After potentially popping the current node, if there's a next one, move towards it.
         if let Some(target_node) = path.nodes.front() {
-            let dx = target_node.0 as i32 - position.x as i32;
-            let dy = target_node.1 as i32 - position.y as i32;
+            let dx = (target_node.0 as i32 - position.x as i32).signum();
+            let dy = (target_node.1 as i32 - position.y as i32).signum();
 
             debug!(
                 "Entity {entity:?} moving towards {target_node:?} with velocity ({dx}, {dy})"

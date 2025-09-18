@@ -21,6 +21,7 @@ pub fn combat_system(
         if let Ok(mut health) = health_query.get_mut(target) {
             health.current -= damage;
             if health.current <= 0 {
+                health.current = 0;
                 target_dead = true;
             }
         }
