@@ -34,3 +34,35 @@ fn test_check_resources_system() {
 
     assert!(app.world.entity(entity).get::<HasResources>().is_some());
 }
+
+#[test]
+fn test_check_resources_system_is_idempotent() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+
+    let recipe_manager = Arc::new(
+        rust_simulation::recipes::RecipeManager::new("data/recipes.json")
+            .expect("Failed to create recipe manager"),
+    );
+    app.insert_resource(RecipeManagerResource(recipe_manager));
+
+    let mut inventory = Inventory::new();
+    inventory.add_item("wood", 25);
+    inventory.add_item("stone", 10);
+
+    let entity = app
+        .world
+        .spawn((inventory, CheckResources("chest".to_string())))
+        .id();
+
+    app.add_systems(Update, check_resources_system);
+    app.update();
+
+    assert!(app.world.entity(entity).get::<HasResources>().is_some());
+
+    // Run the system again
+    app.update();
+
+    // The component should still be there, and nothing should have crashed.
+    assert!(app.world.entity(entity).get::<HasResources>().is_some());
+}
