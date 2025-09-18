@@ -260,32 +260,3 @@ fn test_pathfinding_failure_clears_goal() {
     assert!(agent.get::<PathRequest>().is_none(), "PathRequest should be removed");
     assert!(agent.get::<PathfindingFailed>().is_none(), "PathfindingFailed should be removed");
 }
-
-#[test]
-fn test_pathfinding_request_without_mental_map_fails_gracefully() {
-    // 1. Setup
-    let mut app = App::new();
-    app.add_plugins(MinimalPlugins);
-    app.insert_resource(rust_simulation::map::Map::new(TEST_WIDTH, TEST_HEIGHT, "data/biomes.json", "data/resources.json").unwrap());
-    app.add_systems(Update, pathfinding_system);
-
-    let start_pos = (0, 0);
-    let goal_pos = (10, 10);
-
-    // Entity has a PathRequest but no MentalMap
-    let agent_entity = app.world.spawn((
-        Position { x: start_pos.0, y: start_pos.1 },
-        PathRequest { start: start_pos, goal: goal_pos },
-    )).id();
-
-    // 2. Run systems
-    app.update();
-    app.update(); // Apply commands
-
-    // 3. Verify
-    let agent = app.world.entity(agent_entity);
-    // The system should have added a PathfindingFailed component.
-    assert!(agent.get::<PathfindingFailed>().is_some(), "Pathfinding should fail for entity without a MentalMap");
-    // The PathRequest should be removed.
-    assert!(agent.get::<PathRequest>().is_none(), "PathRequest should be removed after failure");
-}

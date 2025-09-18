@@ -77,8 +77,8 @@ fn test_crafting_system_insufficient_resources() {
     assert_eq!(inventory.get_quantity("wood"), 1);
     // New item should NOT be added
     assert_eq!(inventory.get_quantity("stone_axe"), 0);
-    // Intent should NOT be removed
-    assert!(app.world.get::<WantsToCraft>(crafter_entity).is_some());
+    // Intent should still be removed
+    assert!(app.world.get::<WantsToCraft>(crafter_entity).is_none());
 }
 
 #[test]
