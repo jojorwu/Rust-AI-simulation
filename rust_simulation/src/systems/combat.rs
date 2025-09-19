@@ -17,16 +17,14 @@ pub fn combat_system(
     }
 
     for (attacker, target, damage) in to_attack {
-        let mut target_dead = false;
         if let Ok(mut health) = health_query.get_mut(target) {
-            health.current -= damage;
-            if health.current <= 0 {
-                target_dead = true;
+            // Only apply damage and send death events if the target is alive.
+            if health.current > 0 {
+                health.current -= damage;
+                if health.current <= 0 {
+                    event_writer.send(Event::EntityDied(target));
+                }
             }
-        }
-
-        if target_dead {
-            event_writer.send(Event::EntityDied(target));
         }
         commands.entity(attacker).remove::<WantsToAttack>();
     }
