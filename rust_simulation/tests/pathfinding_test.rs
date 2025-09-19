@@ -260,3 +260,43 @@ fn test_pathfinding_failure_clears_goal() {
     assert!(agent.get::<PathRequest>().is_none(), "PathRequest should be removed");
     assert!(agent.get::<PathfindingFailed>().is_none(), "PathfindingFailed should be removed");
 }
+
+#[test]
+fn test_pathfinding_failure_removes_component_for_brainless_entity() {
+    // 1. Setup
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.insert_resource(rust_simulation::map::Map::new(TEST_WIDTH, TEST_HEIGHT, "data/biomes.json", "data/resources.json").unwrap());
+
+    let mut map_data = std::collections::HashMap::new();
+    // Wall off the goal so pathfinding fails
+    map_data.insert((0, 1), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+    map_data.insert((1, 1), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+    map_data.insert((2, 1), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+    map_data.insert((2, 0), MemoryTile { tile: Tile::new('#', "wall".to_string()) });
+
+    let mental_map = MentalMap(Arc::new(map_data));
+
+    app.add_systems(Update, (pathfinding_system, pathfinding_completion_system, pathfinding_failure_system).chain());
+
+    let start_pos = (1, 0);
+    let goal_pos = (1, 2);
+
+    // This entity does NOT have a BrainComponent
+    let agent_entity = app.world.spawn((
+        Position { x: start_pos.0, y: start_pos.1 },
+        PathRequest { start: start_pos, goal: goal_pos },
+        mental_map,
+    )).id();
+
+    // 2. Run the systems
+    for _ in 0..10 {
+        app.update();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    // 3. Verify
+    let agent = app.world.entity(agent_entity);
+    // The PathfindingFailed component should be removed, even without a brain.
+    assert!(agent.get::<PathfindingFailed>().is_none(), "PathfindingFailed component should be removed from brainless entities");
+}

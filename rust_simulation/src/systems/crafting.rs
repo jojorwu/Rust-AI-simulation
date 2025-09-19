@@ -15,19 +15,15 @@ pub fn crafting_system(
             Ok(required_resources) => {
                 if inventory.remove_resources(&required_resources) {
                     inventory.add_item(&wants_to_craft.item_name, 1);
-                    // Crafting was successful, so remove the intent.
-                    commands.entity(entity).remove::<WantsToCraft>();
                 }
-                // If not enough resources, do nothing and keep the intent.
             }
             Err(e) => {
                 error!(
-                    "Failed to get required resources for item '{}': {}. Removing intent.",
+                    "Failed to get required resources for item '{}': {}",
                     wants_to_craft.item_name, e
                 );
-                // The recipe is invalid or there was an error, so remove the intent.
-                commands.entity(entity).remove::<WantsToCraft>();
             }
         }
+        commands.entity(entity).remove::<WantsToCraft>();
     }
 }

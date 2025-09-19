@@ -112,7 +112,8 @@ fn test_storage_fails_if_chest_does_not_exist() {
     app.update();
 
     // 3. Verify
-    // The item should remain in the storer's inventory because the chest is invalid.
+    // This assertion will fail initially, as the item is destroyed.
+    // After the fix, the item should remain in the storer's inventory.
     let storer_inv = app
         .world
         .get::<Inventory>(storer_entity)

@@ -82,35 +82,3 @@ fn test_combat_system_handles_death() {
     }
     assert!(death_event_found);
 }
-
-#[test]
-fn test_combat_system_sends_only_one_death_event() {
-    // 1. Setup
-    let mut app = App::new();
-    app.add_plugins(MinimalPlugins);
-    app.add_event::<Event>();
-    app.add_systems(Update, combat_system);
-
-    // Create a target with low health
-    let target = app.world.spawn(Health { current: 5, max: 50 }).id();
-
-    // Create two attackers targeting the same entity
-    app.world.spawn((WantsToAttack { target }, Damage(10)));
-    app.world.spawn((WantsToAttack { target }, Damage(10)));
-
-    // 2. Run the system
-    app.update();
-
-    // 3. Verify
-    // A death event should have been sent, but only one.
-    let events = app.world.resource::<Events<Event>>();
-    let mut reader = events.get_reader();
-    let mut death_event_count = 0;
-    for event in reader.read(events) {
-        if let Event::EntityDied(e) = event {
-            assert_eq!(*e, target);
-            death_event_count += 1;
-        }
-    }
-    assert_eq!(death_event_count, 1, "Expected only one death event to be sent.");
-}

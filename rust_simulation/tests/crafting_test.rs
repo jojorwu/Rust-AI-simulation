@@ -53,7 +53,7 @@ fn test_crafting_system_success() {
 }
 
 #[test]
-fn test_crafting_system_insufficient_resources_keeps_intent() {
+fn test_crafting_system_insufficient_resources() {
     // 1. Setup
     let mut app = setup_test_app();
 
@@ -77,8 +77,8 @@ fn test_crafting_system_insufficient_resources_keeps_intent() {
     assert_eq!(inventory.get_quantity("wood"), 1);
     // New item should NOT be added
     assert_eq!(inventory.get_quantity("stone_axe"), 0);
-    // Intent should NOT be removed, so the agent can try again
-    assert!(app.world.get::<WantsToCraft>(crafter_entity).is_some());
+    // Intent should still be removed
+    assert!(app.world.get::<WantsToCraft>(crafter_entity).is_none());
 }
 
 #[test]
