@@ -121,3 +121,26 @@ fn test_eating_does_not_exceed_max_hunger() {
     // Should be clamped to max
     assert_eq!(hunger.current, 100.0);
 }
+
+#[test]
+fn test_eating_removes_intent_when_no_food_present() {
+    // 1. Setup
+    let mut app = setup_test_app();
+    let inventory = Inventory::new(); // Empty inventory
+
+    let entity = app
+        .world
+        .spawn((
+            Hunger { current: 50.0, max: 100.0 },
+            inventory,
+            WantsToEat("meat".to_string()),
+        ))
+        .id();
+
+    // 2. Run system
+    app.update();
+
+    // 3. Verify
+    // The intent should be removed even if eating fails, to prevent getting stuck.
+    assert!(app.world.get::<WantsToEat>(entity).is_none());
+}

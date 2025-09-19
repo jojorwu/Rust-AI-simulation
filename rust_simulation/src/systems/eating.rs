@@ -17,8 +17,10 @@ pub fn eating_system(
                 if hunger.current > hunger.max {
                     hunger.current = hunger.max;
                 }
-                commands.entity(entity).remove::<WantsToEat>();
             }
         }
+        // Always remove the intent, whether eating was successful or not.
+        // If the agent is still hungry, it will generate a new goal on the next tick.
+        commands.entity(entity).remove::<WantsToEat>();
     }
 }
