@@ -5,13 +5,15 @@ use rust_simulation::{
         intents::{IntendsToExplore, IntendsToGather},
         Position,
     },
-    systems::hunting::hunting_system,
+    spatial::SpatialIndex,
+    systems::{hunting::hunting_system, spatial_indexing::update_spatial_index_system},
 };
 
 #[test]
 fn test_hunting_system_no_pigs_should_explore() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
+    app.init_resource::<SpatialIndex>();
 
     // No pigs are spawned in the world.
 
@@ -23,7 +25,7 @@ fn test_hunting_system_no_pigs_should_explore() {
         ))
         .id();
 
-    app.add_systems(Update, hunting_system);
+    app.add_systems(Update, (update_spatial_index_system, hunting_system).chain());
     app.update();
 
     let hunter = app.world.entity(hunter_entity);
@@ -41,6 +43,7 @@ fn test_hunting_system_no_pigs_should_explore() {
 fn test_hunting_system_with_pig_far_away_should_pathfind() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
+    app.init_resource::<SpatialIndex>();
 
     app.world.spawn((Pig, Position { x: 10, y: 10 }));
 
@@ -52,7 +55,7 @@ fn test_hunting_system_with_pig_far_away_should_pathfind() {
         ))
         .id();
 
-    app.add_systems(Update, hunting_system);
+    app.add_systems(Update, (update_spatial_index_system, hunting_system).chain());
     app.update();
 
     let hunter = app.world.entity(hunter_entity);

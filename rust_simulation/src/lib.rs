@@ -34,6 +34,7 @@ pub mod road;
 pub mod road_builder;
 pub mod road_manager;
 pub mod serde_helpers;
+pub mod spatial;
 pub mod state;
 pub mod systems;
 pub mod ui;
@@ -49,7 +50,9 @@ use item::ItemRegistry;
 use map::Map;
 use player::Player;
 use recipes::RecipeManager;
+use spatial::SpatialIndex;
 use systems::ai::{actions, goal_selection, q_learning};
+use systems::spatial_indexing;
 use systems::*;
 
 // --- System Sets ---
@@ -151,6 +154,7 @@ pub fn setup_simulation(
     commands.insert_resource(IsDay(true));
     commands.insert_resource(TickCount(0));
     commands.init_resource::<Events<events::Event>>();
+    commands.init_resource::<SpatialIndex>();
 
     if memory_limit_reached.0 {
         log::warn!("RAM limit reached, not spawning any agents.");
@@ -208,6 +212,7 @@ pub fn add_simulation_systems(app: &mut App) {
             // --- Perception and State Updates ---
             // These systems update the agent's internal state and perception of the world.
             update_day_night,
+            spatial_indexing::update_spatial_index_system,
             visibility_system::visibility_system,
             hunger::hunger_system,
             eating::eating_system,

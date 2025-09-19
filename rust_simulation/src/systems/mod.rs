@@ -19,5 +19,6 @@ pub mod pathfinding_failure;
 pub mod pathfinding_system;
 pub mod persistence;
 pub mod pickup;
+pub mod spatial_indexing;
 pub mod storage;
 pub mod visibility_system;

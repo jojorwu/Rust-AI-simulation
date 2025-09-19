@@ -21,6 +21,7 @@ toml = "0.8.12"
 sysinfo = "0.30.13"
 clap = { version = "4.5.4", features = ["derive"] }
 directories = "5.0"
+rstar = { version = "0.12.2", features = ["serde"] }
 
 [dev-dependencies]
 criterion = "0.5.1"

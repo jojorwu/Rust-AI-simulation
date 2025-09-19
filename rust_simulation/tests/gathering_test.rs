@@ -1,21 +1,21 @@
 use rust_simulation::{
     components::{
-        ai::KnownResources,
         intents::{IntendsToGather, IsGathering},
         Position,
     },
     map::Map,
-    systems::find_resource::find_resource_system,
+    spatial::SpatialIndex,
+    systems::{find_resource::find_resource_system, spatial_indexing::update_spatial_index_system},
 };
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet};
 
 #[test]
 fn test_find_resource_system() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
+    app.init_resource::<SpatialIndex>();
 
-    let map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
+    let mut map = Map::new(10, 10, "data/biomes.json", "data/resources.json")
         .expect("Failed to create map");
     let resource_pos = Position { x: 5, y: 5 };
     let resource_entity = app
@@ -28,25 +28,19 @@ fn test_find_resource_system() {
             resource_pos,
         ))
         .id();
-    map.add_entity_to_spatial_map(resource_entity, 5, 5);
+    map.add_entity_to_spatial_map(resource_entity, 5, 5)
+        .unwrap();
     app.insert_resource(map);
 
-    let mut known_resources = KnownResources(HashMap::new());
-    let mut positions = HashSet::new();
-    positions.insert(resource_pos);
-    known_resources
-        .0
-        .insert("wood".to_string(), positions);
     let gatherer_entity = app
         .world
         .spawn((
-            known_resources,
             Position { x: 0, y: 0 },
             IntendsToGather("wood".to_string(), 1),
         ))
         .id();
 
-    app.add_systems(Update, find_resource_system);
+    app.add_systems(Update, (update_spatial_index_system, find_resource_system).chain());
     app.update();
 
     let gatherer = app.world.entity(gatherer_entity);
